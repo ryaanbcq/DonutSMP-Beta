@@ -14,7 +14,7 @@ import { balances, demarrerRafraichissement } from './donut/balances.js';
 import { publierSuivis, surveillerSoldes, demanderSolde, attendreSolde } from './donut/ingame-balances.js';
 import { donut } from './donut/api.js';
 import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
-import { settings } from './settings.js';
+import { settings, ouSeLier } from './settings.js';
 import { surveillerPresence } from './ingame/surveillance.js';
 import { presence } from './ingame/presence.js';
 import { repondreChallenge } from './link/flow.js';
@@ -115,8 +115,8 @@ async function onCommande(interaction) {
         couleur: FR.jaune,
         description:
           'Cette commande est réservée aux membres qui ont associé leur compte DonutSMP.\n\n'
-          + 'Utilisez `/link <votre pseudo>` : le bot vous donnera une somme exacte à lui '
-          + 'envoyer en jeu, qui vous sera rendue aussitôt après vérification.',
+          + `Pour vous vérifier, ${ouSeLier()}. Le bot vous donnera une somme exacte `
+          + 'à lui envoyer en jeu, qui vous sera rendue aussitôt après vérification.',
       })],
       flags: MessageFlags.Ephemeral,
     });

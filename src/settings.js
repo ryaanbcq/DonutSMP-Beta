@@ -25,3 +25,14 @@ export const settings = {
   },
   poserEmojis: (liste) => store.kvSet('baltop.emojis', liste.join('|')),
 };
+
+/**
+ * Ou envoyer un membre pour se lier. La liaison ne passe QUE par le bouton du
+ * panneau : aucun texte ne doit renvoyer vers une commande qui n existe plus.
+ */
+export function ouSeLier() {
+  const salon = settings.salonLink();
+  return salon
+    ? `rendez-vous dans <#${salon}> et cliquez sur **Se connecter**`
+    : 'passez par le panneau de connexion du serveur et cliquez sur **Se connecter**';
+}

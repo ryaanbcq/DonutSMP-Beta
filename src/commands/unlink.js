@@ -3,6 +3,7 @@ import { store } from '../db.js';
 import { cancelLink } from '../link/manager.js';
 import { forget } from '../link/interactions.js';
 import { config } from '../config.js';
+import { ouSeLier } from '../settings.js';
 import { balances } from '../donut/balances.js';
 import { publierSuivis } from '../donut/ingame-balances.js';
 
@@ -35,8 +36,8 @@ export async function execute(interaction) {
   }
 
   return interaction.reply({
-    content: `✅ **${link.mc_name}** n'est plus associé à votre profil. `
-      + 'Un nouveau `/link` demandera un nouveau paiement.',
+    content: `✅ **${link.mc_name}** n'est plus associé à votre profil.\n`
+      + `Pour vous relier, ${ouSeLier()} : un nouveau paiement sera demandé.`,
     flags: MessageFlags.Ephemeral,
   });
 }

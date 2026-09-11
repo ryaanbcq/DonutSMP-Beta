@@ -39,7 +39,7 @@ export function rendre() {
     ? '\n\n*Pour que votre argent soit pris en compte, vous devez obligatoirement lier votre compte '
       + `Minecraft dans le salon <#${salonLink}>.*`
     : '\n\n*Pour que votre argent soit pris en compte, vous devez obligatoirement lier votre compte '
-      + 'Minecraft avec la commande `/link`.*';
+      + 'Minecraft depuis le panneau de connexion du serveur.*';
 
   return embed(TITRES.classement, {
     couleur: FR.or,

@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../db.js';
+import { ouSeLier } from '../settings.js';
 import { donut } from '../donut/api.js';
 import { embed, TITRES, FR } from '../lib/brand.js';
 import { shortMoney, duration, reputation } from '../lib/format.js';
@@ -18,7 +19,7 @@ export async function execute(interaction) {
   if (!link) {
     return interaction.reply({
       content: target.id === interaction.user.id
-        ? "Vous n'êtes pas encore vérifié. Utilisez `/link <pseudo>`."
+        ? `Vous n'êtes pas encore vérifié : ${ouSeLier()}.`
         : `**${target.username}** n'a pas associé de compte Minecraft.`,
       flags: MessageFlags.Ephemeral,
     });
