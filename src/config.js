@@ -41,6 +41,7 @@ export const config = {
   ingame: {
     trackedFile: process.env.TRACKED_FILE ?? './data/tracked.json',
     balanceFile: process.env.BALANCE_FILE ?? './data/balances.jsonl',
+    statusFile: process.env.INGAME_STATUS ?? './data/ingame-status.json',
   },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),

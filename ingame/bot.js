@@ -180,11 +180,15 @@ function connect() {
     }
   });
 
-  bot.on('kicked', (reason) => console.warn(`[mc] kick : ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`));
+  bot.on('kicked', (reason) => {
+    console.warn(`[mc] kick : ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
+    saveStatus({ online: false }).catch(() => {});
+  });
   bot.on('error', (err) => console.error(`[mc] erreur : ${err.message}`));
   bot.on('end', (reason) => {
     console.warn(`[mc] deconnecte (${reason}), reconnexion...`);
     bot = null;
+    saveStatus({ online: false }).catch(() => {});
     const delay = Math.min(60_000, 5_000 * 2 ** attempt++);
     setTimeout(connect, delay);
   });
@@ -410,10 +414,13 @@ setInterval(() => {
   if (purged > 50) console.log(`[mem] ${purged} entites hors portee purgees`);
 }, 60_000).unref();
 
+// Battement de coeur. Le bot Discord refuse les /link quand ce fichier est
+// vieux : s il ralentissait, il bloquerait les liaisons pour rien.
+setInterval(() => { saveStatus().catch(() => {}); }, 20_000).unref();
+
 setInterval(() => {
   const { rss, heapUsed } = process.memoryUsage();
   console.log(`[mem] rss ${Math.round(rss / 1048576)}M heap ${Math.round(heapUsed / 1048576)}M`);
-  saveStatus().catch(() => {});
 }, 120_000).unref();
 
 for (const sig of ['SIGINT', 'SIGTERM']) {

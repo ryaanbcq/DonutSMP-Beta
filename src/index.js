@@ -15,6 +15,8 @@ import { publierSuivis, surveillerSoldes } from './donut/ingame-balances.js';
 import { donut } from './donut/api.js';
 import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
 import { settings } from './settings.js';
+import { surveillerPresence } from './ingame/surveillance.js';
+import { presence } from './ingame/presence.js';
 import { repondreChallenge } from './link/flow.js';
 import { shortMoney } from './lib/format.js';
 
@@ -40,6 +42,12 @@ client.once('clientReady', async (c) => {
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
   console.log(`[link] compte receveur : ${config.mc.linkAccount}`);
+
+  const etat = await presence();
+  console.log(etat.enLigne
+    ? `[presence] bot en jeu connecte (${etat.username})`
+    : `[presence] bot en jeu INDISPONIBLE (${etat.raison}) : les /link seront refuses`);
+  surveillerPresence(c);
 
   const suivis = balances.resynchroniser();
   // Toujours branche : le salon du panneau peut etre choisi plus tard par
@@ -72,12 +80,22 @@ client.once('clientReady', async (c) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
+  const qui = interaction.user?.tag ?? interaction.user?.id;
   try {
-    if (interaction.isButton()) return await onBouton(interaction);
-    if (interaction.isModalSubmit()) return await onModal(interaction);
-    if (interaction.isChatInputCommand()) return await onCommande(interaction);
+    if (interaction.isButton()) {
+      console.log(`[ui] bouton ${interaction.customId} par ${qui}`);
+      return await onBouton(interaction);
+    }
+    if (interaction.isModalSubmit()) {
+      console.log(`[ui] formulaire ${interaction.customId} par ${qui}`);
+      return await onModal(interaction);
+    }
+    if (interaction.isChatInputCommand()) {
+      console.log(`[ui] /${interaction.commandName} par ${qui}`);
+      return await onCommande(interaction);
+    }
   } catch (err) {
-    console.error('[interaction] erreur :', err);
+    console.error(`[ui] echec pour ${qui} :`, err);
     const payload = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
     if (interaction.isRepliable()) {
       if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
