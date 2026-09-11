@@ -227,7 +227,7 @@ async function chargerSuivis() {
   }
 }
 
-async function ecrireSolde(nom, montant) {
+async function ecrireLigneSolde(objet) {
   await mkdir(dirname(cfg.soldes.sortie), { recursive: true });
   try {
     const { size } = await stat(cfg.soldes.sortie);
@@ -236,8 +236,10 @@ async function ecrireSolde(nom, montant) {
       console.log('[solde] flux remis a zero (taille max atteinte)');
     }
   } catch { /* fichier absent : il va etre cree */ }
-  await appendFile(cfg.soldes.sortie, JSON.stringify({ name: nom, money: montant, at: Date.now() }) + '\n');
+  await appendFile(cfg.soldes.sortie, JSON.stringify({ ...objet, at: Date.now() }) + '\n');
 }
+
+const ecrireSolde = (nom, montant) => ecrireLigneSolde({ name: nom, money: montant });
 
 function traiterReponseSolde(line) {
   if (!demande) return false;
@@ -249,6 +251,10 @@ function traiterReponseSolde(line) {
 
   if (lu.inconnu) {
     console.warn(`[solde] ${demande.nom} : compte inconnu sur DonutSMP`);
+    // On l ecrit quand meme : une consultation qui attend une reponse doit
+    // savoir que le joueur n existe pas, plutot que d expirer en silence.
+    ecrireLigneSolde({ name: demande.nom, inconnu: true })
+      .catch((e) => console.error('[solde] ecriture :', e.message));
     demande = null;
     return true;
   }

@@ -32,6 +32,35 @@ const q = {
  * Lit le flux des soldes releves en jeu.
  * `onUpdate` sert au panneau public, comme pour l ancienne boucle API.
  */
+// Consultations en attente d une reponse du jeu, par pseudo normalise.
+const enAttente = new Map();
+
+function resoudre(cle, valeur) {
+  const liste = enAttente.get(cle);
+  if (!liste) return;
+  enAttente.delete(cle);
+  for (const ok of liste) ok(valeur);
+}
+
+/**
+ * Demande le solde d un joueur QUELCONQUE et attend la reponse du jeu.
+ * Rend { money } , { inconnu: true } , ou null si le jeu n a pas repondu.
+ */
+export async function consulterSolde(nom, { timeoutMs = 15_000 } = {}) {
+  const propre = String(nom ?? '').trim();
+  if (!/^\.?[A-Za-z0-9_]{1,24}$/.test(propre)) return { invalide: true };
+
+  const cle = normName(propre);
+  const attente = new Promise((resolve) => {
+    if (!enAttente.has(cle)) enAttente.set(cle, []);
+    enAttente.get(cle).push(resolve);
+    setTimeout(() => resolve(null), timeoutMs);
+  });
+
+  await demanderSolde(propre);
+  return attente;
+}
+
 export function surveillerSoldes({ onUpdate = () => {} } = {}) {
   const tailer = new Tailer({
     file: config.ingame.balanceFile,
@@ -39,11 +68,19 @@ export function surveillerSoldes({ onUpdate = () => {} } = {}) {
     pollMs: config.payments.pollMs,
     onLine: (entree) => {
       const nom = typeof entree === 'object' ? entree.name : null;
-      const montant = Number(typeof entree === 'object' ? entree.money : NaN);
-      if (typeof nom !== 'string' || !Number.isFinite(montant) || montant < 0) return;
-
+      if (typeof nom !== 'string') return;
       const cle = normName(nom);
-      // Seuls les comptes encore lies entrent dans le classement.
+
+      if (entree.inconnu) {
+        resoudre(cle, { inconnu: true });
+        return;
+      }
+
+      const montant = Number(entree.money);
+      if (!Number.isFinite(montant) || montant < 0) return;
+      resoudre(cle, { money: montant });
+      // Seuls les comptes encore lies entrent dans le classement : une
+      // consultation ponctuelle ne doit pas peupler le baltop.
       const lien = store.getLinkByName(cle);
       if (!lien) return;
 
