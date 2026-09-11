@@ -23,10 +23,19 @@ il faudrait aussi payer depuis son compte.
 
 ```bash
 npm install
-cp .env.example .env    # puis remplis le
+node scripts/setup.js   # colle le token, le reste se remplit tout seul
 npm run deploy          # enregistre les slash commands
 npm start
 ```
+
+`scripts/setup.js` demande le token du bot sur stdin (jamais en argument, pour
+qu'il ne finisse pas dans l'historique du shell), puis interroge Discord pour
+recuperer l'id de l'application, le nom du bot et la liste des serveurs. Il
+ecrit `DISCORD_TOKEN` et `DISCORD_CLIENT_ID` dans `.env` en chmod 600, pose
+`DISCORD_GUILD_ID` si le bot n'est que sur un serveur, et affiche le lien
+d'invitation avec les bonnes permissions. Le token n'est jamais reaffiche en
+clair. Les autres variables (`MC_LINK_ACCOUNT`, `VERIFIED_ROLE_ID`,
+`DONUT_API_KEY`) restent a remplir a la main.
 
 Node 22.5+ requis (le bot utilise `node:sqlite`, aucune dependance native).
 
