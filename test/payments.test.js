@@ -67,3 +67,15 @@ test('reponses de /balance relevees en production', async () => {
   // Un joueur qui tape la phrase dans le chat ne fixe pas un solde
   assert.equal(parseBalance('[VIP] Troll: SentiaZz has $ 5B'), null);
 });
+
+test('une reponse de /balance porte son pseudo et se suffit a elle meme', async () => {
+  const { parseBalance } = await import('../src/minecraft/payments.js');
+  // C est ce qui permet d accepter une reponse arrivee en retard : le nom est
+  // dedans, aucune correspondance avec la demande en cours n est necessaire.
+  const lu = parseBalance('DrDonutt has $ 116B');
+  assert.equal(lu.name, 'DrDonutt');
+  assert.equal(lu.amount, 116_000_000_000);
+  // A l inverse « That player does not exist » ne porte aucun nom : elle ne
+  // vaut que rattachee a la demande en cours.
+  assert.deepEqual(parseBalance('That player does not exist'), { inconnu: true });
+});

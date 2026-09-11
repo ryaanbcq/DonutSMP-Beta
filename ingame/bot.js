@@ -241,30 +241,31 @@ async function ecrireLigneSolde(objet) {
 
 const ecrireSolde = (nom, montant) => ecrireLigneSolde({ name: nom, money: montant });
 
-function traiterReponseSolde(line) {
-  if (!demande) return false;
-  const lu = parseBalance(line);
-  if (!lu) return false;
+const memeJoueur = (a, b) =>
+  String(a).toLowerCase().replace(/^\./, '') === String(b).toLowerCase().replace(/^\./, '');
 
-  // Reponse pour soi-meme : ce n est pas celle qu on attend.
-  if (lu.soi) return false;
+function traiterReponseSolde(line) {
+  const lu = parseBalance(line);
+  if (!lu || lu.soi) return false;
 
   if (lu.inconnu) {
+    // Seule reponse qui ne porte pas de pseudo : elle ne vaut que rattachee a
+    // la demande en cours.
+    if (!demande) return false;
     console.warn(`[solde] ${demande.nom} : compte inconnu sur DonutSMP`);
-    // On l ecrit quand meme : une consultation qui attend une reponse doit
-    // savoir que le joueur n existe pas, plutot que d expirer en silence.
     ecrireLigneSolde({ name: demande.nom, inconnu: true })
       .catch((e) => console.error('[solde] ecriture :', e.message));
     demande = null;
     return true;
   }
-  // Le serveur peut repondre pour un autre pseudo si une demande a traine.
-  if (lu.name.toLowerCase().replace(/^\./, '') !== demande.nom.toLowerCase().replace(/^\./, '')) {
-    return false;
-  }
 
+  // La reponse PORTE le pseudo : elle se suffit a elle meme. On la prend
+  // toujours, meme si elle arrive en retard et ne correspond plus a la demande
+  // en cours. Exiger la correspondance desynchronisait tout le pipeline : une
+  // reponse tardive etait jetee, la suivante arrivait pour la demande d avant,
+  // et plus une seule n etait acceptee (vecu le 2026-09-12).
   ecrireSolde(lu.name, lu.amount).catch((e) => console.error('[solde] ecriture :', e.message));
-  demande = null;
+  if (demande && memeJoueur(lu.name, demande.nom)) demande = null;
   return true;
 }
 

@@ -56,7 +56,7 @@ export async function execute(interaction) {
   dernier.set(interaction.user.id, Date.now());
   await interaction.deferReply();
 
-  const reponse = await consulterSolde(pseudo);
+  const reponse = await consulterSolde(pseudo, { timeoutMs: 30_000 });
 
   if (reponse === null) {
     return interaction.editReply("⌛ Le serveur n'a pas répondu à temps, réessayez dans un instant.");
