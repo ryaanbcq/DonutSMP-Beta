@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import {
   Client, GatewayIntentBits, Collection, MessageFlags,
   ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder,
+  ButtonBuilder, ButtonStyle,
 } from 'discord.js';
 import { config } from './config.js';
 import { store } from './db.js';
@@ -18,6 +19,7 @@ import { settings, ouSeLier } from './settings.js';
 import { surveillerPresence } from './ingame/surveillance.js';
 import { presence } from './ingame/presence.js';
 import { repondreChallenge } from './link/flow.js';
+import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -126,16 +128,28 @@ async function onCommande(interaction) {
 }
 
 async function onBouton(interaction) {
+  if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 
+  // Le panneau est un message unique : son bouton porte le meme libelle pour
+  // tout le monde. On repond donc en prive, avec le bouton qui correspond a
+  // l etat de CE membre.
   const dejaLie = store.getLink(interaction.user.id);
   if (dejaLie) {
     return interaction.reply({
       embeds: [embed(TITRES.verifie, {
         image: dejaLie.mc_name,
-        description: `Votre profil est déjà associé à **${dejaLie.mc_name}**.\n`
-          + 'Utilisez `/unlink` si vous souhaitez le détacher.',
+        description: `Votre profil est déjà associé à **${dejaLie.mc_name}**.\n\n`
+          + 'Vous pouvez le détacher pour en lier un autre, mais il faudra '
+          + 'refaire une vérification et donc un nouveau paiement.',
       })],
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('link:unlink')
+          .setLabel('Se déconnecter')
+          .setEmoji('🔓')
+          .setStyle(ButtonStyle.Danger),
+      )],
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -154,6 +168,26 @@ async function onBouton(interaction) {
     ));
 
   return interaction.showModal(modal);
+}
+
+async function onDelier(interaction) {
+  const res = await delier(interaction.user.id, interaction.member);
+
+  const contenu = res.etat === 'delie'
+    ? embed('🔓・COMPTE DÉTACHÉ', {
+      couleur: FR.jaune,
+      image: 'aucune',
+      description: `**${res.pseudo}** n'est plus associé à votre profil.\n\n`
+        + 'Cliquez de nouveau sur **Se connecter** pour lier un compte.',
+    })
+    : embed('🔓・COMPTE DÉTACHÉ', {
+      couleur: FR.jaune,
+      image: 'aucune',
+      description: "Vous n'avez aucun compte associé.",
+    });
+
+  // On remplace le message prive : le bouton a fait son office.
+  return interaction.update({ embeds: [contenu], components: [] });
 }
 
 async function onModal(interaction) {
