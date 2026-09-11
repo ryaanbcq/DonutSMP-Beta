@@ -39,7 +39,6 @@ export class PaymentWatcher extends EventEmitter {
     this.file = file;
     this.pollMs = pollMs;
     this.timer = null;
-    this.buffer = '';
   }
 
   async start() {
@@ -56,7 +55,7 @@ export class PaymentWatcher extends EventEmitter {
   }
 
   async tick() {
-    let offset = Number(store.kvGet(OFFSET_KEY) ?? 0);
+    const offset = Number(store.kvGet(OFFSET_KEY) ?? 0);
     let size;
     try {
       ({ size } = await stat(this.file));
@@ -64,27 +63,27 @@ export class PaymentWatcher extends EventEmitter {
       return;
     }
     // Fichier tronque ou tourne : on repart de zero.
-    if (size < offset) {
-      offset = 0;
-      this.buffer = '';
-    }
-    if (size === offset) return;
+    const from = size < offset ? 0 : offset;
+    if (size === from) return;
 
     const fh = await open(this.file, 'r');
+    let chunk;
     try {
-      const len = size - offset;
+      const len = size - from;
       const buf = Buffer.alloc(len);
-      await fh.read(buf, 0, len, offset);
-      this.buffer += buf.toString('utf8');
+      await fh.read(buf, 0, len, from);
+      chunk = buf.toString('utf8');
     } finally {
       await fh.close();
     }
 
-    const lines = this.buffer.split('\n');
-    // La derniere tranche peut etre une ligne incomplete : on la garde.
-    this.buffer = lines.pop() ?? '';
-    const consumed = size - Buffer.byteLength(this.buffer, 'utf8');
-    store.kvSet(OFFSET_KEY, consumed);
+    const lines = chunk.split('\n');
+    // La derniere tranche peut etre une ligne encore en cours d ecriture. On ne
+    // la garde PAS en memoire : on laisse l offset avant elle et on la relira
+    // entiere au prochain tour. Ca la sauve aussi si le process redemarre au
+    // milieu d une ecriture.
+    const partial = lines.pop() ?? '';
+    store.kvSet(OFFSET_KEY, size - Buffer.byteLength(partial, 'utf8'));
 
     for (const line of lines) {
       const trimmed = line.trim();

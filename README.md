@@ -50,29 +50,41 @@ Node 22.5+ requis (le bot utilise `node:sqlite`, aucune dependance native).
 | `VERIFIED_ROLE_ID` | Role donne automatiquement au membre verifie. |
 | `DONUT_API_KEY` | Cle de l'API DonutSMP (`/api` en jeu). Vide = stats de test. |
 
-## Brancher le bot en jeu
+## Le bot en jeu
 
-Le bot Discord ne parle pas a Minecraft : il lit un fichier JSONL append-only.
-Cote mineflayer (une instance dediee, connectee avec le nouveau compte), il
-suffit d'ajouter le handler suivant :
+`ingame/bot.js` est un mineflayer qui se connecte a DonutSMP avec le compte
+receveur et ecrit chaque paiement recu dans `data/payments.jsonl`. Les deux
+process sont independants : le bot Discord ne parle jamais a Minecraft, il lit
+le fichier.
 
-```js
-import { appendFileSync } from 'node:fs';
-
-const LINK_FEED = '/root/bots/fr-bot/data/payments.jsonl';
-
-bot.on('message', (msg) => {
-  const line = msg.toString();
-  if (!/paid you \$/i.test(line)) return;
-  // On ecrit la ligne BRUTE. Le bot Discord la reparse lui meme : il ne fait
-  // jamais confiance a un pseudo ou un montant recopie par un tiers.
-  appendFileSync(LINK_FEED, JSON.stringify({ raw: line, at: Date.now() }) + '\n');
-});
+```bash
+node ingame/bot.js          # en dev
+pm2 start ecosystem.config.cjs --only fr-ingame
 ```
 
-Si les deux bots ne tournent pas sur la meme machine, `rsync`, un montage, ou un
-petit endpoint HTTP qui append dans le meme fichier font l'affaire. Le watcher
-lit par offset et supporte la troncature du fichier.
+Ce bot **ne fait que recevoir**. Aucun chemin de code n envoie d argent, et le
+garde `sendSafe` refuse `/pay`, `/eco`, `/give`, `/trade`, `/sell` meme si la
+commande est ajoutee plus tard par accident. Il previent au demarrage si le
+pseudo connecte ne correspond pas a `MC_LINK_ACCOUNT`, sinon les joueurs
+paieraient le mauvais compte.
+
+Il ecrit la ligne de chat **brute**, jamais un pseudo ou un montant recopie :
+le bot Discord la reparse lui meme avec des motifs ancres. Un test verrouille
+ce contrat entre les deux process, y compris le cas ou une ligne arrive coupee
+en deux ecritures.
+
+Si les deux process ne tournent pas sur la meme machine, il suffit que
+`PAYMENT_FILE` pointe sur le meme fichier partage. Le watcher lit par offset,
+supporte la troncature et reprend la ou il en etait apres un redemarrage.
+
+### Memoire
+
+`ecosystem.config.cjs` plafonne `fr-ingame` a **700 Mo** avec
+`MALLOC_ARENA_MAX=2` et `--max-old-space-size=512`. Un mineflayer sain tient a
+40 a 60 Mo de tas ; ce qui grimpe sur Linux c est le RSS par fragmentation
+glibc, pas une vraie fuite. Le bot purge en plus les entites a plus de 64 blocs
+toutes les minutes et loggue `[mem] rss … heap …` toutes les 2 minutes. Si la
+beta tape le plafond, c est un bug a regarder, pas de la RAM a rajouter.
 
 ## Securite
 
