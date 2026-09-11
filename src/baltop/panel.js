@@ -115,6 +115,7 @@ export async function majRoleTop(client) {
 let derniereSignature = null;
 let derniereEdition = 0;
 let enCours = false;
+let depuisQuand = 0;
 
 export function signature() {
   return balances.classement('money', 10)
@@ -123,7 +124,15 @@ export function signature() {
 }
 
 export async function rafraichirSiBesoin(client, { force = false } = {}) {
-  if (!settings.salonBaltop() || enCours) return false;
+  if (!settings.salonBaltop()) return false;
+
+  // Filet : une publication qui ne rend jamais la main bloquerait le panneau
+  // pour toujours. Au dela de deux minutes on considere le verrou perdu.
+  if (enCours) {
+    if (Date.now() - depuisQuand < 120_000) return false;
+    console.warn('[baltop] verrou de publication bloque, on le force');
+    enCours = false;
+  }
 
   const sig = signature();
   if (!force) {
@@ -132,6 +141,7 @@ export async function rafraichirSiBesoin(client, { force = false } = {}) {
   }
 
   enCours = true;
+  depuisQuand = Date.now();
   try {
     await publier(client);
     await majRoleTop(client);
@@ -146,8 +156,22 @@ export async function rafraichirSiBesoin(client, { force = false } = {}) {
   }
 }
 
-/** A appeler apres chaque releve de solde. */
-export function surveiller(client) {
+/**
+ * A appeler apres chaque releve de solde, ET en balayage regulier.
+ *
+ * Ne jamais faire dependre un affichage public d un seul evenement : si un
+ * onUpdate est manque, le classement resterait faux indefiniment sans que
+ * personne ne le sache. Le balayage rattrape, la limite d edition empeche
+ * qu il fasse du bruit.
+ */
+export function surveiller(client, { balayageMs = 60_000 } = {}) {
   derniereSignature = signature();
-  return () => { rafraichirSiBesoin(client).catch(() => {}); };
+
+  const declencher = () => {
+    rafraichirSiBesoin(client).catch((e) => console.error('[baltop] ', e.message));
+  };
+
+  const timer = setInterval(declencher, balayageMs);
+  timer.unref?.();
+  return declencher;
 }
