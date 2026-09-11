@@ -30,6 +30,9 @@ const cfg = {
     enabled: (process.env.BALANCE_POLL ?? 'true') !== 'false',
     suivis: process.env.TRACKED_FILE ?? './data/tracked.json',
     sortie: process.env.BALANCE_FILE ?? './data/balances.jsonl',
+    // Demandes prioritaires : un compte tout juste verifie ne doit pas
+    // attendre son tour de cycle pour apparaitre au classement.
+    priorite: process.env.BALANCE_PRIORITY_FILE ?? './data/balance-priority.txt',
     // Espacement PLANCHER entre deux /balance. DonutSMP et Paper coupent le
     // spam de commandes : on reste tres en dessous.
     intervalMs: (Number(process.env.BALANCE_INTERVAL_S) || 5) * 1000,
@@ -204,6 +207,7 @@ function connect() {
 // ---------------------------------------------------------------------------
 
 let suivis = [];
+let prioritaires = [];
 let curseur = 0;
 let demande = null;
 let dernierEnvoi = 0;
@@ -266,18 +270,42 @@ setInterval(() => {
     }
     return;
   }
-  if (suivis.length === 0) return;
-  const espacement = Math.max(cfg.soldes.intervalMs, Math.floor(cfg.soldes.cycleMs / suivis.length));
+  const urgent = prioritaires.length > 0;
+  if (!urgent && suivis.length === 0) return;
+
+  // Une demande prioritaire ne saute pas le plancher anti-spam, seulement
+  // l espacement long du cycle de fond.
+  const espacement = urgent
+    ? cfg.soldes.intervalMs
+    : Math.max(cfg.soldes.intervalMs, Math.floor(cfg.soldes.cycleMs / suivis.length));
   if (Date.now() - dernierEnvoi < espacement) return;
 
-  const nom = suivis[curseur % suivis.length];
-  curseur = (curseur + 1) % Math.max(1, suivis.length);
+  let nom;
+  if (urgent) {
+    nom = prioritaires.shift();
+  } else {
+    nom = suivis[curseur % suivis.length];
+    curseur = (curseur + 1) % Math.max(1, suivis.length);
+  }
   demande = { nom, a: Date.now() };
   dernierEnvoi = Date.now();
   bot.chat(`/balance ${nom}`);
 }, 1000).unref();
 
 setInterval(() => { chargerSuivis().catch(() => {}); }, 30_000).unref();
+
+// File prioritaire : une ligne par pseudo, consommee puis videe.
+setInterval(async () => {
+  let contenu;
+  try { contenu = await readFile(cfg.soldes.priorite, 'utf8'); } catch { return; }
+  if (!contenu.trim()) return;
+  await writeFile(cfg.soldes.priorite, '');
+  for (const nom of contenu.split('\n').map((l) => l.trim()).filter(Boolean)) {
+    if (!/^\.?[A-Za-z0-9_]{1,24}$/.test(nom)) continue;
+    if (!prioritaires.includes(nom)) prioritaires.push(nom);
+  }
+  if (prioritaires.length) console.log(`[solde] ${prioritaires.length} demande(s) prioritaire(s)`);
+}, 2_000).unref();
 
 // ---------------------------------------------------------------------------
 // File de commandes admin : une ligne par commande dans data/cmd-queue.txt,

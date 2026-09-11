@@ -1,4 +1,4 @@
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { db, store } from '../db.js';
 import { balances } from './balances.js';
@@ -55,4 +55,30 @@ export function surveillerSoldes({ onUpdate = () => {} } = {}) {
 
   tailer.start().catch((e) => console.error('[solde] flux illisible :', e.message));
   return tailer;
+}
+
+/** Demande au bot en jeu de relever ce compte en priorite. */
+export async function demanderSolde(nom) {
+  const propre = String(nom ?? '').trim();
+  if (!/^\.?[A-Za-z0-9_]{1,24}$/.test(propre)) return false;
+  await mkdir(dirname(config.ingame.priorityFile), { recursive: true });
+  await appendFile(config.ingame.priorityFile, propre + '\n');
+  return true;
+}
+
+/**
+ * Attend qu un solde frais arrive pour ce compte. Rend le montant, ou null si
+ * rien n arrive a temps : on ne bloque jamais une confirmation pour ca.
+ */
+export async function attendreSolde(nom, { timeoutMs = 8000, pasMs = 400 } = {}) {
+  const cle = normName(nom);
+  const depart = Date.now();
+  const avant = db.prepare('SELECT updated_at FROM balances WHERE mc_name_norm = ?').get(cle)?.updated_at ?? 0;
+
+  while (Date.now() - depart < timeoutMs) {
+    await new Promise((r) => setTimeout(r, pasMs));
+    const row = db.prepare('SELECT money, updated_at FROM balances WHERE mc_name_norm = ?').get(cle);
+    if (row && row.updated_at > avant && row.updated_at > 0) return row.money;
+  }
+  return null;
 }

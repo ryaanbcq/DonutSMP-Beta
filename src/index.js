@@ -11,7 +11,7 @@ import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
 import { balances, demarrerRafraichissement } from './donut/balances.js';
-import { publierSuivis, surveillerSoldes } from './donut/ingame-balances.js';
+import { publierSuivis, surveillerSoldes, demanderSolde, attendreSolde } from './donut/ingame-balances.js';
 import { donut } from './donut/api.js';
 import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
 import { settings } from './settings.js';
@@ -173,6 +173,12 @@ async function startWatcher(c) {
     console.log(`[link] ${challenge.mc_name} verifie pour ${discordId} (${shortMoney(payment.amount)})`);
     balances.suivre({ mc_name: challenge.mc_name, discord_id: discordId });
     publierSuivis().catch((e) => console.error('[baltop] liste des suivis :', e.message));
+
+    // Solde releve tout de suite : sans ca le nouveau membre attendrait le
+    // prochain tour de cycle, jusqu a un quart d heure, pour apparaitre au
+    // classement.
+    await demanderSolde(challenge.mc_name).catch(() => {});
+    const solde = await attendreSolde(challenge.mc_name).catch(() => null);
 
     const delai = Math.round(config.refundDelayMaxS / 60);
     const confirmation = embed(TITRES.verifie, {
