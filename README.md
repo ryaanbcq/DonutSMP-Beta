@@ -58,9 +58,36 @@ process sont independants : le bot Discord ne parle jamais a Minecraft, il lit
 le fichier.
 
 ```bash
+node scripts/auth.js        # une seule fois : connexion Microsoft
 node ingame/bot.js          # en dev
 pm2 start ecosystem.config.cjs --only fr-ingame
 ```
+
+### Connexion Microsoft
+
+`scripts/auth.js` fait l authentification une fois et met le jeton en cache
+dans `data/msa-cache`, que le bot reutilise ensuite a chaque demarrage.
+
+```bash
+node scripts/auth.js                 # utilise MC_EMAIL du .env
+node scripts/auth.js mail@exemple.com
+node scripts/auth.js --force         # oublie le cache, refait l auth
+node scripts/auth.js --check         # le cache est il encore valide ? (code 2 sinon)
+```
+
+Microsoft affiche une page et un code a saisir : aucun mot de passe ne passe
+par le script, il ne voit jamais les identifiants du compte. Sur macOS le code
+est copie dans le presse papier.
+
+Le script lit le pseudo en jeu depuis le profil Minecraft et le compare a
+`MC_LINK_ACCOUNT` : si les deux different il refuse de continuer, parce que les
+joueurs paieraient un autre compte que celui annonce. Si `MC_LINK_ACCOUNT` est
+vide, il le remplit tout seul avec le vrai pseudo.
+
+Le bot et le script partagent `MC_PROFILES_FOLDER` et les memes reglages de
+flux (`live`, titre Nintendo Switch, comme mineflayer par defaut) : c est ce qui
+fait que le cache est commun. Si le jeton expire pendant que le bot tourne, le
+code de reconnexion s affiche dans les logs pm2 au lieu d attendre en silence.
 
 Ce bot **ne fait que recevoir**. Aucun chemin de code n envoie d argent, et le
 garde `sendSafe` refuse `/pay`, `/eco`, `/give`, `/trade`, `/sell` meme si la

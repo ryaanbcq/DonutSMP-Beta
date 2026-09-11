@@ -16,6 +16,9 @@ const cfg = {
   username: process.env.MC_EMAIL ?? '',
   auth: process.env.MC_AUTH ?? 'microsoft',
   version: process.env.MC_VERSION || false,
+  // Meme dossier que scripts/auth.js : le bot reutilise le jeton deja obtenu
+  // au lieu de relancer une connexion Microsoft a chaque demarrage.
+  profilesFolder: process.env.MC_PROFILES_FOLDER ?? './data/msa-cache',
   feed: process.env.PAYMENT_FILE ?? './data/payments.jsonl',
   status: process.env.INGAME_STATUS ?? './data/ingame-status.json',
   expectedName: process.env.MC_LINK_ACCOUNT ?? '',
@@ -76,7 +79,15 @@ function connect() {
     username: cfg.username,
     auth: cfg.auth,
     version: cfg.version,
+    profilesFolder: cfg.profilesFolder,
     hideErrors: false,
+    // Si le jeton en cache a expire, le code s affiche dans les logs pm2
+    // plutot que de laisser le process attendre en silence.
+    onMsaCode: (res) => {
+      console.warn('[mc] jeton expire, reconnexion Microsoft demandee');
+      console.warn(`[mc] ouvre ${res.verification_uri} et saisis le code ${res.user_code}`);
+      console.warn('[mc] ou lance : node scripts/auth.js --force');
+    },
   });
 
   bot.once('spawn', async () => {
