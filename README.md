@@ -105,3 +105,13 @@ npm test                       # 20 tests, dont tous les scenarios de triche
 node scripts/demo.js           # deroule le flux complet sans Discord
 npm run pay -- Sp4cz 944       # simule un paiement recu en jeu
 ```
+
+## Outil staff
+
+```bash
+node scripts/admin.js list                       # les comptes lies
+node scripts/admin.js link <discordId> <pseudo>  # lier a la main (conflit, dedommagement)
+node scripts/admin.js unlink <discordId>
+node scripts/admin.js pending                    # verifications en cours
+node scripts/admin.js payments 20                # derniers paiements vus et leur verdict
+```
