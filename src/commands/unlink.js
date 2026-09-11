@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../db.js';
 import { cancelLink } from '../link/manager.js';
+import { forget } from '../link/interactions.js';
 import { config } from '../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -11,6 +12,7 @@ export const requiresLink = false;
 
 export async function execute(interaction) {
   const cancelled = cancelLink(interaction.user.id);
+  forget(interaction.user.id);
   const link = store.getLink(interaction.user.id);
 
   if (!link) {

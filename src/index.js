@@ -5,6 +5,7 @@ import { Client, GatewayIntentBits, Collection, EmbedBuilder, MessageFlags } fro
 import { config, COLORS } from './config.js';
 import { store } from './db.js';
 import { PaymentWatcher } from './link/watcher.js';
+import { take } from './link/interactions.js';
 import { shortMoney } from './lib/format.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -72,13 +73,25 @@ async function startWatcher(c) {
   watcher.on('linked', async ({ discordId, challenge, payment }) => {
     console.log(`[link] ${challenge.mc_name} verifie pour ${discordId} (${shortMoney(payment.amount)})`);
 
+    const confirmation = new EmbedBuilder()
+      .setColor(COLORS.ok)
+      .setTitle('Compte vérifié')
+      .setDescription(`**${challenge.mc_name}** est maintenant lié à ton Discord. Toutes les commandes du bot te sont ouvertes.`)
+      .addFields(
+        { name: 'Compte', value: challenge.mc_name, inline: true },
+        { name: 'Payé', value: shortMoney(payment.amount), inline: true },
+      )
+      .setThumbnail(`https://mc-heads.net/avatar/${encodeURIComponent(challenge.mc_name.replace(/^\./, ''))}/128`);
+
+    // Confirmation visible du seul membre, dans le salon ou il a tape /link.
+    const origin = take(discordId);
+    if (origin) {
+      await origin.followUp({ embeds: [confirmation], flags: MessageFlags.Ephemeral })
+        .catch((e) => console.warn('[link] ephemere impossible :', e.message));
+    }
+
     const user = await c.users.fetch(discordId).catch(() => null);
-    await user?.send({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.ok)
-        .setTitle('Compte vérifié')
-        .setDescription(`**${challenge.mc_name}** est maintenant lié à ton Discord. Toutes les commandes du bot te sont ouvertes.`)],
-    }).catch(() => {});
+    await user?.send({ embeds: [confirmation] }).catch(() => {});
 
     if (config.discord.verifiedRoleId && config.discord.guildId) {
       const guild = await c.guilds.fetch(config.discord.guildId).catch(() => null);

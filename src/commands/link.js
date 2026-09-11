@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { startLink, cancelLink, LinkError } from '../link/manager.js';
 import { config, COLORS } from '../config.js';
 import { store } from '../db.js';
+import { remember } from '../link/interactions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('link')
@@ -42,7 +43,11 @@ export async function execute(interaction) {
     )
     .setFooter({ text: 'Le montant est unique. Un autre joueur qui paie la même somme ne validera pas ton compte.' });
 
-  return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+
+  // Sert a confirmer en ephemere quand le paiement arrivera, hors interaction.
+  remember(interaction.user.id, interaction, challenge.expiresAt - Date.now());
+
 }
 
 export const cancel = { cancelLink, store };
