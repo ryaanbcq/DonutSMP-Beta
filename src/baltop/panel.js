@@ -1,6 +1,7 @@
 import { balances } from '../donut/balances.js';
 import { config } from '../config.js';
 import { embed, TITRES, FR } from '../lib/brand.js';
+import { shortMoney } from '../lib/format.js';
 import { store } from '../db.js';
 import { settings } from '../settings.js';
 
@@ -12,8 +13,6 @@ function rang(i) {
   if (i < 3) return settings.emojis()[i] || MEDAILLES[i];
   return RANGS[i] ?? `\`${i + 1}\``;
 }
-
-const dollars = (n) => `$${Number(n).toLocaleString('en-US')}`;
 
 /** Cadence en clair, generee depuis la config pour ne pas mentir. */
 export function texteCadence() {
@@ -32,7 +31,7 @@ export function rendre() {
       : '');
 
   const lignes = top.length
-    ? top.map((r, i) => `${rang(i)} <@${r.discordId}> — \`\`${dollars(r.value)}\`\``).join('\n')
+    ? top.map((r, i) => `${rang(i)} <@${r.discordId}> — \`\`${shortMoney(r.value)}\`\``).join('\n')
     : '*Aucun solde relevé pour le moment.*';
 
   const salonLink = settings.salonLink();
