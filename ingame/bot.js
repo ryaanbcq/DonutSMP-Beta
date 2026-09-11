@@ -177,6 +177,9 @@ function connect() {
         ledger.markPaid(entry.id);
         ledger.save().catch(() => {});
         console.log(`[refund] rendu ${entry.amount} a ${entry.to}`);
+        // Le solde du joueur vient de remonter : le classement le connait
+        // encore d avant le remboursement. On le relit tout de suite.
+        if (!prioritaires.includes(entry.to)) prioritaires.push(entry.to);
       } else {
         console.warn(`[refund] confirmation sans entree en vol : ${envoye.raw}`);
       }
