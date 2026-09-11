@@ -1,15 +1,15 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../db.js';
-import { COLORS } from '../config.js';
+import { embed, TITRES, FR } from '../lib/brand.js';
 import { reputation } from '../lib/format.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vouch')
-  .setDescription('Laisse un avis sur un membre avec qui tu as tradé')
+  .setDescription('Laissez un avis sur un membre avec qui vous avez tradé')
   .addUserOption((o) => o.setName('membre').setDescription('Le membre à noter').setRequired(true))
   .addStringOption((o) =>
     o.setName('avis')
-      .setDescription('Ton verdict')
+      .setDescription('Votre verdict')
       .setRequired(true)
       .addChoices(
         { name: "Positif, tout s'est bien passé", value: 'pos' },
@@ -24,7 +24,7 @@ export const requiresLink = true;
 
 export async function execute(interaction) {
   const target = interaction.options.getUser('membre', true);
-  const value = interaction.options.getString('avis', true) === 'pos' ? 1 : -1;
+  const positif = interaction.options.getString('avis', true) === 'pos';
   const comment = interaction.options.getString('commentaire');
 
   if (target.id === interaction.user.id) {
@@ -43,20 +43,24 @@ export async function execute(interaction) {
   }
 
   const previous = store.vouchList(target.id, 100).find((v) => v.from_id === interaction.user.id);
-  store.setVouch(interaction.user.id, target.id, value, comment);
+  store.setVouch(interaction.user.id, target.id, positif ? 1 : -1, comment);
 
   const { pos, neg } = store.vouchScore(target.id);
   const rep = reputation(pos, neg);
-  const author = store.getLink(interaction.user.id);
+  const auteur = store.getLink(interaction.user.id);
 
-  const embed = new EmbedBuilder()
-    .setColor(value > 0 ? COLORS.ok : COLORS.err)
-    .setTitle(value > 0 ? '👍 Avis positif' : '👎 Avis négatif')
-    .setDescription(`**${author.mc_name}** a noté **${targetLink.mc_name}**`)
-    .addFields({ name: 'Réputation de ' + targetLink.mc_name, value: `${rep.label} · \`+${pos}\` / \`-${neg}\`` });
+  const carte = embed(TITRES.avis, {
+    couleur: positif ? FR.vert : FR.rouge,
+    image: targetLink.mc_name,
+    description: `${positif ? '👍 Avis positif' : '👎 Avis négatif'}\n`
+      + `**${auteur.mc_name}** a noté **${targetLink.mc_name}**`,
+  }).addFields({
+    name: `Réputation de ${targetLink.mc_name}`,
+    value: `${rep.label} · \`+${pos}\` / \`-${neg}\``,
+  });
 
-  if (comment) embed.addFields({ name: 'Commentaire', value: comment });
-  if (previous) embed.setFooter({ text: 'Cet avis remplace le précédent du même auteur.' });
+  if (comment) carte.addFields({ name: 'Commentaire', value: comment });
+  if (previous) carte.setFooter({ text: 'Cet avis remplace le précédent du même auteur.' });
 
-  return interaction.reply({ embeds: [embed] });
+  return interaction.reply({ embeds: [carte] });
 }

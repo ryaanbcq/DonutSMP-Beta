@@ -34,6 +34,8 @@ export const config = {
     base: process.env.DONUT_API_BASE ?? 'https://api.donutsmp.net/v1',
   },
   dbPath: process.env.DB_PATH ?? './data/bot.db',
+  // Repris tel quel par les textes joueurs qui annoncent le remboursement.
+  refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),
 };
 
 export const COLORS = {

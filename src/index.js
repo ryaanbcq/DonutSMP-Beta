@@ -1,11 +1,16 @@
 import { readdir } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
-import { Client, GatewayIntentBits, Collection, EmbedBuilder, MessageFlags } from 'discord.js';
-import { config, COLORS } from './config.js';
+import {
+  Client, GatewayIntentBits, Collection, MessageFlags,
+  ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder,
+} from 'discord.js';
+import { config } from './config.js';
 import { store } from './db.js';
 import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
+import { setLogo, embed, TITRES, FR } from './lib/brand.js';
+import { repondreChallenge } from './link/flow.js';
 import { shortMoney } from './lib/format.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +31,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = await loadCommands();
 
 client.once('clientReady', async (c) => {
+  setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
   console.log(`[link] compte receveur : ${config.mc.linkAccount}`);
@@ -33,34 +39,76 @@ client.once('clientReady', async (c) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+  try {
+    if (interaction.isButton()) return await onBouton(interaction);
+    if (interaction.isModalSubmit()) return await onModal(interaction);
+    if (interaction.isChatInputCommand()) return await onCommande(interaction);
+  } catch (err) {
+    console.error('[interaction] erreur :', err);
+    const payload = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
+    if (interaction.isRepliable()) {
+      if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
+      else await interaction.reply(payload).catch(() => {});
+    }
+  }
+});
+
+async function onCommande(interaction) {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // Mur de verification : les avantages sont reserves aux comptes lies.
+  // Mur de verification : les fonctionnalites sont reservees aux comptes lies.
   if (command.requiresLink && !store.getLink(interaction.user.id)) {
     return interaction.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(COLORS.warn)
-        .setTitle('Compte non vérifié')
-        .setDescription(
-          'Cette commande est réservée aux membres qui ont lié leur compte DonutSMP.\n\n'
-          + 'Fais `/link <ton pseudo>` : le bot te donnera une somme exacte à lui envoyer en jeu, '
-          + 'et ton compte sera vérifié en quelques secondes.',
-        )],
+      embeds: [embed(TITRES.reserve, {
+        couleur: FR.jaune,
+        description:
+          'Cette commande est réservée aux membres qui ont associé leur compte DonutSMP.\n\n'
+          + 'Utilisez `/link <votre pseudo>` : le bot vous donnera une somme exacte à lui '
+          + 'envoyer en jeu, qui vous sera rendue aussitôt après vérification.',
+      })],
       flags: MessageFlags.Ephemeral,
     });
   }
 
-  try {
-    await command.execute(interaction);
-  } catch (err) {
-    console.error(`[cmd] ${interaction.commandName} :`, err);
-    const payload = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
-    if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
-    else await interaction.reply(payload).catch(() => {});
+  await command.execute(interaction);
+}
+
+async function onBouton(interaction) {
+  if (interaction.customId !== 'link:start') return;
+
+  const dejaLie = store.getLink(interaction.user.id);
+  if (dejaLie) {
+    return interaction.reply({
+      embeds: [embed(TITRES.verifie, {
+        image: dejaLie.mc_name,
+        description: `Votre profil est déjà associé à **${dejaLie.mc_name}**.\n`
+          + 'Utilisez `/unlink` si vous souhaitez le détacher.',
+      })],
+      flags: MessageFlags.Ephemeral,
+    });
   }
-});
+
+  const modal = new ModalBuilder()
+    .setCustomId('link:modal')
+    .setTitle('Associer mon compte Minecraft')
+    .addComponents(new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('pseudo')
+        .setLabel('Votre pseudo Minecraft')
+        .setPlaceholder('Exactement comme en jeu')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(24),
+    ));
+
+  return interaction.showModal(modal);
+}
+
+async function onModal(interaction) {
+  if (interaction.customId !== 'link:modal') return;
+  return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
+}
 
 async function startWatcher(c) {
   if (config.payments.source === 'none') {
@@ -73,15 +121,17 @@ async function startWatcher(c) {
   watcher.on('linked', async ({ discordId, challenge, payment }) => {
     console.log(`[link] ${challenge.mc_name} verifie pour ${discordId} (${shortMoney(payment.amount)})`);
 
-    const confirmation = new EmbedBuilder()
-      .setColor(COLORS.ok)
-      .setTitle('Compte vérifié')
-      .setDescription(`**${challenge.mc_name}** est maintenant lié à ton Discord. Toutes les commandes du bot te sont ouvertes.`)
-      .addFields(
-        { name: 'Compte', value: challenge.mc_name, inline: true },
-        { name: 'Payé', value: shortMoney(payment.amount), inline: true },
-      )
-      .setThumbnail(`https://mc-heads.net/avatar/${encodeURIComponent(challenge.mc_name.replace(/^\./, ''))}/128`);
+    const delai = Math.round(config.refundDelayMaxS / 60);
+    const confirmation = embed(TITRES.verifie, {
+      couleur: FR.vert,
+      image: challenge.mc_name,
+      description:
+        `**${challenge.mc_name}** est maintenant associé à votre profil Discord.\n`
+        + 'Toutes les fonctionnalités du bot vous sont ouvertes.',
+    }).addFields(
+      { name: 'Compte', value: `\`${challenge.mc_name}\``, inline: true },
+      { name: 'Remboursement', value: `${shortMoney(payment.amount)} sous ${delai} min`, inline: true },
+    );
 
     // Confirmation visible du seul membre, dans le salon ou il a tape /link.
     const origin = take(discordId);
@@ -100,12 +150,11 @@ async function startWatcher(c) {
         console.error('[link] role non attribue :', e.message));
     }
 
-    await log(c, new EmbedBuilder()
-      .setColor(COLORS.ok)
-      .setTitle('Nouveau compte vérifié')
-      .setDescription(`<@${discordId}> → **${challenge.mc_name}**`)
-      .addFields({ name: 'Payé', value: shortMoney(payment.amount), inline: true })
-      .setTimestamp());
+    await log(c, embed(TITRES.staff, {
+      couleur: FR.vert,
+      image: challenge.mc_name,
+      description: `Nouveau compte vérifié : <@${discordId}> → **${challenge.mc_name}**`,
+    }).addFields({ name: 'Payé', value: shortMoney(payment.amount), inline: true }).setTimestamp());
   });
 
   watcher.on('unmatched', ({ payment }) => {
@@ -114,11 +163,11 @@ async function startWatcher(c) {
 
   watcher.on('conflict', async ({ challenge, payment }) => {
     console.warn(`[link] conflit sur ${challenge.mc_name} (${shortMoney(payment.amount)})`);
-    await log(c, new EmbedBuilder()
-      .setColor(COLORS.err)
-      .setTitle('Vérification en conflit')
-      .setDescription(`**${challenge.mc_name}** a payé ${shortMoney(payment.amount)} mais le compte était déjà lié. À traiter à la main.`)
-      .setTimestamp());
+    await log(c, embed(TITRES.staff, {
+      couleur: FR.rouge,
+      description: `Vérification en conflit : **${challenge.mc_name}** a payé ${shortMoney(payment.amount)} `
+        + 'mais le compte était déjà lié. À traiter à la main.',
+    }).setTimestamp());
   });
 
   watcher.on('error', (err) => console.error('[link] watcher :', err.message));

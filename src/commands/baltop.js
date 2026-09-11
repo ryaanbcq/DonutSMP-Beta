@@ -1,6 +1,6 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { donut, LEADERBOARDS, MONEY_BOARDS } from '../donut/api.js';
-import { COLORS } from '../config.js';
+import { embed, TITRES } from '../lib/brand.js';
 import { shortMoney, duration, MEDALS } from '../lib/format.js';
 
 export const data = new SlashCommandBuilder()
@@ -26,17 +26,16 @@ export async function execute(interaction) {
 
   const fmt = MONEY_BOARDS.has(category) ? shortMoney
     : category === 'playtime' ? duration
-    : (v) => Number(v).toLocaleString('en-US');
+    : (v) => Number(v).toLocaleString('fr-FR');
 
   const label = LEADERBOARDS.find((l) => l.value === category)?.name ?? category;
-  const lines = rows.map((r, i) =>
+  const lignes = rows.map((r, i) =>
     `${MEDALS[i] ?? `\`${String(r.rank).padStart(2, ' ')}\``} **${r.name}** · ${fmt(r.value)}`);
 
-  const embed = new EmbedBuilder()
-    .setColor(COLORS.brand)
-    .setTitle(`Classement ${label}`)
-    .setDescription(lines.join('\n') || 'Classement vide.');
+  const classement = embed(TITRES.classement, {
+    description: `**${label}**\n\n${lignes.join('\n') || 'Classement vide.'}`,
+  });
 
-  if (rows[0]?.mock) embed.setFooter({ text: 'Données de test : aucune clé API DonutSMP configurée.' });
-  return interaction.editReply({ embeds: [embed] });
+  if (rows[0]?.mock) classement.setFooter({ text: 'Données de test : aucune clé API DonutSMP configurée.' });
+  return interaction.editReply({ embeds: [classement] });
 }

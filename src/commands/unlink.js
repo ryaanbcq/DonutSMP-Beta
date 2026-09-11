@@ -6,7 +6,7 @@ import { config } from '../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unlink')
-  .setDescription('Détache ton compte Minecraft de ton Discord');
+  .setDescription('Détachez votre compte Minecraft de votre profil Discord');
 
 export const requiresLink = false;
 
@@ -19,7 +19,7 @@ export async function execute(interaction) {
     return interaction.reply({
       content: cancelled
         ? '✅ Vérification en cours annulée.'
-        : "Tu n'as aucun compte lié.",
+        : "Vous n'avez aucun compte associé.",
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -31,7 +31,8 @@ export async function execute(interaction) {
   }
 
   return interaction.reply({
-    content: `✅ **${link.mc_name}** n'est plus lié à ton Discord. Un nouveau \`/link\` demandera un nouveau paiement.`,
+    content: `✅ **${link.mc_name}** n'est plus associé à votre profil. `
+      + 'Un nouveau `/link` demandera un nouveau paiement.',
     flags: MessageFlags.Ephemeral,
   });
 }

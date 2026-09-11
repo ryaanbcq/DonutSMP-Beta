@@ -20,7 +20,7 @@ export function allocateAmount() {
   const taken = store.takenAmounts();
   const span = max - min + 1;
   if (taken.size >= span) {
-    throw new LinkError('saturated', 'Toutes les sommes de vérification sont prises, réessaie dans quelques minutes.');
+    throw new LinkError('saturated', 'Toutes les sommes de vérification sont prises, réessayez dans quelques minutes.');
   }
   for (let i = 0; i < 64; i++) {
     const n = randomInt(min, max + 1);
@@ -28,7 +28,7 @@ export function allocateAmount() {
   }
   // Tirage sature localement : on prend le premier libre.
   for (let n = min; n <= max; n++) if (!taken.has(n)) return n;
-  throw new LinkError('saturated', 'Toutes les sommes de vérification sont prises, réessaie dans quelques minutes.');
+  throw new LinkError('saturated', 'Toutes les sommes de vérification sont prises, réessayez dans quelques minutes.');
 }
 
 /**
@@ -44,12 +44,12 @@ export function startLink(discordId, mcName) {
 
   const existing = store.getLink(discordId);
   if (existing) {
-    throw new LinkError('already_linked', `Ton Discord est déjà lié à **${existing.mc_name}**. Fais \`/unlink\` d'abord.`);
+    throw new LinkError('already_linked', `Votre profil est déjà associé à **${existing.mc_name}**. Utilisez \`/unlink\` d'abord.`);
   }
 
   const taken = store.getLinkByName(name);
   if (taken) {
-    throw new LinkError('name_taken', `Le compte **${name}** est déjà lié à un autre membre. Ouvre un ticket si c'est le tien.`);
+    throw new LinkError('name_taken', `Le compte **${name}** est déjà associé à un autre membre. Ouvrez un ticket si c'est le vôtre.`);
   }
 
   const pending = store.getPending(discordId);
@@ -89,10 +89,17 @@ export function resolvePayment(payment) {
     return { outcome: 'conflict', payment, challenge };
   }
 
-  store.createLink(challenge.discord_id, challenge.mc_name, payment.amount);
+  // Le message systeme de DonutSMP porte la casse officielle du pseudo :
+  // elle bat celle tapee par le membre, qui peut etre en minuscules.
+  store.createLink(challenge.discord_id, payment.from, payment.amount);
   store.closeChallenge(challenge.id, 'confirmed');
   store.recordPayment(payment, 'linked', challenge.id);
-  return { outcome: 'linked', payment, challenge, discordId: challenge.discord_id };
+  return {
+    outcome: 'linked',
+    payment,
+    challenge: { ...challenge, mc_name: payment.from },
+    discordId: challenge.discord_id,
+  };
 }
 
 export { normName };
