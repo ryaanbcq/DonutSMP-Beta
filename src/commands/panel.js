@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { embed, TITRES } from '../lib/brand.js';
 import { verrouiller, deverrouiller, peutVerrouiller } from '../lib/salon.js';
 import { publier as publierClassement, majRoleTop } from '../baltop/panel.js';
+import { settings } from '../settings.js';
 
 export const requiresLink = false;
 
@@ -46,20 +47,28 @@ const PANNEAUX = {
     nom: 'Connexion',
     async poser(interaction, salon) {
       await salon.send(panneauConnexion());
-      return config.discord.logoUrl === '' && !config.baltop.salonLinkId
-        ? `Pense à mettre \`LINK_CHANNEL_ID=${salon.id}\` dans le .env pour que le classement y renvoie.`
-        : null;
+      // Le classement renvoie vers ce salon : on retient lequel c'est.
+      settings.poserSalonLink(salon.id);
+      return 'Le classement renverra désormais vers ce salon.';
     },
   },
   baltop: {
     nom: 'Classement',
     async poser(interaction, salon) {
+      // Retenu AVANT la publication : c'est ce salon que le bot réécrira.
+      settings.poserSalonBaltop(salon.id);
+
+      const role = interaction.options.getRole('role');
+      if (role) settings.poserRoleTop(role.id);
+
       const message = await publierClassement(interaction.client, salon.id);
       if (!message) throw new Error('publication refusée, regarde les logs');
       await majRoleTop(interaction.client);
-      return config.baltop.salonId
-        ? null
-        : `Pense à mettre \`BALTOP_CHANNEL_ID=${salon.id}\` dans le .env pour qu'il se réécrive tout seul.`;
+
+      const notes = ['Il se réécrira ici tout seul dès qu\'une position bouge.'];
+      if (role) notes.push(`Le premier du classement recevra ${role}.`);
+      else if (!settings.roleTop()) notes.push('Ajoute l\'option `role` pour récompenser le premier.');
+      return notes.join(' ');
     },
   },
 };
@@ -69,7 +78,10 @@ export const data = new SlashCommandBuilder()
   .setDescription('Publie un panneau du bot dans un salon')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addSubcommand((s) => sousCommande(s, 'link', 'Panneau de connexion avec le bouton de liaison'))
-  .addSubcommand((s) => sousCommande(s, 'baltop', 'Classement des fortunes de la commu, réécrit tout seul'))
+  .addSubcommand((s) =>
+    sousCommande(s, 'baltop', 'Classement des fortunes de la commu, réécrit tout seul')
+      .addRoleOption((o) =>
+        o.setName('role').setDescription('Rôle donné automatiquement au premier du classement')))
   .addSubcommand((s) =>
     s.setName('deverrouiller')
       .setDescription('Rouvre un salon de panneau à tout le monde')

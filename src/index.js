@@ -14,6 +14,7 @@ import { balances, demarrerRafraichissement } from './donut/balances.js';
 import { publierSuivis, surveillerSoldes } from './donut/ingame-balances.js';
 import { donut } from './donut/api.js';
 import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
+import { settings } from './settings.js';
 import { repondreChallenge } from './link/flow.js';
 import { shortMoney } from './lib/format.js';
 
@@ -41,7 +42,9 @@ client.once('clientReady', async (c) => {
   console.log(`[link] compte receveur : ${config.mc.linkAccount}`);
 
   const suivis = balances.resynchroniser();
-  const onUpdate = config.baltop.salonId ? surveillerClassement(c) : () => {};
+  // Toujours branche : le salon du panneau peut etre choisi plus tard par
+  // /panel baltop, sans redemarrage.
+  const onUpdate = surveillerClassement(c);
 
   if (donut.live) {
     // Une cle API existe : on releve par l API, c est plus precis.
@@ -58,12 +61,12 @@ client.once('clientReady', async (c) => {
     surveillerSoldes({ onUpdate });
     console.log(`[baltop] ${n} comptes publies pour le bot en jeu, soldes lus via /balance`);
   }
-  if (config.baltop.salonId) {
-    const secondes = Math.round(config.baltop.minEditMs / 1000);
+  const secondes = Math.round(config.baltop.minEditMs / 1000);
+  if (settings.salonBaltop()) {
     console.log(`[baltop] panneau reecrit des que le top bouge, au plus une fois par ${secondes} s`);
     await rafraichirSiBesoin(c, { force: true });
   } else {
-    console.log('[baltop] pas de salon de panneau (BALTOP_CHANNEL_ID vide)');
+    console.log('[baltop] aucun panneau pose, utilise /panel baltop dans un salon');
   }
   await startWatcher(c);
 });

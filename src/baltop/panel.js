@@ -2,13 +2,14 @@ import { balances } from '../donut/balances.js';
 import { config } from '../config.js';
 import { embed, TITRES, FR } from '../lib/brand.js';
 import { store } from '../db.js';
+import { settings } from '../settings.js';
 
 const RANGS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 const MEDAILLES = ['🥇', '🥈', '🥉'];
 const CLE_MESSAGE = 'baltop.message';
 
 function rang(i) {
-  if (i < 3) return config.baltop.emojis[i] || MEDAILLES[i];
+  if (i < 3) return settings.emojis()[i] || MEDAILLES[i];
   return RANGS[i] ?? `\`${i + 1}\``;
 }
 
@@ -26,17 +27,18 @@ export function rendre() {
 
   const intro = '**Découvrez les plus grandes fortunes de DonutSMP FR ! '
     + 'Le classement ci-dessous regroupe les 10 joueurs ayant le solde en jeu le plus élevé.**'
-    + (config.baltop.roleTopId
-      ? ` De plus, le joueur occupant la 1ère place reçoit automatiquement le rôle exclusif <@&${config.baltop.roleTopId}> !`
+    + (settings.roleTop()
+      ? ` De plus, le joueur occupant la 1ère place reçoit automatiquement le rôle exclusif <@&${settings.roleTop()}> !`
       : '');
 
   const lignes = top.length
     ? top.map((r, i) => `${rang(i)} <@${r.discordId}> — \`\`${dollars(r.value)}\`\``).join('\n')
     : '*Aucun solde relevé pour le moment.*';
 
-  const pied = config.baltop.salonLinkId
+  const salonLink = settings.salonLink();
+  const pied = salonLink
     ? '\n\n*Pour que votre argent soit pris en compte, vous devez obligatoirement lier votre compte '
-      + `Minecraft dans le salon <#${config.baltop.salonLinkId}>.*`
+      + `Minecraft dans le salon <#${salonLink}>.*`
     : '\n\n*Pour que votre argent soit pris en compte, vous devez obligatoirement lier votre compte '
       + 'Minecraft avec la commande `/link`.*';
 
@@ -51,7 +53,7 @@ export function rendre() {
 
 /** Publie ou reecrit le panneau. Rend le message, ou null. */
 export async function publier(client, salonForce = null) {
-  const salonId = salonForce ?? config.baltop.salonId;
+  const salonId = salonForce ?? settings.salonBaltop();
   if (!salonId) return null;
 
   const salon = await client.channels.fetch(salonId).catch(() => null);
@@ -80,7 +82,7 @@ export async function publier(client, salonForce = null) {
 
 /** Donne le role au premier et le retire a l ancien. */
 export async function majRoleTop(client) {
-  const roleId = config.baltop.roleTopId;
+  const roleId = settings.roleTop();
   if (!roleId || !config.discord.guildId) return;
 
   const top = balances.classement('money', 1);
@@ -122,7 +124,7 @@ export function signature() {
 }
 
 export async function rafraichirSiBesoin(client, { force = false } = {}) {
-  if (!config.baltop.salonId || enCours) return false;
+  if (!settings.salonBaltop() || enCours) return false;
 
   const sig = signature();
   if (!force) {
