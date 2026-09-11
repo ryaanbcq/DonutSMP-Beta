@@ -8,7 +8,7 @@ export const data = new SlashCommandBuilder()
   .setDescription('Le classement DonutSMP')
   .addStringOption((o) =>
     o.setName('categorie')
-      .setDescription('Le classement a afficher')
+      .setDescription('Le classement à afficher')
       .addChoices(...LEADERBOARDS));
 
 export const requiresLink = true;
@@ -21,7 +21,7 @@ export async function execute(interaction) {
   try {
     rows = await donut.leaderboard(category, 10);
   } catch (err) {
-    return interaction.editReply(`❌ L'API DonutSMP ne repond pas (${err.message}).`);
+    return interaction.editReply(`❌ L'API DonutSMP ne répond pas (${err.message}).`);
   }
 
   const fmt = category === 'money' ? shortMoney
@@ -37,6 +37,6 @@ export async function execute(interaction) {
     .setTitle(`Classement ${label}`)
     .setDescription(lines.join('\n') || 'Classement vide.');
 
-  if (rows[0]?.mock) embed.setFooter({ text: 'Donnees de test : aucune cle API DonutSMP configuree.' });
+  if (rows[0]?.mock) embed.setFooter({ text: 'Données de test : aucune clé API DonutSMP configurée.' });
   return interaction.editReply({ embeds: [embed] });
 }

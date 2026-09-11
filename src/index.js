@@ -41,11 +41,11 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({
       embeds: [new EmbedBuilder()
         .setColor(COLORS.warn)
-        .setTitle('Compte non verifie')
+        .setTitle('Compte non vérifié')
         .setDescription(
-          'Cette commande est reservee aux membres qui ont lie leur compte DonutSMP.\n\n'
-          + 'Fais `/link <ton pseudo>` : le bot te donnera une somme exacte a lui envoyer en jeu, '
-          + 'et ton compte sera verifie en quelques secondes.',
+          'Cette commande est réservée aux membres qui ont lié leur compte DonutSMP.\n\n'
+          + 'Fais `/link <ton pseudo>` : le bot te donnera une somme exacte à lui envoyer en jeu, '
+          + 'et ton compte sera vérifié en quelques secondes.',
         )],
       flags: MessageFlags.Ephemeral,
     });
@@ -76,8 +76,8 @@ async function startWatcher(c) {
     await user?.send({
       embeds: [new EmbedBuilder()
         .setColor(COLORS.ok)
-        .setTitle('Compte verifie')
-        .setDescription(`**${challenge.mc_name}** est maintenant lie a ton Discord. Toutes les commandes du bot te sont ouvertes.`)],
+        .setTitle('Compte vérifié')
+        .setDescription(`**${challenge.mc_name}** est maintenant lié à ton Discord. Toutes les commandes du bot te sont ouvertes.`)],
     }).catch(() => {});
 
     if (config.discord.verifiedRoleId && config.discord.guildId) {
@@ -89,9 +89,9 @@ async function startWatcher(c) {
 
     await log(c, new EmbedBuilder()
       .setColor(COLORS.ok)
-      .setTitle('Nouveau compte verifie')
+      .setTitle('Nouveau compte vérifié')
       .setDescription(`<@${discordId}> → **${challenge.mc_name}**`)
-      .addFields({ name: 'Paye', value: shortMoney(payment.amount), inline: true })
+      .addFields({ name: 'Payé', value: shortMoney(payment.amount), inline: true })
       .setTimestamp());
   });
 
@@ -103,8 +103,8 @@ async function startWatcher(c) {
     console.warn(`[link] conflit sur ${challenge.mc_name} (${shortMoney(payment.amount)})`);
     await log(c, new EmbedBuilder()
       .setColor(COLORS.err)
-      .setTitle('Verification en conflit')
-      .setDescription(`**${challenge.mc_name}** a paye ${shortMoney(payment.amount)} mais le compte etait deja lie. A traiter a la main.`)
+      .setTitle('Vérification en conflit')
+      .setDescription(`**${challenge.mc_name}** a payé ${shortMoney(payment.amount)} mais le compte était déjà lié. À traiter à la main.`)
       .setTimestamp());
   });
 

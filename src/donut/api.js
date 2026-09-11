@@ -93,5 +93,5 @@ export const LEADERBOARDS = [
   { name: 'Kills', value: 'kills' },
   { name: 'Temps de jeu', value: 'playtime' },
   { name: 'Shards', value: 'shards' },
-  { name: 'Blocs mines', value: 'brokenblocks' },
+  { name: 'Blocs minés', value: 'brokenblocks' },
 ];

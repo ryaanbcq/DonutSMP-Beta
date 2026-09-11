@@ -5,7 +5,7 @@ import { store } from '../db.js';
 
 export const data = new SlashCommandBuilder()
   .setName('link')
-  .setDescription('Lie ton compte Minecraft a ton Discord')
+  .setDescription('Lie ton compte Minecraft à ton Discord')
   .addStringOption((o) =>
     o.setName('pseudo')
       .setDescription('Ton pseudo exact sur DonutSMP')
@@ -31,16 +31,16 @@ export async function execute(interaction) {
   const minutes = Math.max(1, Math.round((challenge.expiresAt - Date.now()) / 60_000));
   const embed = new EmbedBuilder()
     .setColor(COLORS.brand)
-    .setTitle(challenge.resumed ? 'Verification deja en cours' : 'Verification de ton compte')
+    .setTitle(challenge.resumed ? 'Vérification déjà en cours' : 'Vérification de ton compte')
     .setDescription(
-      `Pour prouver que **${challenge.mc_name}** est bien a toi, envoie exactement cette somme en jeu :`,
+      `Pour prouver que **${challenge.mc_name}** est bien à toi, envoie exactement cette somme en jeu :`,
     )
     .addFields(
-      { name: 'Commande a taper sur DonutSMP', value: `\`\`\`/pay ${config.mc.linkAccount} ${challenge.amount}\`\`\`` },
+      { name: 'Commande à taper sur DonutSMP', value: `\`\`\`/pay ${config.mc.linkAccount} ${challenge.amount}\`\`\`` },
       { name: 'Montant exact', value: `$${challenge.amount}`, inline: true },
-      { name: 'Validite', value: `${minutes} min`, inline: true },
+      { name: 'Validité', value: `${minutes} min`, inline: true },
     )
-    .setFooter({ text: 'Le montant est unique. Un autre joueur qui paie la meme somme ne validera pas ton compte.' });
+    .setFooter({ text: 'Le montant est unique. Un autre joueur qui paie la même somme ne validera pas ton compte.' });
 
   return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }

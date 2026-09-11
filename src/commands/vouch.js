@@ -5,19 +5,19 @@ import { reputation } from '../lib/format.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vouch')
-  .setDescription('Laisse un avis sur un membre avec qui tu as trade')
-  .addUserOption((o) => o.setName('membre').setDescription('Le membre a noter').setRequired(true))
+  .setDescription('Laisse un avis sur un membre avec qui tu as tradé')
+  .addUserOption((o) => o.setName('membre').setDescription('Le membre à noter').setRequired(true))
   .addStringOption((o) =>
     o.setName('avis')
       .setDescription('Ton verdict')
       .setRequired(true)
       .addChoices(
-        { name: 'Positif, tout s est bien passe', value: 'pos' },
-        { name: 'Negatif, scam ou probleme', value: 'neg' },
+        { name: "Positif, tout s'est bien passé", value: 'pos' },
+        { name: 'Négatif, scam ou problème', value: 'neg' },
       ))
   .addStringOption((o) =>
     o.setName('commentaire')
-      .setDescription('Ce qui s est passe (visible par tous)')
+      .setDescription("Ce qui s'est passé (visible par tous)")
       .setMaxLength(280));
 
 export const requiresLink = true;
@@ -28,7 +28,7 @@ export async function execute(interaction) {
   const comment = interaction.options.getString('commentaire');
 
   if (target.id === interaction.user.id) {
-    return interaction.reply({ content: '❌ On ne se vouch pas soi meme.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: '❌ On ne se vouch pas soi-même.', flags: MessageFlags.Ephemeral });
   }
   if (target.bot) {
     return interaction.reply({ content: '❌ Ce membre est un bot.', flags: MessageFlags.Ephemeral });
@@ -37,7 +37,7 @@ export async function execute(interaction) {
   const targetLink = store.getLink(target.id);
   if (!targetLink) {
     return interaction.reply({
-      content: `❌ **${target.username}** n'a pas de compte Minecraft verifie, impossible de le noter.`,
+      content: `❌ **${target.username}** n'a pas de compte Minecraft vérifié, impossible de le noter.`,
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -51,12 +51,12 @@ export async function execute(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(value > 0 ? COLORS.ok : COLORS.err)
-    .setTitle(value > 0 ? '👍 Avis positif' : '👎 Avis negatif')
-    .setDescription(`**${author.mc_name}** a note **${targetLink.mc_name}**`)
-    .addFields({ name: 'Reputation de ' + targetLink.mc_name, value: `${rep.label} · \`+${pos}\` / \`-${neg}\`` });
+    .setTitle(value > 0 ? '👍 Avis positif' : '👎 Avis négatif')
+    .setDescription(`**${author.mc_name}** a noté **${targetLink.mc_name}**`)
+    .addFields({ name: 'Réputation de ' + targetLink.mc_name, value: `${rep.label} · \`+${pos}\` / \`-${neg}\`` });
 
   if (comment) embed.addFields({ name: 'Commentaire', value: comment });
-  if (previous) embed.setFooter({ text: 'Cet avis remplace le precedent du meme auteur.' });
+  if (previous) embed.setFooter({ text: 'Cet avis remplace le précédent du même auteur.' });
 
   return interaction.reply({ embeds: [embed] });
 }

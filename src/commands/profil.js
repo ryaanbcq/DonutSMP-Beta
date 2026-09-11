@@ -6,8 +6,8 @@ import { shortMoney, duration, reputation } from '../lib/format.js';
 
 export const data = new SlashCommandBuilder()
   .setName('profil')
-  .setDescription("Affiche le profil d'un membre verifie")
-  .addUserOption((o) => o.setName('membre').setDescription('Le membre a consulter'));
+  .setDescription("Affiche le profil d'un membre vérifié")
+  .addUserOption((o) => o.setName('membre').setDescription('Le membre à consulter'));
 
 export const requiresLink = false;
 
@@ -18,8 +18,8 @@ export async function execute(interaction) {
   if (!link) {
     return interaction.reply({
       content: target.id === interaction.user.id
-        ? "Tu n'es pas encore verifie. Fais `/link <pseudo>`."
-        : `**${target.username}** n'a pas lie de compte Minecraft.`,
+        ? "Tu n'es pas encore vérifié. Fais `/link <pseudo>`."
+        : `**${target.username}** n'a pas lié de compte Minecraft.`,
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -39,8 +39,8 @@ export async function execute(interaction) {
     .setTitle(link.mc_name)
     .setThumbnail(`https://mc-heads.net/avatar/${encodeURIComponent(link.mc_name.replace(/^\./, ''))}/128`)
     .addFields(
-      { name: 'Reputation', value: `${rep.label}\n\`+${pos}\` / \`-${neg}\``, inline: true },
-      { name: 'Verifie depuis', value: `<t:${Math.floor(link.linked_at / 1000)}:R>`, inline: true },
+      { name: 'Réputation', value: `${rep.label}\n\`+${pos}\` / \`-${neg}\``, inline: true },
+      { name: 'Vérifié depuis', value: `<t:${Math.floor(link.linked_at / 1000)}:R>`, inline: true },
     );
 
   if (stats) {
@@ -50,7 +50,7 @@ export async function execute(interaction) {
       { name: 'Morts', value: String(stats.deaths), inline: true },
       { name: 'Temps de jeu', value: duration(stats.playtimeMs), inline: true },
     );
-    if (stats.mock) embed.setFooter({ text: 'Stats de test : aucune cle API DonutSMP configuree.' });
+    if (stats.mock) embed.setFooter({ text: 'Stats de test : aucune clé API DonutSMP configurée.' });
   }
 
   return interaction.editReply({ embeds: [embed] });

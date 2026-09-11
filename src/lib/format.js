@@ -19,9 +19,9 @@ export function reputation(pos, neg) {
   const score = pos - neg;
   const ratio = Math.round((pos / total) * 100);
   const label = neg === 0 && pos >= 5 ? 'Fiable'
-    : ratio >= 80 ? 'Bonne reputation'
-    : ratio >= 50 ? 'Mitige'
-    : 'A eviter';
+    : ratio >= 80 ? 'Bonne réputation'
+    : ratio >= 50 ? 'Mitigé'
+    : 'À éviter';
   return { label, score, ratio };
 }
 

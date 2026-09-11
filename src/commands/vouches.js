@@ -5,17 +5,17 @@ import { reputation, MEDALS } from '../lib/format.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vouches')
-  .setDescription('Consulte la reputation de la commu')
+  .setDescription('Consulte la réputation de la commu')
   .addSubcommand((s) =>
     s.setName('membre')
-      .setDescription("Les avis recus par un membre")
-      .addUserOption((o) => o.setName('membre').setDescription('Le membre a consulter')))
+      .setDescription("Les avis reçus par un membre")
+      .addUserOption((o) => o.setName('membre').setDescription('Le membre à consulter')))
   .addSubcommand((s) =>
-    s.setName('top').setDescription('Le classement des membres les mieux notes'))
+    s.setName('top').setDescription('Le classement des membres les mieux notés'))
   .addSubcommand((s) =>
     s.setName('retirer')
-      .setDescription('Retire l avis que tu avais laisse')
-      .addUserOption((o) => o.setName('membre').setDescription('Le membre concerne').setRequired(true)));
+      .setDescription("Retire l'avis que tu avais laissé")
+      .addUserOption((o) => o.setName('membre').setDescription('Le membre concerné').setRequired(true)));
 
 export const requiresLink = true;
 
@@ -26,7 +26,7 @@ export async function execute(interaction) {
     const target = interaction.options.getUser('membre', true);
     const removed = store.removeVouch(interaction.user.id, target.id);
     return interaction.reply({
-      content: removed ? `✅ Ton avis sur **${target.username}** a ete retire.` : "Tu n'avais pas d'avis sur ce membre.",
+      content: removed ? `✅ Ton avis sur **${target.username}** a été retiré.` : "Tu n'avais pas d'avis sur ce membre.",
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -53,7 +53,7 @@ export async function execute(interaction) {
   const target = interaction.options.getUser('membre') ?? interaction.user;
   const link = store.getLink(target.id);
   if (!link) {
-    return interaction.reply({ content: `**${target.username}** n'est pas verifie.`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `**${target.username}** n'est pas vérifié.`, flags: MessageFlags.Ephemeral });
   }
 
   const { pos, neg } = store.vouchScore(target.id);
@@ -71,9 +71,9 @@ export async function execute(interaction) {
   return interaction.reply({
     embeds: [new EmbedBuilder()
       .setColor(neg > pos ? COLORS.err : COLORS.ok)
-      .setTitle(`Reputation de ${link.mc_name}`)
+      .setTitle(`Réputation de ${link.mc_name}`)
       .setThumbnail(`https://mc-heads.net/avatar/${encodeURIComponent(link.mc_name.replace(/^\./, ''))}/128`)
-      .setDescription(`**${rep.label}** · \`+${pos}\` positifs / \`-${neg}\` negatifs`)
+      .setDescription(`**${rep.label}** · \`+${pos}\` positifs / \`-${neg}\` négatifs`)
       .addFields({ name: 'Derniers avis', value: lines.join('\n') || 'Aucun avis.' })],
   });
 }

@@ -20,7 +20,7 @@ export function allocateAmount() {
   const taken = store.takenAmounts();
   const span = max - min + 1;
   if (taken.size >= span) {
-    throw new LinkError('saturated', 'Toutes les sommes de verification sont prises, reessaie dans quelques minutes.');
+    throw new LinkError('saturated', 'Toutes les sommes de vérification sont prises, réessaie dans quelques minutes.');
   }
   for (let i = 0; i < 64; i++) {
     const n = randomInt(min, max + 1);
@@ -28,7 +28,7 @@ export function allocateAmount() {
   }
   // Tirage sature localement : on prend le premier libre.
   for (let n = min; n <= max; n++) if (!taken.has(n)) return n;
-  throw new LinkError('saturated', 'Toutes les sommes de verification sont prises, reessaie dans quelques minutes.');
+  throw new LinkError('saturated', 'Toutes les sommes de vérification sont prises, réessaie dans quelques minutes.');
 }
 
 /**
@@ -44,12 +44,12 @@ export function startLink(discordId, mcName) {
 
   const existing = store.getLink(discordId);
   if (existing) {
-    throw new LinkError('already_linked', `Ton Discord est deja lie a **${existing.mc_name}**. Fais \`/unlink\` d'abord.`);
+    throw new LinkError('already_linked', `Ton Discord est déjà lié à **${existing.mc_name}**. Fais \`/unlink\` d'abord.`);
   }
 
   const taken = store.getLinkByName(name);
   if (taken) {
-    throw new LinkError('name_taken', `Le compte **${name}** est deja lie a un autre membre. Ouvre un ticket si c'est le tien.`);
+    throw new LinkError('name_taken', `Le compte **${name}** est déjà lié à un autre membre. Ouvre un ticket si c'est le tien.`);
   }
 
   const pending = store.getPending(discordId);

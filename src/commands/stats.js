@@ -8,7 +8,7 @@ import { isValidName } from '../lib/names.js';
 export const data = new SlashCommandBuilder()
   .setName('stats')
   .setDescription("Les stats DonutSMP d'un joueur")
-  .addStringOption((o) => o.setName('pseudo').setDescription('Le pseudo a chercher').setMaxLength(24));
+  .addStringOption((o) => o.setName('pseudo').setDescription('Le pseudo à chercher').setMaxLength(24));
 
 export const requiresLink = true;
 
@@ -28,7 +28,7 @@ export async function execute(interaction) {
   } catch (err) {
     return interaction.editReply(`❌ L'API DonutSMP ne repond pas (${err.message}).`);
   }
-  if (!stats) return interaction.editReply(`Aucun joueur nomme **${pseudo}** sur DonutSMP.`);
+  if (!stats) return interaction.editReply(`Aucun joueur nommé **${pseudo}** sur DonutSMP.`);
 
   const kd = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : String(stats.kills);
   const linked = store.getLinkByName(pseudo);
@@ -45,7 +45,7 @@ export async function execute(interaction) {
       { name: 'Temps de jeu', value: duration(stats.playtimeMs), inline: true },
     );
 
-  if (linked) embed.addFields({ name: 'Membre verifie', value: `<@${linked.discord_id}>`, inline: true });
+  if (linked) embed.addFields({ name: 'Membre vérifié', value: `<@${linked.discord_id}>`, inline: true });
   if (stats.mock) embed.setFooter({ text: 'Donnees de test : aucune cle API DonutSMP configuree.' });
 
   return interaction.editReply({ embeds: [embed] });
