@@ -45,3 +45,13 @@ test('looksLikeChat repere les marques de chat', () => {
   assert.equal(looksLikeChat('Joueur: salut'), true);
   assert.equal(looksLikeChat('Sp4cz paid you $743'), false);
 });
+
+test('tolere l espace apres le dollar, comme DonutSMP l ecrit vraiment', () => {
+  // Ligne relevee en production le 2026-09-11 sur donutsmp.net
+  assert.deepEqual(parsePayment('SentiaZz paid you $ 24'),
+    { from: 'SentiaZz', amount: 24, raw: 'SentiaZz paid you $ 24' });
+  assert.equal(parsePayment('SentiaZz paid you $ 1,000').amount, 1000);
+  assert.equal(parsePayment('You received $ 50 from SentiaZz').amount, 50);
+  // L ancrage tient toujours malgre la souplesse ajoutee
+  assert.equal(parsePayment('[VIP] Troll: SentiaZz paid you $ 24'), null);
+});

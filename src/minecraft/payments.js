@@ -26,7 +26,9 @@ export function looksLikeChat(clean) {
   return CHAT_MARKERS.some((re) => re.test(clean));
 }
 
-const AMOUNT = String.raw`\$?([\d,]+(?:\.\d+)?)\s*([KMBkmb])?`;
+// DonutSMP ecrit « paid you $ 24 » avec une espace apres le dollar, et
+// « $1,000 » ou « $2K » selon les montants. On tolere les trois.
+const AMOUNT = String.raw`\$?\s*([\d,]+(?:\.\d+)?)\s*([KMBkmb])?`;
 const NAME = String.raw`(\.?[A-Za-z0-9_]{1,24})`;
 
 // Formes acceptees, toutes ancrees. `order` dit ou lire le pseudo et le montant.
