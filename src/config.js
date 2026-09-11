@@ -12,6 +12,9 @@ export const config = {
     guildId: process.env.DISCORD_GUILD_ID ?? '',
     verifiedRoleId: process.env.VERIFIED_ROLE_ID ?? '',
     logChannelId: process.env.LOG_CHANNEL_ID ?? '',
+    // Vide = avatar du bot. Ne jamais mettre une URL d attachement Discord
+    // (parametres ex=/is=/hm=) : elle est signee et expire sous 24 h.
+    logoUrl: process.env.LOGO_URL ?? '',
   },
   mc: {
     linkAccount: process.env.MC_LINK_ACCOUNT ?? 'OutmindFR',
@@ -39,4 +42,5 @@ export const COLORS = {
   err: 0xed4245,
   info: 0x5865f2,
   brand: 0xa18cd1,
+  fr: 0xaeefff,
 };

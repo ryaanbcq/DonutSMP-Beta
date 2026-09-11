@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { donut, LEADERBOARDS } from '../donut/api.js';
+import { donut, LEADERBOARDS, MONEY_BOARDS } from '../donut/api.js';
 import { COLORS } from '../config.js';
 import { shortMoney, duration, MEDALS } from '../lib/format.js';
 
@@ -24,7 +24,7 @@ export async function execute(interaction) {
     return interaction.editReply(`❌ L'API DonutSMP ne répond pas (${err.message}).`);
   }
 
-  const fmt = category === 'money' ? shortMoney
+  const fmt = MONEY_BOARDS.has(category) ? shortMoney
     : category === 'playtime' ? duration
     : (v) => Number(v).toLocaleString('en-US');
 

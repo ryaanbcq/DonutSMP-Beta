@@ -67,3 +67,27 @@ export function parsePayment(line) {
   }
   return null;
 }
+
+// Confirmation d un paiement SORTANT, pour savoir qu un remboursement est
+// bien arrive. Meme discipline : ancre, et rejet de toute ligne de chat.
+const SENT_PATTERNS = [
+  { re: new RegExp(`^You paid ${NAME} ${AMOUNT}$`, 'i'), name: 1, amount: 2, suffix: 3 },
+  { re: new RegExp(`^You paid ${AMOUNT} to ${NAME}$`, 'i'), name: 3, amount: 1, suffix: 2 },
+];
+
+/**
+ * Rend { to, amount } si la ligne confirme un paiement envoye, sinon null.
+ */
+export function parsePaymentSent(line) {
+  const clean = stripColors(line).trim();
+  if (!clean || looksLikeChat(clean)) return null;
+  for (const p of SENT_PATTERNS) {
+    const m = clean.match(p.re);
+    if (!m) continue;
+    const to = m[p.name];
+    const amount = parseAmount(m[p.amount], m[p.suffix]);
+    if (!to || amount === null) return null;
+    return { to, amount, raw: clean };
+  }
+  return null;
+}

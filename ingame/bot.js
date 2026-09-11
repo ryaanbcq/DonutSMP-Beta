@@ -6,9 +6,11 @@
 // `sendSafe` refuse la commande meme si quelqu'un l'ajoute par accident.
 
 import mineflayer from 'mineflayer';
-import { appendFile, writeFile, mkdir } from 'node:fs/promises';
+import { appendFile, writeFile, readFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import 'dotenv/config';
+import { parsePayment, parsePaymentSent } from '../src/minecraft/payments.js';
+import { RefundLedger } from './refunds.js';
 
 const cfg = {
   host: process.env.MC_HOST ?? 'donutsmp.net',
@@ -22,6 +24,16 @@ const cfg = {
   feed: process.env.PAYMENT_FILE ?? './data/payments.jsonl',
   status: process.env.INGAME_STATUS ?? './data/ingame-status.json',
   expectedName: process.env.MC_LINK_ACCOUNT ?? '',
+  refunds: {
+    enabled: (process.env.REFUND_ENABLED ?? 'true') !== 'false',
+    file: process.env.REFUND_FILE ?? './data/refunds.json',
+    min: Number(process.env.LINK_AMOUNT_MIN) || 1,
+    max: Number(process.env.LINK_AMOUNT_MAX) || 1000,
+    dailyMax: Number(process.env.REFUND_DAILY_MAX) || 200_000,
+    delayMin: (Number(process.env.REFUND_DELAY_MIN_S) || 60) * 1000,
+    delayMax: (Number(process.env.REFUND_DELAY_MAX_S) || 120) * 1000,
+    confirmMs: (Number(process.env.REFUND_CONFIRM_S) || 90) * 1000,
+  },
 };
 
 if (!cfg.username) {
@@ -29,7 +41,6 @@ if (!cfg.username) {
   process.exit(1);
 }
 
-const PAID = /paid you \$/i;
 // Commandes interdites : rien ne doit pouvoir sortir de l'argent de ce compte.
 const FORBIDDEN = /^\/(pay|eco|give|trade|ah|sell|shop|drop)\b/i;
 
@@ -55,6 +66,7 @@ async function saveStatus(extra = {}) {
       z: Math.round(bot.entity.position.z),
     } : null,
     lastPayment,
+    refunds: ledger?.stats() ?? null,
     rssMb: rss,
     heapMb: heap,
     at: Date.now(),
@@ -97,18 +109,56 @@ function connect() {
       console.warn(`[mc] ATTENTION : connecte en ${bot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
       console.warn('[mc] les joueurs paieront le mauvais compte, corrige le .env.');
     }
+    if (!process.env.DONUT_API_KEY && (process.env.DONUT_KEY_FETCH ?? 'true') !== 'false') {
+      setTimeout(() => {
+        cleDemandee = true;
+        console.log('[api] demande de la cle avec /api');
+        bot.chat('/api');
+        // On arrete d ecouter au bout d une minute pour ne pas prendre
+        // n importe quelle ligne de chat pour une cle.
+        setTimeout(() => { cleDemandee = false; }, 60_000);
+      }, 8_000);
+    }
+
     await saveStatus();
   });
 
-  // On ecrit la ligne BRUTE, sans la decouper : le bot Discord la reparse lui
-  // meme avec des motifs ancres. Un joueur qui tape le motif dans le chat est
-  // rejete de l'autre cote, pas ici.
   bot.on('message', (msg) => {
     const line = msg.toString();
-    if (!PAID.test(line)) return;
-    lastPayment = { line, at: Date.now() };
-    console.log(`[pay] ${line}`);
-    feed(line).catch((e) => console.error('[pay] ecriture impossible :', e.message));
+
+    // Mise au point : DEBUG_CHAT=true loggue le chat, en masquant toute suite
+    // longue qui pourrait etre une cle.
+    if (process.env.DEBUG_CHAT === 'true') {
+      const sur = line.replace(/[A-Za-z0-9_\-]{24,}/g, (k) => `<${k.length} car. masques>`);
+      if (sur.trim()) console.log(`[chat] ${sur}`);
+    }
+
+    // Paiement RECU. On ecrit la ligne brute pour le bot Discord, qui la
+    // reparse de son cote ; ici on parse strictement parce que c est cette
+    // lecture qui decide de rendre de l argent.
+    const recu = parsePayment(line);
+    if (recu) {
+      lastPayment = { line: recu.raw, at: Date.now() };
+      console.log(`[pay] recu ${recu.amount} de ${recu.from}`);
+      feed(line).catch((e) => console.error('[pay] ecriture impossible :', e.message));
+      planifierRemboursement(recu);
+      return;
+    }
+
+    if (capturerCle(line)) return;
+
+    // Confirmation d un remboursement parti.
+    const envoye = parsePaymentSent(line);
+    if (envoye) {
+      const entry = ledger?.matchConfirmation(envoye.to, envoye.amount);
+      if (entry) {
+        ledger.markPaid(entry.id);
+        ledger.save().catch(() => {});
+        console.log(`[refund] rendu ${entry.amount} a ${entry.to}`);
+      } else {
+        console.warn(`[refund] confirmation sans entree en vol : ${envoye.raw}`);
+      }
+    }
   });
 
   bot.on('kicked', (reason) => console.warn(`[mc] kick : ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`));
@@ -120,6 +170,128 @@ function connect() {
     setTimeout(connect, delay);
   });
 }
+
+// ---------------------------------------------------------------------------
+// File de commandes admin : une ligne par commande dans data/cmd-queue.txt,
+// jouee sous 2 s puis le fichier est vide. Meme principe que le bot du casino.
+// sendSafe filtre : rien qui sorte de l argent ne passe par ce canal.
+// ---------------------------------------------------------------------------
+
+const QUEUE = process.env.CMD_QUEUE ?? './data/cmd-queue.txt';
+
+setInterval(async () => {
+  if (!bot?.player) return;
+  let contenu;
+  try { contenu = await readFile(QUEUE, 'utf8'); } catch { return; }
+  if (!contenu.trim()) return;
+  await writeFile(QUEUE, '');
+  for (const ligne of contenu.split('\n').map((l) => l.trim()).filter(Boolean)) {
+    console.log(`[admin] ${ligne}`);
+    sendSafe(ligne);
+    await new Promise((r) => setTimeout(r, 600));
+  }
+}, 2_000).unref();
+
+// ---------------------------------------------------------------------------
+// Cle API DonutSMP : elle se recupere en jeu avec /api. Le bot la demande une
+// fois au demarrage si elle manque, l ecrit dans .env et ne la loggue JAMAIS
+// en clair.
+// ---------------------------------------------------------------------------
+
+const CLE = /\b([A-Za-z0-9_\-]{24,}(?:\.[A-Za-z0-9_\-]{8,}){0,2})\b/;
+let cleDemandee = false;
+
+const masque = (k) => `${k.slice(0, 4)}...${k.slice(-4)} (${k.length} car.)`;
+
+async function ecrireCle(cle) {
+  let contenu;
+  try { contenu = await readFile('.env', 'utf8'); } catch { return false; }
+  const ligne = `DONUT_API_KEY=${cle}`;
+  contenu = /^DONUT_API_KEY=.*$/m.test(contenu)
+    ? contenu.replace(/^DONUT_API_KEY=.*$/m, ligne)
+    : `${contenu.trimEnd()}\n${ligne}\n`;
+  await writeFile('.env', contenu, { mode: 0o600 });
+  return true;
+}
+
+function capturerCle(line) {
+  if (!cleDemandee || process.env.DONUT_API_KEY) return false;
+  if (!/\bapi\b|\bkey\b|\btoken\b/i.test(line)) return false;
+  const m = line.match(CLE);
+  if (!m) {
+    console.log('[api] reponse sans cle reconnue, ajuster le motif si besoin');
+    return false;
+  }
+  const cle = m[1];
+  process.env.DONUT_API_KEY = cle;
+  ecrireCle(cle)
+    .then((ok) => console.log(ok
+      ? `[api] cle recuperee et ecrite dans .env : ${masque(cle)} (redemarre le bot Discord)`
+      : `[api] cle recuperee mais .env introuvable : ${masque(cle)}`))
+    .catch((e) => console.error('[api] ecriture impossible :', e.message));
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Remboursement : le micro-paiement n est qu une preuve, on le rend au joueur
+// une a deux minutes plus tard. Seul endroit du bot ou de l argent sort.
+// ---------------------------------------------------------------------------
+
+let ledger = null;
+
+function planifierRemboursement(payment) {
+  if (!cfg.refunds.enabled || !ledger) return;
+  const { entry, skipped } = ledger.queue({ ...payment, receivedAt: Date.now() });
+  if (skipped) {
+    console.warn(`[refund] pas rendu a ${payment.from} (${payment.amount}) : ${skipped}`);
+    return;
+  }
+  const dans = Math.round((entry.dueAt - Date.now()) / 1000);
+  console.log(`[refund] ${entry.amount} a rendre a ${entry.to} dans ${dans}s`);
+  ledger.save().catch(() => {});
+}
+
+/**
+ * Construit et envoie le /pay. La commande n est JAMAIS assemblee a partir de
+ * texte venu du chat : le pseudo est revalide et le montant doit etre un entier
+ * dans la fourchette, sinon on refuse et on marque l entree en echec.
+ */
+function envoyerRemboursement(entry) {
+  if (!/^\.?[A-Za-z0-9_]{1,24}$/.test(entry.to)
+      || !Number.isInteger(entry.amount)
+      || entry.amount < cfg.refunds.min
+      || entry.amount > cfg.refunds.max) {
+    console.error(`[refund] entree refusee a l envoi : ${JSON.stringify(entry)}`);
+    ledger.retryOrFail(entry.id, 0);
+    return false;
+  }
+  bot.chat(`/pay ${entry.to} ${entry.amount}`);
+  ledger.markSent(entry.id);
+  ledger.save().catch(() => {});
+  console.log(`[refund] /pay ${entry.to} ${entry.amount} envoye`);
+  return true;
+}
+
+setInterval(() => {
+  if (!cfg.refunds.enabled || !ledger || !bot?.player) return;
+
+  // Un seul /pay en vol : on attend sa confirmation avant le suivant.
+  const enVol = ledger.inFlight();
+  if (enVol) {
+    if (Date.now() - enVol.sentAt > cfg.refunds.confirmMs) {
+      console.warn(`[refund] pas de confirmation pour ${enVol.to} (${enVol.amount}), essai ${enVol.attempts}`);
+      const e = ledger.retryOrFail(enVol.id);
+      if (e.status === 'failed') {
+        console.error(`[refund] ABANDON : ${e.amount} a rendre a ${e.to} a la main`);
+      }
+      ledger.save().catch(() => {});
+    }
+    return;
+  }
+
+  const suivant = ledger.due();
+  if (suivant) envoyerRemboursement(suivant);
+}, 5_000).unref();
 
 // Purge des entites hors de portee : sans ca le RSS grimpe en quelques heures
 // sur un spawn charge (lecon du bot du casino).
@@ -147,6 +319,15 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
     bot?.quit?.();
     process.exit(0);
   });
+}
+
+if (cfg.refunds.enabled) {
+  ledger = await new RefundLedger(cfg.refunds).load();
+  const s = ledger.stats();
+  console.log(`[refund] registre charge : ${s.pending} en attente, ${s.paid} rendus, ${s.failed} en echec, ${s.today} rendus aujourd hui`);
+  console.log(`[refund] fourchette ${cfg.refunds.min}-${cfg.refunds.max}, plafond journalier ${cfg.refunds.dailyMax}`);
+} else {
+  console.warn('[refund] remboursements DESACTIVES (REFUND_ENABLED=false)');
 }
 
 connect();
