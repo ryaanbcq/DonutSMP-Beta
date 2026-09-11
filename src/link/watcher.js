@@ -1,8 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { open, stat, mkdir, appendFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import { config } from '../config.js';
-import { store } from '../db.js';
+import { Tailer } from '../lib/tail.js';
 import { parsePayment } from '../minecraft/payments.js';
 import { resolvePayment } from './manager.js';
 
@@ -36,69 +34,25 @@ export function normalizeEntry(entry) {
 export class PaymentWatcher extends EventEmitter {
   constructor({ file = config.payments.file, pollMs = config.payments.pollMs } = {}) {
     super();
-    this.file = file;
-    this.pollMs = pollMs;
-    this.timer = null;
+    this.tailer = new Tailer({
+      file,
+      key: OFFSET_KEY,
+      pollMs,
+      onLine: (entree) => {
+        const payment = normalizeEntry(entree);
+        if (!payment) return;
+        const result = resolvePayment(payment);
+        this.emit(result.outcome, result);
+        this.emit('payment', result);
+      },
+    });
   }
 
-  async start() {
-    await mkdir(dirname(this.file), { recursive: true });
-    await appendFile(this.file, '');
-    this.timer = setInterval(() => this.tick().catch((e) => this.emit('error', e)), this.pollMs);
-    this.timer.unref?.();
-    await this.tick();
+  start() {
+    return this.tailer.start();
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-  }
-
-  async tick() {
-    const offset = Number(store.kvGet(OFFSET_KEY) ?? 0);
-    let size;
-    try {
-      ({ size } = await stat(this.file));
-    } catch {
-      return;
-    }
-    // Fichier tronque ou tourne : on repart de zero.
-    const from = size < offset ? 0 : offset;
-    if (size === from) return;
-
-    const fh = await open(this.file, 'r');
-    let chunk;
-    try {
-      const len = size - from;
-      const buf = Buffer.alloc(len);
-      await fh.read(buf, 0, len, from);
-      chunk = buf.toString('utf8');
-    } finally {
-      await fh.close();
-    }
-
-    const lines = chunk.split('\n');
-    // La derniere tranche peut etre une ligne encore en cours d ecriture. On ne
-    // la garde PAS en memoire : on laisse l offset avant elle et on la relira
-    // entiere au prochain tour. Ca la sauve aussi si le process redemarre au
-    // milieu d une ecriture.
-    const partial = lines.pop() ?? '';
-    store.kvSet(OFFSET_KEY, size - Buffer.byteLength(partial, 'utf8'));
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let entry;
-      try {
-        entry = JSON.parse(trimmed);
-      } catch {
-        entry = trimmed;
-      }
-      const payment = normalizeEntry(entry);
-      if (!payment) continue;
-      const result = resolvePayment(payment);
-      this.emit(result.outcome, result);
-      this.emit('payment', result);
-    }
+    this.tailer.stop();
   }
 }

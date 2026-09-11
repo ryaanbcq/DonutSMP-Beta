@@ -55,3 +55,15 @@ test('tolere l espace apres le dollar, comme DonutSMP l ecrit vraiment', () => {
   // L ancrage tient toujours malgre la souplesse ajoutee
   assert.equal(parsePayment('[VIP] Troll: SentiaZz paid you $ 24'), null);
 });
+
+test('reponses de /balance relevees en production', async () => {
+  const { parseBalance } = await import('../src/minecraft/payments.js');
+  // Formats releves sur donutsmp.net le 2026-09-11
+  assert.deepEqual(parseBalance('SentiaZz has $ 79.9M'),
+    { name: 'SentiaZz', amount: 79_900_000, raw: 'SentiaZz has $ 79.9M' });
+  assert.equal(parseBalance('Accoutrement_ has $ 636M').amount, 636_000_000);
+  assert.equal(parseBalance('You have $ 18,818,277').soi, true);
+  assert.equal(parseBalance('That player does not exist').inconnu, true);
+  // Un joueur qui tape la phrase dans le chat ne fixe pas un solde
+  assert.equal(parseBalance('[VIP] Troll: SentiaZz has $ 5B'), null);
+});

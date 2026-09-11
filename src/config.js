@@ -38,6 +38,10 @@ export const config = {
     mock: process.env.DONUT_MOCK === 'true',
   },
   dbPath: process.env.DB_PATH ?? './data/bot.db',
+  ingame: {
+    trackedFile: process.env.TRACKED_FILE ?? './data/tracked.json',
+    balanceFile: process.env.BALANCE_FILE ?? './data/balances.jsonl',
+  },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),
   baltop: {

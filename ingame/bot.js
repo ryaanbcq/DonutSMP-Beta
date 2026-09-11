@@ -6,10 +6,10 @@
 // `sendSafe` refuse la commande meme si quelqu'un l'ajoute par accident.
 
 import mineflayer from 'mineflayer';
-import { appendFile, writeFile, readFile, mkdir } from 'node:fs/promises';
+import { appendFile, writeFile, readFile, mkdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import 'dotenv/config';
-import { parsePayment, parsePaymentSent } from '../src/minecraft/payments.js';
+import { parsePayment, parsePaymentSent, parseBalance } from '../src/minecraft/payments.js';
 import { RefundLedger } from './refunds.js';
 
 const cfg = {
@@ -24,6 +24,24 @@ const cfg = {
   feed: process.env.PAYMENT_FILE ?? './data/payments.jsonl',
   status: process.env.INGAME_STATUS ?? './data/ingame-status.json',
   expectedName: process.env.MC_LINK_ACCOUNT ?? '',
+  soldes: {
+    // DonutSMP n a pas d API accessible : les soldes se lisent en jeu avec
+    // /balance <joueur>. Le serveur arrondit pour les autres joueurs.
+    enabled: (process.env.BALANCE_POLL ?? 'true') !== 'false',
+    suivis: process.env.TRACKED_FILE ?? './data/tracked.json',
+    sortie: process.env.BALANCE_FILE ?? './data/balances.jsonl',
+    // Espacement PLANCHER entre deux /balance. DonutSMP et Paper coupent le
+    // spam de commandes : on reste tres en dessous.
+    intervalMs: (Number(process.env.BALANCE_INTERVAL_S) || 5) * 1000,
+    // Duree visee pour relever tout le monde une fois. L espacement reel est
+    // le plus grand des deux : a 2 comptes on ne redemande pas toutes les
+    // 10 s, a 500 on ne descend pas sous le plancher.
+    cycleMs: (Number(process.env.BALANCE_CYCLE_MINUTES) || 15) * 60_000,
+    // Au dela, le flux est remis a zero : le bot Discord a deja tout range
+    // en base, et le lecteur repart proprement d un fichier tronque.
+    tailleMaxOctets: (Number(process.env.BALANCE_FILE_MAX_MB) || 5) * 1024 * 1024,
+    attenteMs: (Number(process.env.BALANCE_TIMEOUT_S) || 10) * 1000,
+  },
   refunds: {
     enabled: (process.env.REFUND_ENABLED ?? 'true') !== 'false',
     file: process.env.REFUND_FILE ?? './data/refunds.json',
@@ -145,6 +163,7 @@ function connect() {
       return;
     }
 
+    if (traiterReponseSolde(line)) return;
     if (capturerCle(line)) return;
 
     // Confirmation d un remboursement parti.
@@ -170,6 +189,91 @@ function connect() {
     setTimeout(connect, delay);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Releve des soldes en jeu. Le bot Discord depose la liste des comptes
+// verifies dans tracked.json ; on les interroge un par un avec /balance et on
+// ecrit les reponses dans balances.jsonl, que le bot Discord relit.
+// Une seule question en vol a la fois : la reponse ne porte pas toujours le
+// pseudo (« That player does not exist »), donc on la rattache a la demande
+// en cours.
+// ---------------------------------------------------------------------------
+
+let suivis = [];
+let curseur = 0;
+let demande = null;
+let dernierEnvoi = 0;
+
+async function chargerSuivis() {
+  try {
+    const brut = JSON.parse(await readFile(cfg.soldes.suivis, 'utf8'));
+    const liste = Array.isArray(brut) ? brut : brut.joueurs ?? [];
+    suivis = liste
+      .map((j) => (typeof j === 'string' ? j : j.name))
+      .filter((n) => typeof n === 'string' && /^\.?[A-Za-z0-9_]{1,24}$/.test(n));
+  } catch {
+    suivis = [];
+  }
+}
+
+async function ecrireSolde(nom, montant) {
+  await mkdir(dirname(cfg.soldes.sortie), { recursive: true });
+  try {
+    const { size } = await stat(cfg.soldes.sortie);
+    if (size > cfg.soldes.tailleMaxOctets) {
+      await writeFile(cfg.soldes.sortie, '');
+      console.log('[solde] flux remis a zero (taille max atteinte)');
+    }
+  } catch { /* fichier absent : il va etre cree */ }
+  await appendFile(cfg.soldes.sortie, JSON.stringify({ name: nom, money: montant, at: Date.now() }) + '\n');
+}
+
+function traiterReponseSolde(line) {
+  if (!demande) return false;
+  const lu = parseBalance(line);
+  if (!lu) return false;
+
+  // Reponse pour soi-meme : ce n est pas celle qu on attend.
+  if (lu.soi) return false;
+
+  if (lu.inconnu) {
+    console.warn(`[solde] ${demande.nom} : compte inconnu sur DonutSMP`);
+    demande = null;
+    return true;
+  }
+  // Le serveur peut repondre pour un autre pseudo si une demande a traine.
+  if (lu.name.toLowerCase().replace(/^\./, '') !== demande.nom.toLowerCase().replace(/^\./, '')) {
+    return false;
+  }
+
+  ecrireSolde(lu.name, lu.amount).catch((e) => console.error('[solde] ecriture :', e.message));
+  demande = null;
+  return true;
+}
+
+setInterval(() => {
+  if (!cfg.soldes.enabled || !bot?.player) return;
+
+  // Une demande sans reponse ne bloque pas la file indefiniment.
+  if (demande) {
+    if (Date.now() - demande.a > cfg.soldes.attenteMs) {
+      console.warn(`[solde] pas de reponse pour ${demande.nom}`);
+      demande = null;
+    }
+    return;
+  }
+  if (suivis.length === 0) return;
+  const espacement = Math.max(cfg.soldes.intervalMs, Math.floor(cfg.soldes.cycleMs / suivis.length));
+  if (Date.now() - dernierEnvoi < espacement) return;
+
+  const nom = suivis[curseur % suivis.length];
+  curseur = (curseur + 1) % Math.max(1, suivis.length);
+  demande = { nom, a: Date.now() };
+  dernierEnvoi = Date.now();
+  bot.chat(`/balance ${nom}`);
+}, 1000).unref();
+
+setInterval(() => { chargerSuivis().catch(() => {}); }, 30_000).unref();
 
 // ---------------------------------------------------------------------------
 // File de commandes admin : une ligne par commande dans data/cmd-queue.txt,
@@ -328,6 +432,17 @@ if (cfg.refunds.enabled) {
   console.log(`[refund] fourchette ${cfg.refunds.min}-${cfg.refunds.max}, plafond journalier ${cfg.refunds.dailyMax}`);
 } else {
   console.warn('[refund] remboursements DESACTIVES (REFUND_ENABLED=false)');
+}
+
+if (cfg.soldes.enabled) {
+  await chargerSuivis();
+  const espacement = suivis.length
+    ? Math.max(cfg.soldes.intervalMs, Math.floor(cfg.soldes.cycleMs / suivis.length))
+    : cfg.soldes.cycleMs;
+  console.log(`[solde] ${suivis.length} comptes a relever, un /balance toutes les `
+    + `${Math.round(espacement / 1000)}s (cycle vise ${Math.round(cfg.soldes.cycleMs / 60_000)} min)`);
+} else {
+  console.warn('[solde] releve des soldes desactive (BALANCE_POLL=false)');
 }
 
 connect();

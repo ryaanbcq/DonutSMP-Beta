@@ -1,0 +1,58 @@
+import { writeFile, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { db, store } from '../db.js';
+import { balances } from './balances.js';
+import { config } from '../config.js';
+import { Tailer } from '../lib/tail.js';
+import { normName } from '../lib/names.js';
+
+// DonutSMP n a pas d API accessible : les soldes viennent du bot en jeu, qui
+// lit /balance et depose ses reponses dans un flux. Ici on publie la liste des
+// comptes a relever et on consomme ce flux.
+
+/** Ecrit la liste des comptes verifies pour le bot en jeu. */
+export async function publierSuivis() {
+  const liens = db.prepare('SELECT mc_name FROM links ORDER BY mc_name').all();
+  await mkdir(dirname(config.ingame.trackedFile), { recursive: true });
+  await writeFile(
+    config.ingame.trackedFile,
+    JSON.stringify({ joueurs: liens.map((l) => ({ name: l.mc_name })), majA: Date.now() }, null, 2),
+  );
+  return liens.length;
+}
+
+const q = {
+  ecrire: db.prepare(`
+    UPDATE balances SET money = ?, updated_at = ?, erreurs = 0
+    WHERE mc_name_norm = ?
+  `),
+};
+
+/**
+ * Lit le flux des soldes releves en jeu.
+ * `onUpdate` sert au panneau public, comme pour l ancienne boucle API.
+ */
+export function surveillerSoldes({ onUpdate = () => {} } = {}) {
+  const tailer = new Tailer({
+    file: config.ingame.balanceFile,
+    key: 'balances.offset',
+    pollMs: config.payments.pollMs,
+    onLine: (entree) => {
+      const nom = typeof entree === 'object' ? entree.name : null;
+      const montant = Number(typeof entree === 'object' ? entree.money : NaN);
+      if (typeof nom !== 'string' || !Number.isFinite(montant) || montant < 0) return;
+
+      const cle = normName(nom);
+      // Seuls les comptes encore lies entrent dans le classement.
+      const lien = store.getLinkByName(cle);
+      if (!lien) return;
+
+      balances.suivre(lien);
+      const res = q.ecrire.run(Math.round(montant), Date.now(), cle);
+      if (res.changes > 0) onUpdate(lien, montant);
+    },
+  });
+
+  tailer.start().catch((e) => console.error('[solde] flux illisible :', e.message));
+  return tailer;
+}

@@ -91,3 +91,27 @@ export function parsePaymentSent(line) {
   }
   return null;
 }
+
+// Reponse de /balance. DonutSMP arrondit pour les autres joueurs
+// (« SentiaZz has $ 79.9M ») et donne l exact pour soi (« You have $ 18,818,277 »).
+const BALANCE = new RegExp(`^${NAME} has ${AMOUNT}$`);
+const BALANCE_SOI = new RegExp(`^You have ${AMOUNT}$`, 'i');
+const INCONNU = /^That player does not exist$/i;
+
+export function parseBalance(line) {
+  const clean = stripColors(line).trim();
+  if (!clean || looksLikeChat(clean)) return null;
+
+  if (INCONNU.test(clean)) return { inconnu: true };
+
+  const soi = clean.match(BALANCE_SOI);
+  if (soi) {
+    const amount = parseAmount(soi[1], soi[2]);
+    return amount === null ? null : { soi: true, amount, raw: clean };
+  }
+
+  const m = clean.match(BALANCE);
+  if (!m) return null;
+  const amount = parseAmount(m[2], m[3]);
+  return amount === null ? null : { name: m[1], amount, raw: clean };
+}

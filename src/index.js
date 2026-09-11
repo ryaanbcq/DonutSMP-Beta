@@ -11,6 +11,8 @@ import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
 import { balances, demarrerRafraichissement } from './donut/balances.js';
+import { publierSuivis, surveillerSoldes } from './donut/ingame-balances.js';
+import { donut } from './donut/api.js';
 import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
 import { repondreChallenge } from './link/flow.js';
 import { shortMoney } from './lib/format.js';
@@ -40,14 +42,22 @@ client.once('clientReady', async (c) => {
 
   const suivis = balances.resynchroniser();
   const onUpdate = config.baltop.salonId ? surveillerClassement(c) : () => {};
-  demarrerRafraichissement({
-    ...config.baltop,
-    onError: (err, row) => console.warn(`[baltop] ${row.mc_name} : ${err.message}`),
-    onUpdate,
-  });
-  const cadence = Math.round(config.baltop.cycleMs / 60_000);
-  console.log(`[baltop] ${suivis} comptes suivis, cycle vise ${cadence} min, `
-    + `plafond ${config.baltop.maxParMinute} req/min`);
+
+  if (donut.live) {
+    // Une cle API existe : on releve par l API, c est plus precis.
+    demarrerRafraichissement({
+      ...config.baltop,
+      onError: (err, row) => console.warn(`[baltop] ${row.mc_name} : ${err.message}`),
+      onUpdate,
+    });
+    const cadence = Math.round(config.baltop.cycleMs / 60_000);
+    console.log(`[baltop] ${suivis} comptes, releve par l API, cycle ${cadence} min`);
+  } else {
+    // Pas d API : le bot en jeu lit /balance et alimente le flux.
+    const n = await publierSuivis();
+    surveillerSoldes({ onUpdate });
+    console.log(`[baltop] ${n} comptes publies pour le bot en jeu, soldes lus via /balance`);
+  }
   if (config.baltop.salonId) {
     const secondes = Math.round(config.baltop.minEditMs / 1000);
     console.log(`[baltop] panneau reecrit des que le top bouge, au plus une fois par ${secondes} s`);
@@ -141,6 +151,7 @@ async function startWatcher(c) {
   watcher.on('linked', async ({ discordId, challenge, payment }) => {
     console.log(`[link] ${challenge.mc_name} verifie pour ${discordId} (${shortMoney(payment.amount)})`);
     balances.suivre({ mc_name: challenge.mc_name, discord_id: discordId });
+    publierSuivis().catch((e) => console.error('[baltop] liste des suivis :', e.message));
 
     const delai = Math.round(config.refundDelayMaxS / 60);
     const confirmation = embed(TITRES.verifie, {
