@@ -43,6 +43,8 @@ export const config = {
     balanceFile: process.env.BALANCE_FILE ?? './data/balances.jsonl',
     statusFile: process.env.INGAME_STATUS ?? './data/ingame-status.json',
     priorityFile: process.env.BALANCE_PRIORITY_FILE ?? './data/balance-priority.txt',
+    statsRequestFile: process.env.STATS_PRIORITY_FILE ?? './data/stats-priority.txt',
+    statsFile: process.env.STATS_FILE ?? './data/stats.jsonl',
   },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),

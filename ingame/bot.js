@@ -11,6 +11,8 @@ import { dirname } from 'node:path';
 import 'dotenv/config';
 import { parsePayment, parsePaymentSent, parseBalance } from '../src/minecraft/payments.js';
 import { RefundLedger } from './refunds.js';
+import nbt from 'prismarine-nbt';
+import { lireDialogueStats } from '../src/minecraft/dialog.js';
 
 const cfg = {
   host: process.env.MC_HOST ?? 'donutsmp.net',
@@ -33,6 +35,9 @@ const cfg = {
     // Demandes prioritaires : un compte tout juste verifie ne doit pas
     // attendre son tour de cycle pour apparaitre au classement.
     priorite: process.env.BALANCE_PRIORITY_FILE ?? './data/balance-priority.txt',
+    // /stats repond par un DIALOGUE vanilla, pas par du chat.
+    statsDemandes: process.env.STATS_PRIORITY_FILE ?? './data/stats-priority.txt',
+    statsSortie: process.env.STATS_FILE ?? './data/stats.jsonl',
     // Espacement PLANCHER entre deux /balance. DonutSMP et Paper coupent le
     // spam de commandes : on reste tres en dessous.
     intervalMs: (Number(process.env.BALANCE_INTERVAL_S) || 5) * 1000,
@@ -122,6 +127,39 @@ function connect() {
       console.warn('[mc] ou lance : node scripts/auth.js --force');
     },
   });
+
+  // Sonde brute : DEBUG_PACKETS=true liste les paquets recus, pour decouvrir
+  // par quel canal une commande repond.
+  if (process.env.DEBUG_PACKETS === 'true') {
+    const bruyants = new Set([
+      'map_chunk', 'entity_move_look', 'rel_entity_move', 'entity_look',
+      'entity_velocity', 'entity_teleport', 'update_time', 'keep_alive',
+      'entity_head_rotation', 'entity_metadata', 'sound_effect', 'world_particles',
+      'unload_chunk', 'update_light', 'block_change', 'multi_block_change',
+      'spawn_entity', 'entity_destroy', 'player_info', 'position', 'animation',
+      'entity_equipment', 'set_slot', 'ping', 'bundle_delimiter', 'chunk_biomes',
+      'damage_event', 'entity_status', 'update_attributes', 'teams', 'scoreboard_score',
+    ]);
+    bot._client.on('packet', (data, meta) => {
+      if (bruyants.has(meta.name)) return;
+      console.log(`[pkt] ${meta.name} ${JSON.stringify(data).slice(0, 200)}`);
+    });
+  }
+
+  // Sonde : DEBUG_WINDOW=true vide le contenu de toute interface qui s ouvre.
+  bot.on('windowOpen', (fenetre) => {
+    if (process.env.DEBUG_WINDOW !== 'true') return;
+    console.log(`[gui] titre=${JSON.stringify(fenetre.title)} slots=${fenetre.slots.length}`);
+    fenetre.slots.forEach((item, i) => {
+      if (!item) return;
+      const nom = item.customName ?? item.displayName ?? item.name;
+      const lore = item.customLore ?? item.lore ?? null;
+      console.log(`[gui] ${String(i).padStart(2)} ${item.name} | ${JSON.stringify(nom)}`);
+      if (lore) console.log(`[gui]    lore=${JSON.stringify(lore)}`);
+    });
+  });
+
+  bot._client.on('show_dialog', traiterDialogue);
 
   bot.once('spawn', async () => {
     attempt = 0;
@@ -241,6 +279,32 @@ async function ecrireLigneSolde(objet) {
 
 const ecrireSolde = (nom, montant) => ecrireLigneSolde({ name: nom, money: montant });
 
+async function ecrireLigneStats(objet) {
+  await mkdir(dirname(cfg.soldes.statsSortie), { recursive: true });
+  await appendFile(cfg.soldes.statsSortie, JSON.stringify({ ...objet, at: Date.now() }) + '\n');
+}
+
+/**
+ * DonutSMP repond a /stats par un dialogue vanilla. On ne le lit que si une
+ * demande de fiche est en cours : le serveur ouvre aussi des dialogues pour
+ * d autres choses, qui n ont rien a faire dans le flux.
+ */
+function traiterDialogue(paquet) {
+  if (!demande || demande.type !== 'stats') return;
+  let fiche = null;
+  try {
+    fiche = lireDialogueStats(nbt.simplify(paquet?.dialog?.data ?? paquet?.dialog));
+  } catch (e) {
+    console.error('[stats] dialogue illisible :', e.message);
+  }
+  if (!fiche) return;
+
+  console.log(`[stats] ${fiche.nom} : ${Object.keys(fiche.lignes).join(', ')}`);
+  ecrireLigneStats({ name: fiche.nom, lignes: fiche.lignes })
+    .catch((e) => console.error('[stats] ecriture :', e.message));
+  demande = null;
+}
+
 const memeJoueur = (a, b) =>
   String(a).toLowerCase().replace(/^\./, '') === String(b).toLowerCase().replace(/^\./, '');
 
@@ -252,6 +316,12 @@ function traiterReponseSolde(line) {
     // Seule reponse qui ne porte pas de pseudo : elle ne vaut que rattachee a
     // la demande en cours.
     if (!demande) return false;
+    if (demande.type === 'stats') {
+      ecrireLigneStats({ name: demande.nom, inconnu: true })
+        .catch((e) => console.error('[stats] ecriture :', e.message));
+      demande = null;
+      return true;
+    }
     console.warn(`[solde] ${demande.nom} : compte inconnu sur DonutSMP`);
     ecrireLigneSolde({ name: demande.nom, inconnu: true })
       .catch((e) => console.error('[solde] ecriture :', e.message));
@@ -275,7 +345,7 @@ setInterval(() => {
   // Une demande sans reponse ne bloque pas la file indefiniment.
   if (demande) {
     if (Date.now() - demande.a > cfg.soldes.attenteMs) {
-      console.warn(`[solde] pas de reponse pour ${demande.nom}`);
+      console.warn(`[jeu] pas de reponse pour ${demande.type} ${demande.nom}`);
       demande = null;
     }
     return;
@@ -290,31 +360,44 @@ setInterval(() => {
     : Math.max(cfg.soldes.intervalMs, Math.floor(cfg.soldes.cycleMs / suivis.length));
   if (Date.now() - dernierEnvoi < espacement) return;
 
-  let nom;
+  let entree;
   if (urgent) {
-    nom = prioritaires.shift();
+    entree = prioritaires.shift();
   } else {
-    nom = suivis[curseur % suivis.length];
+    entree = { type: 'solde', nom: suivis[curseur % suivis.length] };
     curseur = (curseur + 1) % Math.max(1, suivis.length);
   }
-  demande = { nom, a: Date.now() };
+
+  demande = { ...entree, a: Date.now() };
   dernierEnvoi = Date.now();
-  bot.chat(`/balance ${nom}`);
+  bot.chat(entree.type === 'stats' ? `/stats ${entree.nom}` : `/balance ${entree.nom}`);
 }, 1000).unref();
 
 setInterval(() => { chargerSuivis().catch(() => {}); }, 30_000).unref();
 
-// File prioritaire : une ligne par pseudo, consommee puis videe.
-setInterval(async () => {
+// Files prioritaires : une ligne par pseudo, consommee puis videe. Les deux
+// types de demandes (solde et fiche) partagent la meme file d envoi, pour
+// garder UNE seule commande en vol et UN seul espacement anti-spam.
+async function lireFile(chemin, type) {
   let contenu;
-  try { contenu = await readFile(cfg.soldes.priorite, 'utf8'); } catch { return; }
-  if (!contenu.trim()) return;
-  await writeFile(cfg.soldes.priorite, '');
+  try { contenu = await readFile(chemin, 'utf8'); } catch { return 0; }
+  if (!contenu.trim()) return 0;
+  await writeFile(chemin, '');
+
+  let ajoutes = 0;
   for (const nom of contenu.split('\n').map((l) => l.trim()).filter(Boolean)) {
     if (!/^\.?[A-Za-z0-9_]{1,24}$/.test(nom)) continue;
-    if (!prioritaires.includes(nom)) prioritaires.push(nom);
+    if (prioritaires.some((d) => d.type === type && d.nom === nom)) continue;
+    prioritaires.push({ type, nom });
+    ajoutes += 1;
   }
-  if (prioritaires.length) console.log(`[solde] ${prioritaires.length} demande(s) prioritaire(s)`);
+  return ajoutes;
+}
+
+setInterval(async () => {
+  const n = (await lireFile(cfg.soldes.priorite, 'solde'))
+    + (await lireFile(cfg.soldes.statsDemandes, 'stats'));
+  if (n) console.log(`[jeu] ${n} demande(s) prioritaire(s), ${prioritaires.length} en file`);
 }, 2_000).unref();
 
 // ---------------------------------------------------------------------------

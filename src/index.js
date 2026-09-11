@@ -13,6 +13,7 @@ import { take } from './link/interactions.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
 import { balances, demarrerRafraichissement } from './donut/balances.js';
 import { publierSuivis, surveillerSoldes, demanderSolde, attendreSolde } from './donut/ingame-balances.js';
+import { surveillerStats } from './donut/ingame-stats.js';
 import { donut } from './donut/api.js';
 import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
 import { settings, ouSeLier } from './settings.js';
@@ -69,6 +70,7 @@ client.once('clientReady', async (c) => {
     // Pas d API : le bot en jeu lit /balance et alimente le flux.
     const n = await publierSuivis();
     surveillerSoldes({ onUpdate });
+    surveillerStats();
     console.log(`[baltop] ${n} comptes publies pour le bot en jeu, soldes lus via /balance`);
   }
   const secondes = Math.round(config.baltop.minEditMs / 1000);
