@@ -28,6 +28,10 @@ npm run deploy          # enregistre les slash commands
 npm start
 ```
 
+Si le projet a gagne des variables depuis la creation de ton `.env`,
+`node scripts/sync-env.js` ajoute les cles manquantes sans toucher a celles
+deja remplies.
+
 `scripts/setup.js` demande le token du bot sur stdin (jamais en argument, pour
 qu'il ne finisse pas dans l'historique du shell), puis interroge Discord pour
 recuperer l'id de l'application, le nom du bot et la liste des serveurs. Il
@@ -69,7 +73,7 @@ pm2 start ecosystem.config.cjs --only fr-ingame
 dans `data/msa-cache`, que le bot reutilise ensuite a chaque demarrage.
 
 ```bash
-node scripts/auth.js                 # utilise MC_EMAIL du .env
+node scripts/auth.js                 # demande l adresse si MC_EMAIL est vide
 node scripts/auth.js mail@exemple.com
 node scripts/auth.js --force         # oublie le cache, refait l auth
 node scripts/auth.js --check         # le cache est il encore valide ? (code 2 sinon)

@@ -12,6 +12,8 @@
 import prismarineAuth from 'prismarine-auth';
 const { Authflow, Titles } = prismarineAuth;
 import { rm, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createInterface } from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
 import { spawnSync } from 'node:child_process';
 import 'dotenv/config';
 
@@ -20,14 +22,34 @@ const force = args.includes('--force');
 const check = args.includes('--check');
 const emailArg = args.find((a) => !a.startsWith('--'));
 
-const username = emailArg ?? process.env.MC_EMAIL ?? '';
 const cacheDir = process.env.MC_PROFILES_FOLDER ?? './data/msa-cache';
 const expected = process.env.MC_LINK_ACCOUNT ?? '';
 
+let username = emailArg ?? process.env.MC_EMAIL ?? '';
+let askedForEmail = false;
+
 if (!username) {
-  console.error('Aucun compte. Renseigne MC_EMAIL dans .env ou passe le en argument :');
-  console.error('  node scripts/auth.js mail@exemple.com');
-  process.exit(1);
+  if (!stdin.isTTY) {
+    console.error('Aucun compte. Renseigne MC_EMAIL dans .env ou passe le en argument :');
+    console.error('  node scripts/auth.js mail@exemple.com');
+    process.exit(1);
+  }
+  console.log("L adresse du compte Microsoft du bot (celle qui possede le compte Minecraft).");
+  console.log("Ce n est pas ton compte perso : c est le nouveau compte qui encaissera les paiements.\n");
+  const rl = createInterface({ input: stdin, output: stdout });
+  try {
+    username = (await rl.question('Adresse Microsoft du bot : ')).trim();
+  } catch {
+    username = ''; // stdin ferme avant la reponse
+  } finally {
+    rl.close();
+  }
+  askedForEmail = true;
+  if (!username) {
+    console.error('\nAucune adresse saisie.');
+    process.exit(1);
+  }
+  console.log('');
 }
 
 // Les memes reglages que mineflayer, sinon le bot ne reutiliserait pas ce cache.
@@ -68,6 +90,7 @@ try {
   }
   await mkdir(cacheDir, { recursive: true });
 
+  if (askedForEmail) await patchEnv('MC_EMAIL', username);
   if (!check) console.log(`Compte  : ${username}\nCache   : ${cacheDir}\n`);
 
   const flow = new Authflow(username, cacheDir, options, check ? () => {
