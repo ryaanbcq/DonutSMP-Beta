@@ -61,11 +61,19 @@ const PANNEAUX = {
       const role = interaction.options.getRole('role');
       if (role) settings.poserRoleTop(role.id);
 
+      const emojis = interaction.options.getString('emojis');
+      if (emojis) {
+        const liste = emojis.trim().split(/\s+/).slice(0, 3);
+        if (liste.length === 3) settings.poserEmojis(liste);
+      }
+
       const message = await publierClassement(interaction.client, salon.id);
       if (!message) throw new Error('publication refusée, regarde les logs');
       await majRoleTop(interaction.client);
 
       const notes = ['Il se réécrira ici tout seul dès qu\'une position bouge.'];
+      if (emojis && emojis.trim().split(/\s+/).length !== 3)
+        notes.push('⚠️ Il faut exactement trois emojis, les anciens sont conservés.');
       if (role) notes.push(`Le premier du classement recevra ${role}.`);
       else if (!settings.roleTop()) notes.push('Ajoute l\'option `role` pour récompenser le premier.');
       return notes.join(' ');
@@ -81,7 +89,11 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((s) =>
     sousCommande(s, 'baltop', 'Classement des fortunes de la commu, réécrit tout seul')
       .addRoleOption((o) =>
-        o.setName('role').setDescription('Rôle donné automatiquement au premier du classement')))
+        o.setName('role').setDescription('Rôle donné automatiquement au premier du classement'))
+      .addStringOption((o) =>
+        o.setName('emojis')
+          .setDescription('Les trois emojis du podium, séparés par un espace')
+          .setMaxLength(200)))
   .addSubcommand((s) =>
     s.setName('deverrouiller')
       .setDescription('Rouvre un salon de panneau à tout le monde')
