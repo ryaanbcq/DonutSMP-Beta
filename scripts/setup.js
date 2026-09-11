@@ -9,6 +9,7 @@
 //   node scripts/setup.js
 //   pbpaste | node scripts/setup.js        (token deja dans le presse papier)
 
+import 'dotenv/config';
 import { createInterface } from 'node:readline/promises';
 import { readFile, writeFile } from 'node:fs/promises';
 import { stdin, stdout } from 'node:process';
@@ -31,6 +32,12 @@ async function api(path, token) {
 }
 
 async function readToken() {
+  // Deja configure : on reutilise le token plutot que de le redemander.
+  // `--new` force une nouvelle saisie (token regenere, autre application).
+  if (process.env.DISCORD_TOKEN && !process.argv.includes('--new')) {
+    console.log('Token repris depuis .env (--new pour en saisir un autre).');
+    return process.env.DISCORD_TOKEN.trim();
+  }
   if (!stdin.isTTY) {
     const piped = await new Promise((resolve) => {
       let buf = '';
