@@ -83,7 +83,5 @@ export async function execute(interaction) {
     });
   }
 
-  // DonutSMP arrondit le solde des autres joueurs, autant le dire.
-  fiche.setFooter({ text: 'Solde lu en jeu. DonutSMP arrondit les soldes des autres joueurs.' });
   return interaction.editReply({ embeds: [fiche] });
 }
