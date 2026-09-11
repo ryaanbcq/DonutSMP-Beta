@@ -10,6 +10,8 @@ import { store } from './db.js';
 import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
+import { balances, demarrerRafraichissement } from './donut/balances.js';
+import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
 import { repondreChallenge } from './link/flow.js';
 import { shortMoney } from './lib/format.js';
 
@@ -35,6 +37,24 @@ client.once('clientReady', async (c) => {
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
   console.log(`[link] compte receveur : ${config.mc.linkAccount}`);
+
+  const suivis = balances.resynchroniser();
+  const onUpdate = config.baltop.salonId ? surveillerClassement(c) : () => {};
+  demarrerRafraichissement({
+    ...config.baltop,
+    onError: (err, row) => console.warn(`[baltop] ${row.mc_name} : ${err.message}`),
+    onUpdate,
+  });
+  const cadence = Math.round(config.baltop.cycleMs / 60_000);
+  console.log(`[baltop] ${suivis} comptes suivis, cycle vise ${cadence} min, `
+    + `plafond ${config.baltop.maxParMinute} req/min`);
+  if (config.baltop.salonId) {
+    const secondes = Math.round(config.baltop.minEditMs / 1000);
+    console.log(`[baltop] panneau reecrit des que le top bouge, au plus une fois par ${secondes} s`);
+    await rafraichirSiBesoin(c, { force: true });
+  } else {
+    console.log('[baltop] pas de salon de panneau (BALTOP_CHANNEL_ID vide)');
+  }
   await startWatcher(c);
 });
 
@@ -120,6 +140,7 @@ async function startWatcher(c) {
 
   watcher.on('linked', async ({ discordId, challenge, payment }) => {
     console.log(`[link] ${challenge.mc_name} verifie pour ${discordId} (${shortMoney(payment.amount)})`);
+    balances.suivre({ mc_name: challenge.mc_name, discord_id: discordId });
 
     const delai = Math.round(config.refundDelayMaxS / 60);
     const confirmation = embed(TITRES.verifie, {

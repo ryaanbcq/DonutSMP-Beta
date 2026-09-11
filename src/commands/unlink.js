@@ -3,6 +3,7 @@ import { store } from '../db.js';
 import { cancelLink } from '../link/manager.js';
 import { forget } from '../link/interactions.js';
 import { config } from '../config.js';
+import { balances } from '../donut/balances.js';
 
 export const data = new SlashCommandBuilder()
   .setName('unlink')
@@ -25,6 +26,7 @@ export async function execute(interaction) {
   }
 
   store.removeLink(interaction.user.id);
+  balances.oublier(link.mc_name);
 
   if (config.discord.verifiedRoleId) {
     await interaction.member?.roles?.remove(config.discord.verifiedRoleId).catch(() => {});

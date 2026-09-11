@@ -36,6 +36,24 @@ export const config = {
   dbPath: process.env.DB_PATH ?? './data/bot.db',
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),
+  baltop: {
+    // Duree visee pour interroger TOUS les membres verifies une fois.
+    cycleMs: num('BALTOP_CYCLE_MINUTES', 15) * 60_000,
+    // Garde-fou : l API DonutSMP autorise 250 requetes par minute.
+    maxParMinute: num('BALTOP_MAX_PER_MINUTE', 60),
+    // Panneau public : salon, heure de reecriture, role du premier.
+    salonId: process.env.BALTOP_CHANNEL_ID ?? '',
+    // Le panneau se reecrit des que le top bouge, jamais plus souvent que ca.
+    minEditMs: num('BALTOP_MIN_EDIT_SECONDS', 120) * 1000,
+    roleTopId: process.env.BALTOP_TOP_ROLE_ID ?? '',
+    salonLinkId: process.env.LINK_CHANNEL_ID ?? '',
+    // Emojis du podium. Vides = medailles Unicode.
+    emojis: [
+      process.env.BALTOP_EMOJI_1 ?? '',
+      process.env.BALTOP_EMOJI_2 ?? '',
+      process.env.BALTOP_EMOJI_3 ?? '',
+    ],
+  },
 };
 
 export const COLORS = {
@@ -45,4 +63,5 @@ export const COLORS = {
   info: 0x5865f2,
   brand: 0xa18cd1,
   fr: 0xaeefff,
+  or: 0xfff36e,
 };

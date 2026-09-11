@@ -7,6 +7,7 @@ import { config } from '../config.js';
 
 export const FR = {
   bleu: 0xaeefff,
+  or: 0xfff36e,
   vert: 0x57f287,
   rouge: 0xed4245,
   jaune: 0xfee75c,
