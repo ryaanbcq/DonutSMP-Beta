@@ -93,6 +93,8 @@ export const balances = {
   suivant: () => q.suivant.get() ?? null,
 
   ecrire(row, stats, now = Date.now()) {
+    // Garde-fou : jamais de donnee inventee dans un classement public.
+    if (stats.mock) throw new Error('refus d ecrire une donnee de test dans le classement');
     q.upsert.run(
       row.mc_name_norm, stats.name ?? row.mc_name, row.discord_id,
       Math.round(stats.money), Math.round(stats.shards ?? 0),
@@ -148,6 +150,12 @@ export function demarrerRafraichissement({
   onError = () => {},
   onUpdate = () => {},
 } = {}) {
+  if (!donut.live) {
+    console.warn('[baltop] releve des soldes a l arret : aucune cle API DonutSMP. '
+      + 'Le classement de la commu restera vide (aucune valeur inventee ne sera publiee).');
+    return () => {};
+  }
+
   let timer = null;
   let arrete = false;
 

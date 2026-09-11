@@ -72,3 +72,17 @@ test('la fraicheur rend l age du plus ancien solde', () => {
   const age = balances.fraicheur();
   assert.ok(age !== null && age < 5000);
 });
+
+test('une donnee de test ne peut jamais entrer dans le classement', () => {
+  db.exec('DELETE FROM balances; DELETE FROM links;');
+  store.createLink('d20', 'Cobaye', 1);
+  balances.suivre(store.getLink('d20'));
+  const row = balances.suivant();
+
+  assert.throws(
+    () => balances.ecrire(row, { mock: true, name: 'Cobaye', money: 3_344_400, kills: 0, deaths: 0, shards: 0, playtimeMs: 0 }),
+    /donnee de test/,
+    'le classement doit refuser une valeur inventee',
+  );
+  assert.equal(balances.classement('money', 10).length, 0);
+});

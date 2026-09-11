@@ -32,6 +32,10 @@ export const config = {
   donut: {
     apiKey: process.env.DONUT_API_KEY ?? '',
     base: process.env.DONUT_API_BASE ?? 'https://api.donutsmp.net/v1',
+    // Donnees inventees pour developper l interface SANS cle. Doit etre
+    // demande explicitement : sinon du faux se glisse dans le classement et
+    // se lit comme du vrai (vecu le 2026-09-11, un solde de 70M affiche a 3,34M).
+    mock: process.env.DONUT_MOCK === 'true',
   },
   dbPath: process.env.DB_PATH ?? './data/bot.db',
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.

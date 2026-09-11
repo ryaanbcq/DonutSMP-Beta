@@ -22,7 +22,12 @@ function mockNumber(seed, scale) {
 }
 
 async function call(path) {
-  if (!config.donut.apiKey) return null;
+  if (!config.donut.apiKey) {
+    // Pas de cle : on ne DEVINE pas. Soit le mode test est demande
+    // explicitement, soit on echoue en le disant.
+    if (config.donut.mock) return null;
+    throw new Error('clé API DonutSMP manquante');
+  }
   const res = await fetch(`${config.donut.base}${path}`, {
     headers: {
       Authorization: `Bearer ${config.donut.apiKey}`,
@@ -46,8 +51,13 @@ const num = (v) => {
 };
 
 export const donut = {
+  /** Vraies donnees disponibles. Faux en mode test comme sans cle. */
   get live() {
     return Boolean(config.donut.apiKey);
+  },
+
+  get mock() {
+    return !config.donut.apiKey && config.donut.mock;
   },
 
   /** Stats de jeu. Le pseudo Bedrock perd son point cote API. */

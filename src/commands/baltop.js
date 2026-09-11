@@ -75,6 +75,16 @@ export async function execute(interaction) {
   const rows = balances.classement(categorie, 10);
   const label = COMMU.find((c) => c.value === categorie)?.name ?? categorie;
 
+  if (rows.length === 0 && !donut.live) {
+    return interaction.editReply({
+      embeds: [embed(TITRES.classement, {
+        description: `**${label}** · commu DonutSMP FR\n\n`
+          + 'Le classement est en attente de la clé API DonutSMP. Aucun solde n\'est relevé '
+          + 'pour le moment, et aucune valeur ne sera inventée.',
+      })],
+    });
+  }
+
   if (rows.length === 0) {
     return interaction.editReply({
       embeds: [embed(TITRES.classement, {
