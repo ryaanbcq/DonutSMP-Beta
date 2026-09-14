@@ -369,8 +369,17 @@ async function supprimer(interaction) {
 // ---------------------------------------------------------------------------
 
 async function prevenirSignale(interaction, cible, auteur, message, fil) {
-  const guildId = interaction.guildId;
   const vouch = store.getVouch(interaction.user.id, cible.discord_id);
+  return envoyerMpSignale(interaction.client, { guildId: interaction.guildId, cible, vouch, auteur, fil });
+}
+
+/** Le MP de signalement, reutilisable par les scripts admin. */
+export async function envoyerMpSignale(client, { guildId, cible, vouch, auteur, fil = null }) {
+  const message = vouch.comment ?? '';
+  if (!fil) {
+    const connu = store.getThread(cible.discord_id);
+    fil = connu ? await client.channels.fetch(connu.thread_id).catch(() => null) : null;
+  }
   const lienCarte = fil && vouch?.message_id ? `https://discord.com/channels/${guildId}/${fil.id}/${vouch.message_id}` : null;
   const salonTickets = reglagesTickets.salonPanneau();
 
@@ -378,7 +387,7 @@ async function prevenirSignale(interaction, cible, auteur, message, fil) {
     couleur: FR.rouge,
     image: cible.mc_name,
     description:
-      `**${auteur}** <@${interaction.user.id}> a publié un signalement de scam sur votre profil **${cible.mc_name}**.\n`
+      `**${auteur}** <@${vouch.from_id}> a publié un signalement de scam sur votre profil **${cible.mc_name}**.\n`
       + `> ${message.replace(/\n/g, '\n> ')}\n`
       + (vouch?.preuves ? `📎 ${JSON.parse(vouch.preuves).length} preuve(s) jointe(s)\n` : '')
       + '\nSi vous estimez ce signalement injustifié, **ouvrez un ticket** : le staff examinera les preuves des deux côtés '
@@ -392,18 +401,15 @@ async function prevenirSignale(interaction, cible, auteur, message, fil) {
   if (lienCarte) {
     boutons.addComponents(new ButtonBuilder().setLabel('Voir le signalement').setEmoji('👀').setStyle(ButtonStyle.Link).setURL(lienCarte));
   }
-  // Les preuves voyagent avec le MP : reprises sur la carte publiee (leurs
-  // liens sont frais au fetch), premiere image dans l embed.
+  // Les preuves voyagent avec le MP, en pieces jointes telechargeables :
+  // reprises sur la carte publiee, dont les liens sont frais au fetch.
   const files = [];
   const carte = fil && vouch?.message_id ? await fil.messages.fetch(vouch.message_id).catch(() => null) : null;
   for (const a of carte?.attachments.values() ?? []) {
     const res = await fetch(a.url).catch(() => null);
     if (res?.ok) files.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
   }
-  // En piece jointe, pas dans l embed : le membre peut la telecharger et
-  // la reutiliser telle quelle pour contester.
-
-  const user = await interaction.client.users.fetch(cible.discord_id);
+  const user = await client.users.fetch(cible.discord_id);
   await user.send({ embeds: [contenu], components: boutons.components.length ? [boutons] : [], files });
   console.log(`[vouch] ${cible.mc_name} prevenu en MP du signalement`);
 }
