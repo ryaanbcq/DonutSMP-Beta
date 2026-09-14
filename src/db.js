@@ -59,6 +59,19 @@ CREATE TABLE IF NOT EXISTS vouches (
 CREATE INDEX IF NOT EXISTS idx_vouch_to ON vouches(to_id);
 
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+
+CREATE TABLE IF NOT EXISTS tickets (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id  TEXT NOT NULL UNIQUE,
+  discord_id  TEXT NOT NULL,
+  categorie   TEXT,
+  sujet       TEXT,
+  etat        TEXT NOT NULL DEFAULT 'ouvert',
+  pris_par    TEXT,
+  created_at  INTEGER NOT NULL,
+  closed_at   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_membre ON tickets(discord_id, etat);
 `);
 
 const q = {
@@ -115,6 +128,18 @@ const q = {
     ORDER BY (pos - neg) DESC, pos DESC LIMIT ?
   `),
 
+  insertTicket: db.prepare(
+    'INSERT INTO tickets (channel_id, discord_id, categorie, sujet, created_at) VALUES (?, ?, ?, ?, ?)',
+  ),
+  ticketBySalon: db.prepare('SELECT * FROM tickets WHERE channel_id = ?'),
+  ticketOuvertDe: db.prepare(
+    "SELECT * FROM tickets WHERE discord_id = ? AND etat != 'supprime' ORDER BY id DESC LIMIT 1",
+  ),
+  setTicketEtat: db.prepare('UPDATE tickets SET etat = ?, closed_at = ? WHERE channel_id = ?'),
+  setTicketPris: db.prepare('UPDATE tickets SET pris_par = ? WHERE channel_id = ?'),
+  renameTicket: db.prepare('UPDATE tickets SET channel_id = ? WHERE channel_id = ?'),
+  countTicketsEtat: db.prepare('SELECT COUNT(*) AS n FROM tickets WHERE etat = ?'),
+
   kvGet: db.prepare('SELECT v FROM kv WHERE k = ?'),
   kvSet: db.prepare('INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v'),
 };
@@ -153,6 +178,19 @@ export const store = {
   vouchScore: (toId) => q.vouchScore.get(String(toId)),
   vouchList: (toId, limit = 5) => q.vouchList.all(String(toId), limit),
   vouchTop: (limit = 10) => q.vouchTop.all(limit),
+
+  // Tickets
+  createTicket: (channelId, discordId, categorie, sujet) => {
+    const info = q.insertTicket.run(String(channelId), String(discordId), categorie ?? null, sujet ?? null, Date.now());
+    return Number(info.lastInsertRowid);
+  },
+  getTicket: (channelId) => q.ticketBySalon.get(String(channelId)) ?? null,
+  ticketEnCours: (discordId) => q.ticketOuvertDe.get(String(discordId)) ?? null,
+  setTicketEtat: (channelId, etat) =>
+    q.setTicketEtat.run(etat, etat === 'ouvert' ? null : Date.now(), String(channelId)),
+  setTicketPris: (channelId, discordId) => q.setTicketPris.run(discordId ? String(discordId) : null, String(channelId)),
+  renommerTicket: (avant, apres) => q.renameTicket.run(String(apres), String(avant)),
+  countTickets: (etat) => q.countTicketsEtat.get(etat).n,
 
   kvGet: (k) => q.kvGet.get(k)?.v ?? null,
   kvSet: (k, v) => q.kvSet.run(k, String(v)),

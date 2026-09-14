@@ -22,6 +22,7 @@ import { presence } from './ingame/presence.js';
 import { repondreChallenge } from './link/flow.js';
 import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
+import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket } from './tickets/manager.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -37,7 +38,10 @@ async function loadCommands() {
   return commands;
 }
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const intents = [GatewayIntentBits.Guilds];
+// Sans cet intent les transcripts de tickets n ont pas le texte des messages.
+if (config.discord.messageContent) intents.push(GatewayIntentBits.MessageContent);
+const client = new Client({ intents });
 client.commands = await loadCommands();
 
 client.once('clientReady', async (c) => {
@@ -94,6 +98,11 @@ client.on('interactionCreate', async (interaction) => {
       console.log(`[ui] formulaire ${interaction.customId} par ${qui}`);
       return await onModal(interaction);
     }
+    if (interaction.isStringSelectMenu()) {
+      console.log(`[ui] menu ${interaction.customId} par ${qui}`);
+      if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
+      return;
+    }
     if (interaction.isChatInputCommand()) {
       console.log(`[ui] /${interaction.commandName} par ${qui}`);
       return await onCommande(interaction);
@@ -130,6 +139,7 @@ async function onCommande(interaction) {
 }
 
 async function onBouton(interaction) {
+  if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 
@@ -193,6 +203,7 @@ async function onDelier(interaction) {
 }
 
 async function onModal(interaction) {
+  if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
 }

@@ -15,6 +15,10 @@ export const config = {
     // Vide = avatar du bot. Ne jamais mettre une URL d attachement Discord
     // (parametres ex=/is=/hm=) : elle est signee et expire sous 24 h.
     logoUrl: process.env.LOGO_URL ?? '',
+    // Intent privilegie « Message Content », a cocher dans le portail
+    // developpeur AVANT de le passer a true, sinon Discord refuse la connexion.
+    // Sans lui les transcripts de tickets sortent sans le texte des messages.
+    messageContent: process.env.DISCORD_MESSAGE_CONTENT === 'true',
   },
   mc: {
     linkAccount: process.env.MC_LINK_ACCOUNT ?? 'OutmindFR',

@@ -1,12 +1,15 @@
 import {
   SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  PermissionFlagsBits, MessageFlags,
+  PermissionFlagsBits, MessageFlags, ChannelType,
 } from 'discord.js';
 import { config } from '../config.js';
 import { embed, TITRES } from '../lib/brand.js';
 import { verrouiller, deverrouiller, peutVerrouiller } from '../lib/salon.js';
 import { publier as publierClassement, majRoleTop } from '../baltop/panel.js';
 import { settings } from '../settings.js';
+import { panneauTicket } from '../tickets/panel.js';
+import { reglagesTickets } from '../tickets/reglages.js';
+import { permissionsManquantes } from '../tickets/manager.js';
 
 export const requiresLink = false;
 
@@ -79,6 +82,19 @@ const PANNEAUX = {
       return notes.join(' ');
     },
   },
+  ticket: {
+    nom: 'Tickets',
+    async poser(interaction, salon) {
+      await salon.send(panneauTicket());
+      reglagesTickets.poserSalonPanneau(salon.id);
+      const notes = [];
+      const manque = permissionsManquantes(interaction.guild);
+      if (manque.length) notes.push(`⚠️ Il me manque ${manque.join(' et ')} pour créer les salons de ticket.`);
+      if (!reglagesTickets.roles().length) notes.push('Aucun rôle staff : `/panel ticket roles` pour en ajouter.');
+      if (!reglagesTickets.salonLogs()) notes.push('Aucun salon de logs : `/panel ticket config`.');
+      return notes.join(' ');
+    },
+  },
 };
 
 export const data = new SlashCommandBuilder()
@@ -97,7 +113,39 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((s) =>
     s.setName('deverrouiller')
       .setDescription('Rouvre un salon de panneau à tout le monde')
-      .addChannelOption((o) => o.setName('salon').setDescription('Le salon à rouvrir')));
+      .addChannelOption((o) => o.setName('salon').setDescription('Le salon à rouvrir')))
+  .addSubcommandGroup((g) =>
+    g.setName('ticket')
+      .setDescription('Système de tickets : panneau, rôles, catégories, logs')
+      .addSubcommand((s) => sousCommande(s, 'publier', 'Publie le panneau de tickets pour les membres'))
+      .addSubcommand((s) =>
+        s.setName('roles')
+          .setDescription('Rôles staff qui voient et gèrent les tickets')
+          .addStringOption((o) =>
+            o.setName('action').setDescription('Que faire').setRequired(true)
+              .addChoices({ name: 'ajouter', value: 'ajouter' }, { name: 'retirer', value: 'retirer' }))
+          .addRoleOption((o) => o.setName('role').setDescription('Le rôle concerné').setRequired(true)))
+      .addSubcommand((s) =>
+        s.setName('categorie')
+          .setDescription('Catégories proposées aux membres quand ils ouvrent un ticket')
+          .addStringOption((o) =>
+            o.setName('action').setDescription('Que faire').setRequired(true)
+              .addChoices({ name: 'ajouter', value: 'ajouter' }, { name: 'retirer', value: 'retirer' }))
+          .addStringOption((o) =>
+            o.setName('nom').setDescription('Nom de la catégorie (le même pour la retirer)').setRequired(true).setMaxLength(60))
+          .addStringOption((o) => o.setName('emoji').setDescription('Emoji affiché devant').setMaxLength(32))
+          .addStringOption((o) =>
+            o.setName('description').setDescription('Une ligne pour expliquer').setMaxLength(200)))
+      .addSubcommand((s) =>
+        s.setName('config')
+          .setDescription('Où créer les tickets et où envoyer les logs')
+          .addChannelOption((o) =>
+            o.setName('dossier').setDescription('Catégorie Discord où naissent les salons de ticket')
+              .addChannelTypes(ChannelType.GuildCategory))
+          .addChannelOption((o) =>
+            o.setName('logs').setDescription('Salon staff qui reçoit les logs et transcripts')
+              .addChannelTypes(ChannelType.GuildText)))
+      .addSubcommand((s) => s.setName('etat').setDescription('Résumé de la configuration des tickets')));
 
 function sousCommande(s, nom, description) {
   return s.setName(nom)
@@ -110,6 +158,9 @@ function sousCommande(s, nom, description) {
 
 export async function execute(interaction) {
   const type = interaction.options.getSubcommand();
+  if (interaction.options.getSubcommandGroup(false) === 'ticket' && type !== 'publier') {
+    return reglerTickets(interaction, type);
+  }
   const salon = interaction.options.getChannel('salon') ?? interaction.channel;
   const moi = interaction.guild?.members?.me;
 
@@ -130,7 +181,7 @@ export async function execute(interaction) {
     return interaction.editReply(`🔓 ${salon} est rouvert à tout le monde.`);
   }
 
-  const panneau = PANNEAUX[type];
+  const panneau = PANNEAUX[type === 'publier' ? 'ticket' : type];
   if (!panneau) return interaction.editReply('❌ Panneau inconnu.');
 
   let note;
@@ -160,4 +211,83 @@ export async function execute(interaction) {
   return interaction.editReply(
     `✅ Panneau **${panneau.nom}** publié dans ${salon}.${verrou}${note ? `\nℹ️ ${note}` : ''}`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// /panel ticket roles | categorie | config | etat
+// ---------------------------------------------------------------------------
+
+async function reglerTickets(interaction, type) {
+  const o = interaction.options;
+  let texte;
+
+  if (type === 'roles') {
+    const role = o.getRole('role');
+    if (o.getString('action') === 'ajouter') {
+      texte = reglagesTickets.ajouterRole(role.id)
+        ? `✅ ${role} voit désormais les tickets. Les tickets déjà ouverts ne changent pas.`
+        : `ℹ️ ${role} avait déjà accès.`;
+    } else {
+      texte = reglagesTickets.retirerRole(role.id)
+        ? `✅ ${role} ne verra plus les nouveaux tickets.`
+        : `ℹ️ ${role} n'avait pas accès.`;
+    }
+  } else if (type === 'categorie') {
+    const nom = o.getString('nom');
+    if (o.getString('action') === 'ajouter') {
+      try {
+        reglagesTickets.poserCategorie({ nom, emoji: o.getString('emoji'), description: o.getString('description') });
+        texte = `✅ Catégorie **${nom}** enregistrée.`;
+      } catch (err) {
+        texte = `❌ ${err.message}`;
+      }
+    } else {
+      texte = reglagesTickets.retirerCategorie(nom)
+        ? `✅ Catégorie **${nom}** retirée.`
+        : `ℹ️ Aucune catégorie nommée **${nom}**.`;
+    }
+    texte += await republierPanneau(interaction.client);
+  } else if (type === 'config') {
+    const dossier = o.getChannel('dossier');
+    const logs = o.getChannel('logs');
+    const faits = [];
+    if (dossier) { reglagesTickets.poserDossier(dossier.id); faits.push(`les tickets naîtront dans **${dossier.name}**`); }
+    if (logs) { reglagesTickets.poserSalonLogs(logs.id); faits.push(`les logs iront dans ${logs}`); }
+    texte = faits.length ? `✅ Désormais ${faits.join(' et ')}.` : etatTickets(interaction.guild);
+  } else {
+    texte = etatTickets(interaction.guild);
+  }
+
+  return interaction.reply({ content: texte, flags: MessageFlags.Ephemeral });
+}
+
+function etatTickets(guild) {
+  const r = reglagesTickets;
+  const roles = r.roles().map((id) => `<@&${id}>`).join(', ') || 'aucun (seuls les « Gérer le serveur » ont accès)';
+  const dossier = r.dossier() ? `<#${r.dossier()}>` : 'aucun (à la racine du serveur)';
+  const cats = r.categories().map((c) => `${c.emoji} ${c.nom}`).join('\n') || 'aucune';
+  const manque = permissionsManquantes(guild);
+  return [
+    '**Configuration des tickets**',
+    `Panneau : ${r.salonPanneau() ? `<#${r.salonPanneau()}>` : 'pas encore publié'}`,
+    `Dossier des tickets : ${dossier}`,
+    `Logs : ${r.salonLogs() ? `<#${r.salonLogs()}>` : 'aucun, les suppressions perdront la conversation'}`,
+    `Rôles staff : ${roles}`,
+    `Catégories :\n${cats}`,
+    manque.length ? `⚠️ Il me manque ${manque.join(' et ')}.` : '',
+  ].filter(Boolean).join('\n');
+}
+
+/** Le panneau publie liste les categories : on le reecrit quand elles changent. */
+async function republierPanneau(client) {
+  const id = reglagesTickets.salonPanneau();
+  if (!id) return '';
+  const salon = await client.channels.fetch(id).catch(() => null);
+  if (!salon?.isTextBased?.()) return '';
+  const recents = await salon.messages.fetch({ limit: 50 }).catch(() => null);
+  const mien = recents?.find((m) => m.author.id === client.user.id
+    && m.components?.[0]?.components?.[0]?.customId === 'ticket:cat');
+  if (!mien) return ' Le panneau n\'a pas été retrouvé, republie-le avec `/panel ticket publier`.';
+  await mien.edit(panneauTicket()).catch(() => {});
+  return ' Le panneau a été mis à jour.';
 }
