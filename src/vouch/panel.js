@@ -167,7 +167,7 @@ async function chercherParTexte(interaction) {
 }
 
 
-export async function ouvrir(interaction) {
+export async function ouvrir(interaction, cibleId = null) {
   const moi = store.getLink(interaction.user.id);
   const libre = bypass(interaction.member, config);
   if (!moi && !libre) return interaction.reply({ content: `❌ Pour noter, ${ouSeLier()}.`, ...EPH });
@@ -182,6 +182,17 @@ export async function ouvrir(interaction) {
     return interaction.reply({ content: "❌ Le forum des vouches n'est pas encore configuré (staff : `/panel vouches`).", ...EPH });
   }
   brouillons.delete(String(interaction.user.id));
+
+  // Depuis le bouton d un post : le joueur est deja choisi, memes garde-fous
+  // que par le menu.
+  if (cibleId) {
+    if (cibleId === interaction.user.id) return interaction.reply({ content: '❌ On ne se note pas soi-même.', ...EPH });
+    const cible = store.getLink(cibleId);
+    if (!cible) return interaction.reply({ content: '❌ Ce membre n\'est plus vérifié.', ...EPH });
+    const existant = store.getVouch(interaction.user.id, cibleId);
+    poser(interaction.user.id, { cible: cibleId });
+    return interaction.reply({ ...(existant ? vueExistant(existant, cible) : rendre(brouillon(interaction.user.id))), ...EPH });
+  }
   return interaction.reply({ ...rendre(brouillon(interaction.user.id)), ...EPH });
 }
 
@@ -229,6 +240,7 @@ export async function onBouton(interaction) {
   const id = interaction.customId;
   if (id.startsWith('vouch:suppr:')) return supprimer(interaction);
   if (id === 'vouch:ouvrir') return ouvrir(interaction);
+  if (id.startsWith('vouch:noter:')) return ouvrir(interaction, id.slice('vouch:noter:'.length));
   if (id === 'vouch:chercher:mc') return interaction.showModal(modalRecherche());
 
   const b = brouillon(interaction.user.id);
