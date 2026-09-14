@@ -392,7 +392,18 @@ async function prevenirSignale(interaction, cible, auteur, message, fil) {
   if (lienCarte) {
     boutons.addComponents(new ButtonBuilder().setLabel('Voir le signalement').setEmoji('👀').setStyle(ButtonStyle.Link).setURL(lienCarte));
   }
+  // Les preuves voyagent avec le MP : reprises sur la carte publiee (leurs
+  // liens sont frais au fetch), premiere image dans l embed.
+  const files = [];
+  const carte = fil && vouch?.message_id ? await fil.messages.fetch(vouch.message_id).catch(() => null) : null;
+  for (const a of carte?.attachments.values() ?? []) {
+    const res = await fetch(a.url).catch(() => null);
+    if (res?.ok) files.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
+  }
+  const image = files.find((f) => /\.(png|jpe?g|gif|webp)$/i.test(f.name));
+  if (image) contenu.setImage(`attachment://${image.name}`);
+
   const user = await interaction.client.users.fetch(cible.discord_id);
-  await user.send({ embeds: [contenu], components: boutons.components.length ? [boutons] : [] });
+  await user.send({ embeds: [contenu], components: boutons.components.length ? [boutons] : [], files });
   console.log(`[vouch] ${cible.mc_name} prevenu en MP du signalement`);
 }
