@@ -87,7 +87,7 @@ for (const col of ['log_message_id TEXT', 'etat_par TEXT']) {
   try { db.exec(`ALTER TABLE tickets ADD COLUMN ${col}`); } catch { /* deja la */ }
 }
 // Avis : etoiles (1-5, null = ancien avis sans note) et carte publiee dans le fil.
-for (const col of ['stars INTEGER', 'message_id TEXT']) {
+for (const col of ['stars INTEGER', 'message_id TEXT', 'preuves TEXT']) {
   try { db.exec(`ALTER TABLE vouches ADD COLUMN ${col}`); } catch { /* deja la */ }
 }
 
@@ -131,7 +131,7 @@ const q = {
   vouchGet: db.prepare('SELECT * FROM vouches WHERE from_id = ? AND to_id = ?'),
   vouchAll: db.prepare('SELECT * FROM vouches WHERE to_id = ? ORDER BY created_at DESC'),
   vouchTargets: db.prepare('SELECT DISTINCT to_id FROM vouches'),
-  vouchSetMessage: db.prepare('UPDATE vouches SET message_id = ? WHERE from_id = ? AND to_id = ?'),
+  vouchSetMessage: db.prepare('UPDATE vouches SET message_id = ?, preuves = COALESCE(?, preuves) WHERE from_id = ? AND to_id = ?'),
   vouchCountFrom: db.prepare('SELECT COUNT(*) AS n FROM vouches WHERE from_id = ?'),
   allLinks: db.prepare('SELECT * FROM links ORDER BY linked_at'),
 
@@ -209,8 +209,8 @@ export const store = {
   getVouch: (fromId, toId) => q.vouchGet.get(String(fromId), String(toId)) ?? null,
   vouchAll: (toId) => q.vouchAll.all(String(toId)),
   vouchTargets: () => q.vouchTargets.all().map((r) => r.to_id),
-  setVouchMessage: (fromId, toId, messageId) =>
-    q.vouchSetMessage.run(messageId ? String(messageId) : null, String(fromId), String(toId)),
+  setVouchMessage: (fromId, toId, messageId, preuves = null) =>
+    q.vouchSetMessage.run(messageId ? String(messageId) : null, preuves ? JSON.stringify(preuves) : null, String(fromId), String(toId)),
   vouchCountFrom: (fromId) => q.vouchCountFrom.get(String(fromId)).n,
   allLinks: () => q.allLinks.all(),
 

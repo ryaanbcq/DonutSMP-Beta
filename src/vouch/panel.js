@@ -1,6 +1,7 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, ModalBuilder,
-  TextInputBuilder, TextInputStyle, MessageFlags, PermissionFlagsBits,
+  TextInputBuilder, TextInputStyle, MessageFlags, PermissionFlagsBits, LabelBuilder, FileUploadBuilder,
+  AttachmentBuilder,
 } from 'discord.js';
 import { store } from '../db.js';
 import { settings, ouSeLier } from '../settings.js';
@@ -17,9 +18,11 @@ import { reglagesTickets } from '../tickets/reglages.js';
 const EPH = { flags: MessageFlags.Ephemeral };
 const MIN_ANCIENNETE_MS = 24 * 3_600_000;
 const MIN_SCAM = 20;
+const MAX_PREUVES = 5;
+const MAX_OCTETS = 8 * 1024 * 1024;
 
 const brouillons = new Map();
-const brouillon = (id) => brouillons.get(String(id)) ?? { cible: null, verdict: null, etoiles: null, message: '' };
+const brouillon = (id) => brouillons.get(String(id)) ?? { cible: null, verdict: null, etoiles: null, message: '', preuves: [] };
 const poser = (id, patch) => { brouillons.set(String(id), { ...brouillon(id), ...patch }); return brouillon(id); };
 
 // ---------------------------------------------------------------------------
@@ -39,7 +42,8 @@ export function rendre(b, note = '') {
       + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t)} · ${t.n} avis\n\n`
       + `2️⃣ Verdict : ${b.verdict ? (scam ? '⚠️ **Signalement**' : '✅ **Vouch**') : '*à choisir*'}\n`
       + `3️⃣ Note : ${scam ? '*sans objet pour un signalement*' : b.etoiles ? `**${etoiles(b.etoiles)}**` : '*à choisir*'}\n`
-      + `4️⃣ Message : ${b.message ? `\n> ${b.message.replace(/\n/g, '\n> ')}` : scam ? `*obligatoire, ${MIN_SCAM} caractères minimum*` : '*facultatif*'}`;
+      + `4️⃣ Message : ${b.message ? `\n> ${b.message.replace(/\n/g, '\n> ')}` : scam ? `*obligatoire, ${MIN_SCAM} caractères minimum*` : '*facultatif*'}`
+      + `\n📎 Preuves : ${b.preuves?.length ? b.preuves.map((f) => `\`${f.name}\``).join(', ') : scam ? '*aucune, fortement conseillées (captures du trade)*' : '*aucune*'}`;
   }
   if (note) description += `\n\n${note}`;
 
@@ -224,14 +228,18 @@ export async function onBouton(interaction) {
   if (id === 'vouch:message') {
     const scam = b.verdict === 'neg';
     const champ = new TextInputBuilder().setCustomId('message')
-      .setLabel(scam ? 'Décrivez le scam, avec des faits' : 'Un mot sur le trade')
       .setStyle(TextInputStyle.Paragraph).setRequired(scam).setMaxLength(280);
     if (scam) champ.setMinLength(MIN_SCAM);
     // Une valeur vide sur un champ a minimum est refusee par Discord (vecu) :
     // on ne pre-remplit que s il y a deja un message.
     if (b.message) champ.setValue(b.message);
     const modal = new ModalBuilder().setCustomId('vouch:modal').setTitle(scam ? 'Que s\'est-il passé ?' : 'Votre message')
-      .addComponents(new ActionRowBuilder().addComponents(champ));
+      .addLabelComponents(
+        new LabelBuilder().setLabel(scam ? 'Décrivez le scam, avec des faits' : 'Un mot sur le trade').setTextInputComponent(champ),
+        new LabelBuilder().setLabel('Preuves (captures, vidéos)')
+          .setDescription(`Jusqu'à ${MAX_PREUVES} fichiers de 8 Mo. ${b.preuves?.length ? 'Un nouvel envoi remplace les précédentes.' : ''}`.trim())
+          .setFileUploadComponent(new FileUploadBuilder().setCustomId('preuves').setMinValues(0).setMaxValues(MAX_PREUVES).setRequired(false)),
+      );
     return interaction.showModal(modal);
   }
   if (id === 'vouch:publier') return publier(interaction, b);
@@ -241,7 +249,25 @@ export async function onModal(interaction) {
   if (interaction.customId === 'vouch:chercher:modal') return chercherParTexte(interaction);
   if (interaction.customId !== 'vouch:modal') return;
   const message = interaction.fields.getTextInputValue('message').trim();
-  const b = poser(interaction.user.id, { message });
+
+  // Les fichiers du formulaire ont une URL a duree de vie courte : on les
+  // telecharge tout de suite, la carte publiee en sera la copie durable.
+  const envoyes = [...(interaction.fields.getUploadedFiles('preuves', false)?.values() ?? [])];
+  let note = '';
+  let preuves = brouillon(interaction.user.id).preuves ?? [];
+  if (envoyes.length) {
+    if (interaction.isFromMessage()) await interaction.deferUpdate(); else await interaction.deferReply(EPH);
+    preuves = [];
+    for (const a of envoyes.slice(0, MAX_PREUVES)) {
+      if ((a.size ?? 0) > MAX_OCTETS) { note += `\n⚠️ \`${a.name}\` dépasse 8 Mo, ignoré.`; continue; }
+      const res = await fetch(a.url).catch(() => null);
+      if (!res?.ok) { note += `\n⚠️ \`${a.name}\` n'a pas pu être récupéré.`; continue; }
+      preuves.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
+    }
+    const b = poser(interaction.user.id, { message, preuves });
+    return interaction.editReply(rendre(b, note.trim()));
+  }
+  const b = poser(interaction.user.id, { message, preuves });
   if (interaction.isFromMessage()) return interaction.update(rendre(b));
   return interaction.reply({ ...rendre(b), ...EPH });
 }
@@ -255,7 +281,7 @@ async function publier(interaction, b) {
 
   await interaction.deferUpdate();
   store.setVouch(interaction.user.id, cible.discord_id, scam ? -1 : 1, b.message || null, scam ? null : b.etoiles);
-  const fil = await posterAvis(interaction.client, interaction.user.id, cible.discord_id)
+  const fil = await posterAvis(interaction.client, interaction.user.id, cible.discord_id, { fichiers: b.preuves ?? [] })
     .catch((e) => { console.error('[vouch] publication :', e.message); return null; });
   brouillons.delete(String(interaction.user.id));
 
@@ -300,8 +326,9 @@ async function prevenirSignale(interaction, cible, auteur, message, fil) {
     image: cible.mc_name,
     description:
       `**${auteur}** <@${interaction.user.id}> a publié un signalement de scam sur votre profil **${cible.mc_name}**.\n`
-      + `> ${message.replace(/\n/g, '\n> ')}\n\n`
-      + 'Si vous estimez ce signalement injustifié, **ouvrez un ticket** : le staff examinera les preuves des deux côtés '
+      + `> ${message.replace(/\n/g, '\n> ')}\n`
+      + (vouch?.preuves ? `📎 ${JSON.parse(vouch.preuves).length} preuve(s) jointe(s)\n` : '')
+      + '\nSi vous estimez ce signalement injustifié, **ouvrez un ticket** : le staff examinera les preuves des deux côtés '
       + 'et pourra retirer l\'avis. Un signalement pèse lourd dans votre trust score, ne le laissez pas sans réponse.',
   });
   const boutons = new ActionRowBuilder();

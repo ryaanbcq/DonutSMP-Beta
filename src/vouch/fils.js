@@ -126,6 +126,8 @@ export function carteReputation(link) {
 
 export function carteAvis(vouch, auteurLink, cibleLink) {
   const positif = vouch.value > 0;
+  let preuves = [];
+  try { preuves = JSON.parse(vouch.preuves ?? '[]'); } catch { /* ancien avis */ }
   const contenu = embed(positif ? '✅・VOUCH' : '⚠️・SIGNALEMENT', {
     couleur: positif ? FR.vert : FR.rouge,
     image: auteurLink?.mc_name ?? 'aucune',
@@ -134,6 +136,7 @@ export function carteAvis(vouch, auteurLink, cibleLink) {
       + (positif ? `· ${etoiles(vouch.stars ?? 5)}` : '· signale **' + cibleLink.mc_name + '**')
       + (vouch.comment ? `\n> ${vouch.comment.replace(/\n/g, '\n> ')}` : ''),
   }).setTimestamp(vouch.created_at);
+  if (preuves.length) contenu.setFooter({ text: `📎 ${preuves.length} preuve(s) jointe(s)` });
   const boutons = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`vouch:suppr:${vouch.from_id}:${vouch.to_id}`)
       .setLabel('Retirer (staff)').setEmoji('🗑️').setStyle(ButtonStyle.Secondary),
@@ -156,21 +159,32 @@ export async function rafraichir(client, discordId) {
   await majRoleTrusted(client, discordId);
 }
 
-/** Publie (ou reecrit) la carte d un avis dans le fil de la cible. Rend le fil. */
-export async function posterAvis(client, fromId, toId) {
+/**
+ * Publie (ou reecrit) la carte d un avis dans le fil de la cible. Rend le fil.
+ * fichiers : preuves a joindre (AttachmentBuilder ou { attachment, name }) ;
+ * elles remplacent les anciennes quand l avis est modifie.
+ */
+export async function posterAvis(client, fromId, toId, { fichiers = [] } = {}) {
   const vouch = store.getVouch(fromId, toId);
   const cible = store.getLink(toId);
   if (!vouch || !cible) return null;
   const fil = await filDe(client, cible);
   if (!fil) return null;
   await reveiller(fil);
-  const carte = carteAvis(vouch, store.getLink(fromId), cible);
+
+  // Les URL d upload du formulaire expirent : la carte publiee dans le fil
+  // devient la copie de reference, on memorise SES pieces jointes.
+  const preuvesDe = (m) => [...m.attachments.values()].map((a) => ({ name: a.name, url: a.url }));
+  const provisoire = fichiers.length ? { ...vouch, preuves: JSON.stringify(fichiers.map((f) => ({ name: f.name }))) } : vouch;
+  const carte = carteAvis(provisoire, store.getLink(fromId), cible);
   const ancien = vouch.message_id ? await fil.messages.fetch(vouch.message_id).catch(() => null) : null;
-  if (ancien) await ancien.edit(carte).catch(() => {});
-  else {
-    const m = await fil.send(carte);
-    store.setVouchMessage(fromId, toId, m.id);
+  let m;
+  if (ancien) {
+    m = await ancien.edit(fichiers.length ? { ...carte, files: fichiers, attachments: [] } : carte).catch(() => null);
+  } else {
+    m = await fil.send(fichiers.length ? { ...carte, files: fichiers } : carte);
   }
+  if (m) store.setVouchMessage(fromId, toId, m.id, fichiers.length ? preuvesDe(m) : null);
   await rafraichir(client, toId);
   return fil;
 }
