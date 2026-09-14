@@ -6,7 +6,8 @@ import { store } from '../db.js';
 import { settings, ouSeLier } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { etoiles, barre } from './trust.js';
-import { trustDe, posterAvis, retirerAvis } from './fils.js';
+import { trustDe, posterAvis, retirerAvis, carteReputation, filDe } from './fils.js';
+import { isValidName } from '../lib/names.js';
 
 // /vouch sans argument : UN message prive qui se remplit en quatre clics.
 // Le brouillon vit en memoire par membre ; rien ne part avant « Publier ».
@@ -83,15 +84,82 @@ export function panneauVouch(forumId) {
       "**Avant un trade, vérifiez. Après un trade, notez.**\n\n"
       + `Chaque membre vérifié a son post dans <#${forumId}> : cherchez son pseudo pour voir son `
       + 'trust score sur 100, ses étoiles, ses vouches et ses signalements.\n\n'
+      + '**Chercher un membre** : choisissez-le dans le menu ci-dessous, ou tapez son pseudo Minecraft '
+      + 'avec le bouton 🔍. Sa carte de réputation vous est montrée en privé.\n\n'
       + "Pour noter quelqu'un, cliquez sur **Donner un avis** ou tapez `/vouch`. "
       + 'Un signalement demande une explication, et le staff peut retirer un avis abusif.\n\n'
       + '💎 Légende · 🥇 Trusted · 🥈 De confiance · 🥉 Fiable · 🌱 Nouveau · ☠️ Signalé',
   });
-  const bouton = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('vouch:ouvrir').setLabel('Donner un avis').setEmoji('⭐').setStyle(ButtonStyle.Primary),
+  const recherche = new ActionRowBuilder().addComponents(
+    new UserSelectMenuBuilder().setCustomId('vouch:chercher:membre').setPlaceholder('🔍 Chercher un membre Discord'),
   );
-  return { embeds: [contenu], components: [bouton] };
+  const boutons = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('vouch:ouvrir').setLabel('Donner un avis').setEmoji('⭐').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('vouch:chercher:mc').setLabel('Chercher un pseudo Minecraft').setEmoji('🔍').setStyle(ButtonStyle.Secondary),
+  );
+  return { embeds: [contenu], components: [recherche, boutons] };
 }
+
+// ---------------------------------------------------------------------------
+// Recherche : par membre Discord (menu) ou par pseudo Minecraft / nom Discord (formulaire)
+// ---------------------------------------------------------------------------
+
+async function montrerCarte(interaction, link, { differe = false } = {}) {
+  const fil = await filDe(interaction.client, link).catch(() => null);
+  const charge = { ...carteReputation(link), content: fil ? `Tous ses avis : ${fil}` : undefined, ...EPH };
+  return differe ? interaction.editReply(charge) : interaction.reply(charge);
+}
+
+async function chercherParMembre(interaction) {
+  const id = interaction.values[0];
+  const link = store.getLink(id);
+  if (!link) return interaction.reply({ content: `<@${id}> n'a pas de compte vérifié : pas de réputation à afficher.`, ...EPH });
+  return montrerCarte(interaction, link);
+}
+
+function modalRecherche() {
+  return new ModalBuilder().setCustomId('vouch:chercher:modal').setTitle('Chercher un joueur')
+    .addComponents(new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('q').setLabel('Pseudo Minecraft ou nom Discord')
+        .setStyle(TextInputStyle.Short).setRequired(true).setMinLength(2).setMaxLength(32),
+    ));
+}
+
+async function chercherParTexte(interaction) {
+  const q = interaction.fields.getTextInputValue('q').trim();
+  await interaction.deferReply(EPH);
+
+  // 1. pseudo Minecraft exact (la casse ne compte pas)
+  if (isValidName(q)) {
+    const link = store.getLinkByName(q);
+    if (link) return montrerCarte(interaction, link, { differe: true });
+  }
+
+  // 2. nom Discord : Discord cherche par prefixe de pseudo ou de surnom
+  const membres = await interaction.guild.members.search({ query: q, limit: 10 }).catch(() => null);
+  const lies = [...(membres?.values() ?? [])].map((m) => store.getLink(m.id)).filter(Boolean);
+  if (lies.length === 1) return montrerCarte(interaction, lies[0], { differe: true });
+  if (lies.length > 1) {
+    return interaction.editReply(
+      `Plusieurs membres vérifiés correspondent à **${q}** :\n`
+      + lies.map((l) => `• **${l.mc_name}** <@${l.discord_id}>`).join('\n')
+      + '\n\nPrécisez le pseudo Minecraft, ou choisissez-le dans le menu du panneau.',
+    );
+  }
+
+  // 3. pseudo Minecraft approchant, parmi les comptes lies
+  const bas = q.toLowerCase();
+  const proches = store.allLinks().filter((l) => l.mc_name.toLowerCase().includes(bas)).slice(0, 5);
+  if (proches.length === 1) return montrerCarte(interaction, proches[0], { differe: true });
+  if (proches.length > 1) {
+    return interaction.editReply(
+      `Aucun **${q}** exact, mais ces pseudos s'en approchent :\n`
+      + proches.map((l) => `• **${l.mc_name}** <@${l.discord_id}>`).join('\n'),
+    );
+  }
+  return interaction.editReply(`Aucun membre vérifié ne correspond à **${q}**. Seuls les comptes link ont une réputation.`);
+}
+
 
 export async function ouvrir(interaction) {
   const moi = store.getLink(interaction.user.id);
@@ -115,6 +183,7 @@ export async function ouvrir(interaction) {
 // ---------------------------------------------------------------------------
 
 export async function onSelect(interaction) {
+  if (interaction.customId === 'vouch:chercher:membre') return chercherParMembre(interaction);
   if (interaction.customId !== 'vouch:cible') return;
   const id = interaction.values[0];
   const b = brouillon(interaction.user.id);
@@ -135,6 +204,7 @@ export async function onBouton(interaction) {
   const id = interaction.customId;
   if (id.startsWith('vouch:suppr:')) return supprimer(interaction);
   if (id === 'vouch:ouvrir') return ouvrir(interaction);
+  if (id === 'vouch:chercher:mc') return interaction.showModal(modalRecherche());
 
   const b = brouillon(interaction.user.id);
   if (id === 'vouch:annuler') {
@@ -162,6 +232,7 @@ export async function onBouton(interaction) {
 }
 
 export async function onModal(interaction) {
+  if (interaction.customId === 'vouch:chercher:modal') return chercherParTexte(interaction);
   if (interaction.customId !== 'vouch:modal') return;
   const message = interaction.fields.getTextInputValue('message').trim();
   const b = poser(interaction.user.id, { message });

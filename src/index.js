@@ -214,7 +214,7 @@ async function onDelier(interaction) {
 async function onModal(interaction) {
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);
-  if (interaction.customId === 'vouch:modal') return onVouchModal(interaction);
+  if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
 }
