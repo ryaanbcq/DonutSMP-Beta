@@ -389,7 +389,7 @@ export async function envoyerMpSignale(client, { guildId, cible, vouch, auteur, 
     description:
       `**${auteur}** <@${vouch.from_id}> a publié un signalement de scam sur votre profil **${cible.mc_name}**.\n`
       + `> ${message.replace(/\n/g, '\n> ')}\n`
-      + (vouch?.preuves ? `📎 ${JSON.parse(vouch.preuves).length} preuve(s) jointe(s)\n` : '')
+      + (nbPreuves(vouch) ? `📎 ${nbPreuves(vouch)} preuve(s) jointe(s), ci-dessous\n` : '')
       + '\nSi vous estimez ce signalement injustifié, **ouvrez un ticket** : le staff examinera les preuves des deux côtés '
       + 'et pourra retirer l\'avis. Un signalement pèse lourd dans votre trust score, ne le laissez pas sans réponse.',
   });
@@ -412,4 +412,8 @@ export async function envoyerMpSignale(client, { guildId, cible, vouch, auteur, 
   const user = await client.users.fetch(cible.discord_id);
   await user.send({ embeds: [contenu], components: boutons.components.length ? [boutons] : [], files });
   console.log(`[vouch] ${cible.mc_name} prevenu en MP du signalement`);
+}
+
+function nbPreuves(vouch) {
+  try { return JSON.parse(vouch?.preuves ?? '[]').length; } catch { return 0; }
 }
