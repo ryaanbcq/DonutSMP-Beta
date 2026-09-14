@@ -9,6 +9,7 @@ import { etoiles, barre, ligneScore } from './trust.js';
 import { trustDe, posterAvis, retirerAvis, carteReputation, filDe } from './fils.js';
 import { isValidName, bypass } from '../lib/names.js';
 import { config } from '../config.js';
+import { reglagesTickets } from '../tickets/reglages.js';
 
 // /vouch sans argument : UN message prive qui se remplit en quatre clics.
 // Le brouillon vit en memoire par membre ; rien ne part avant « Publier ».
@@ -260,6 +261,7 @@ async function publier(interaction, b) {
 
   const t = trustDe(cible.discord_id);
   const auteur = store.getLink(interaction.user.id)?.mc_name ?? interaction.user.tag;
+  if (scam) prevenirSignale(interaction, cible, auteur, b.message, fil).catch((e) => console.warn('[vouch] MP :', e.message));
   console.log(`[vouch] ${auteur} ${scam ? 'signale' : `vouch ${b.etoiles}★`} ${cible.mc_name} (score ${t.score})`);
   return interaction.editReply({
     embeds: [embed(scam ? '⚠️・SIGNALEMENT PUBLIÉ' : '✅・VOUCH PUBLIÉ', {
@@ -280,4 +282,37 @@ async function supprimer(interaction) {
   const ok = await retirerAvis(interaction.client, fromId, toId);
   console.log(`[vouch] avis de ${fromId} sur ${toId} retire par ${interaction.user.tag}`);
   return interaction.editReply(ok ? '🗑️ Avis retiré, le score est recalculé.' : 'Cet avis n\'existe plus.');
+}
+
+// ---------------------------------------------------------------------------
+// Un signalement n est jamais silencieux : la personne visee le recoit en MP
+// avec de quoi le contester, un bouton vers le salon des tickets.
+// ---------------------------------------------------------------------------
+
+async function prevenirSignale(interaction, cible, auteur, message, fil) {
+  const guildId = interaction.guildId;
+  const vouch = store.getVouch(interaction.user.id, cible.discord_id);
+  const lienCarte = fil && vouch?.message_id ? `https://discord.com/channels/${guildId}/${fil.id}/${vouch.message_id}` : null;
+  const salonTickets = reglagesTickets.salonPanneau();
+
+  const contenu = embed('⚠️・VOUS AVEZ ÉTÉ SIGNALÉ', {
+    couleur: FR.rouge,
+    image: cible.mc_name,
+    description:
+      `**${auteur}** <@${interaction.user.id}> a publié un signalement de scam sur votre profil **${cible.mc_name}**.\n`
+      + `> ${message.replace(/\n/g, '\n> ')}\n\n`
+      + 'Si vous estimez ce signalement injustifié, **ouvrez un ticket** : le staff examinera les preuves des deux côtés '
+      + 'et pourra retirer l\'avis. Un signalement pèse lourd dans votre trust score, ne le laissez pas sans réponse.',
+  });
+  const boutons = new ActionRowBuilder();
+  if (salonTickets) {
+    boutons.addComponents(new ButtonBuilder().setLabel('Contester dans #tickets').setEmoji('📩').setStyle(ButtonStyle.Link)
+      .setURL(`https://discord.com/channels/${guildId}/${salonTickets}`));
+  }
+  if (lienCarte) {
+    boutons.addComponents(new ButtonBuilder().setLabel('Voir le signalement').setEmoji('👀').setStyle(ButtonStyle.Link).setURL(lienCarte));
+  }
+  const user = await interaction.client.users.fetch(cible.discord_id);
+  await user.send({ embeds: [contenu], components: boutons.components.length ? [boutons] : [] });
+  console.log(`[vouch] ${cible.mc_name} prevenu en MP du signalement`);
 }
