@@ -143,7 +143,9 @@ export async function onFormulaireOuverture(interaction) {
   console.log(`[ticket] #${id} ouvert par ${interaction.user.tag} (${categorie?.nom ?? 'sans categorie'})`);
   await majJournal(guild, ticket);
 
-  return interaction.editReply(`✅ Votre ticket est ouvert : ${salon}`);
+  // Le membre est mentionne dans son ticket, qui apparait chez lui : la
+  // confirmation en prive ne sert a rien, on retire la reponse differee.
+  return interaction.deleteReply().catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
