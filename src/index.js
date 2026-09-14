@@ -23,6 +23,7 @@ import { repondreChallenge } from './link/flow.js';
 import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket } from './tickets/manager.js';
+import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -98,9 +99,10 @@ client.on('interactionCreate', async (interaction) => {
       console.log(`[ui] formulaire ${interaction.customId} par ${qui}`);
       return await onModal(interaction);
     }
-    if (interaction.isStringSelectMenu()) {
+    if (interaction.isAnySelectMenu()) {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
+      if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
       return;
     }
     if (interaction.isChatInputCommand()) {
@@ -140,6 +142,7 @@ async function onCommande(interaction) {
 
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
+  if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 
@@ -204,6 +207,7 @@ async function onDelier(interaction) {
 
 async function onModal(interaction) {
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
+  if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
 }

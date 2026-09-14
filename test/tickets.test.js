@@ -106,3 +106,24 @@ test('le transcript est chronologique et signale un contenu illisible', () => {
   const sans = rendreTranscript({ ticket, messages, contenuDisponible: false });
   assert.match(sans, /intent Message Content/);
 });
+
+test('le panneau de setup reflete la configuration et tient en 5 rangees', async () => {
+  const { rendreSetup } = await import('../src/tickets/setup.js');
+  const { PermissionsBitField } = await import('discord.js');
+  reglagesTickets.poserSalonLogs('logs-1');
+  reglagesTickets.ajouterRole('role-1');
+  const guild = {
+    roles: { cache: new Map([['role-1', {}], ['222', {}]]) },
+    members: { me: { permissions: new PermissionsBitField(PermissionsBitField.All) } },
+  };
+  const vue = rendreSetup(guild, 'note de test');
+  assert.equal(vue.components.length, 5, 'Discord refuse au dela de 5 rangees');
+  const desc = vue.embeds[0].data.description;
+  assert.match(desc, /<#logs-1>/);
+  assert.match(desc, /<@&role-1>/);
+  assert.match(desc, /note de test/);
+  assert.doesNotMatch(desc, /Il me manque/);
+  const ids = vue.components.flatMap((r) => r.components.map((c) => c.toJSON().custom_id));
+  assert.deepEqual(ids.slice(0, 4), ['tsetup:salon', 'tsetup:dossier', 'tsetup:logs', 'tsetup:roles']);
+  assert.ok(ids.includes('tsetup:cat:add'));
+});
