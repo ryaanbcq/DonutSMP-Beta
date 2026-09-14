@@ -4,10 +4,10 @@ import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { calculerTrust, etoiles, barre } from './trust.js';
 
-// Un fil par joueur link dans le salon des vouches, nomme « ⭐ Pseudo » pour
+// Un post par joueur link dans le FORUM des vouches, nomme « ⭐ Pseudo » pour
 // que la barre de recherche le trouve. Verrouille : le bot seul y ecrit. Le
-// premier message est la carte de reputation, editee a chaque avis ; chaque
-// avis est une carte en dessous.
+// message de depart du post est la carte de reputation, editee a chaque
+// avis ; chaque avis est une carte en dessous. Le tag du post = son palier.
 
 export const TITRE_REPUTATION = '⭐・RÉPUTATION';
 const nomFil = (pseudo) => `⭐ ${pseudo}`.slice(0, 100);
@@ -16,7 +16,31 @@ async function salonVouch(client) {
   const id = settings.salonVouch();
   if (!id) return null;
   const salon = await client.channels.fetch(id).catch(() => null);
-  return salon?.type === ChannelType.GuildText ? salon : null;
+  return salon?.type === ChannelType.GuildForum ? salon : null;
+}
+
+// Tags du forum, un par palier : le forum se filtre par confiance.
+const TAGS = [
+  { name: 'Légende', emoji: '💎' }, { name: 'Trusted', emoji: '🥇' }, { name: 'De confiance', emoji: '🥈' },
+  { name: 'Fiable', emoji: '🥉' }, { name: 'Douteux', emoji: '⚠️' }, { name: 'Nouveau', emoji: '🌱' },
+  { name: 'Signalé', emoji: '☠️' },
+];
+
+async function tagsDuForum(forum) {
+  const manquants = TAGS.filter((t) => !forum.availableTags.some((a) => a.name === t.name));
+  if (manquants.length) {
+    await forum.setAvailableTags([
+      ...forum.availableTags,
+      ...manquants.map((t) => ({ name: t.name, emoji: { id: null, name: t.emoji }, moderated: true })),
+    ], 'Tags de réputation').catch((e) => console.warn('[vouch] tags :', e.message));
+  }
+  return forum.availableTags;
+}
+
+async function tagDe(forum, palier) {
+  const tags = await tagsDuForum(forum);
+  const tag = tags.find((t) => t.name === palier.nom);
+  return tag ? [tag.id] : [];
 }
 
 async function fetchFil(client, id) {
@@ -54,13 +78,14 @@ export async function filDe(client, link) {
 
   const fil = await salon.threads.create({
     name: nomFil(link.mc_name),
+    message: carteReputation(link),
+    appliedTags: await tagDe(salon, trustDe(link.discord_id).palier),
     autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-    reason: `Fil de réputation de ${link.mc_name}`,
+    reason: `Post de réputation de ${link.mc_name}`,
   });
-  const carte = await fil.send(carteReputation(link));
-  await carte.pin().catch(() => {});
   await fil.setLocked(true, 'Seul le bot écrit ici').catch(() => {});
-  store.setThread(link.discord_id, fil.id, carte.id, link.mc_name);
+  // Dans un forum, le message de depart porte l id du post.
+  store.setThread(link.discord_id, fil.id, fil.id, link.mc_name);
   console.log(`[vouch] fil ouvert pour ${link.mc_name}`);
   return fil;
 }
@@ -114,15 +139,11 @@ export async function rafraichir(client, discordId) {
   if (!link) return;
   const fil = await filDe(client, link);
   if (fil) {
-    const connu = store.getThread(discordId);
-    const carte = connu?.card_id ? await fil.messages.fetch(connu.card_id).catch(() => null) : null;
     await reveiller(fil);
-    if (carte) await carte.edit(carteReputation(link)).catch(() => {});
-    else {
-      const neuve = await fil.send(carteReputation(link));
-      await neuve.pin().catch(() => {});
-      store.setThread(discordId, fil.id, neuve.id, link.mc_name);
-    }
+    const carte = await fil.fetchStarterMessage().catch(() => null);
+    if (carte) await carte.edit(carteReputation(link)).catch((e) => console.warn('[vouch] carte :', e.message));
+    const forum = await salonVouch(client);
+    if (forum) await fil.setAppliedTags(await tagDe(forum, trustDe(discordId).palier)).catch(() => {});
   }
   await majRoleTrusted(client, discordId);
 }
@@ -176,7 +197,7 @@ async function majRoleTrusted(client, discordId) {
   if (!t.trusted && a) await membre.roles.remove(roleId, 'Trust score').catch((e) => console.warn('[vouch] role :', e.message));
 }
 
-/** Au demarrage et a chaque link : chaque compte verifie a son fil. */
+/** Au demarrage et a chaque link : chaque compte verifie a son post. */
 export async function assurerFils(client) {
   if (!settings.salonVouch()) return 0;
   let n = 0;

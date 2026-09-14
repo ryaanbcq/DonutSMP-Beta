@@ -1,6 +1,6 @@
 import {
   SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  PermissionFlagsBits, MessageFlags,
+  PermissionFlagsBits, MessageFlags, ChannelType,
 } from 'discord.js';
 import { config } from '../config.js';
 import { embed, TITRES } from '../lib/brand.js';
@@ -11,6 +11,7 @@ import { reglagesTickets } from '../tickets/reglages.js';
 import { permissionsManquantes } from '../tickets/manager.js';
 import { publierPanneau } from '../tickets/setup.js';
 import { assurerFils } from '../vouch/fils.js';
+import { panneauVouch } from '../vouch/panel.js';
 
 export const requiresLink = false;
 
@@ -86,21 +87,16 @@ const PANNEAUX = {
   vouches: {
     nom: 'Vouches',
     async poser(interaction, salon) {
-      settings.poserSalonVouch(salon.id);
+      const forum = interaction.options.getChannel('forum');
+      if (forum) settings.poserSalonVouch(forum.id);
       const role = interaction.options.getRole('role');
       if (role) settings.poserRoleTrusted(role.id);
-      await salon.send({
-        embeds: [embed(TITRES.reputation, {
-          description:
-            "**Ici, chaque membre vérifié a son fil d'avis.**\n\n"
-            + 'Cherchez un pseudo dans la barre de recherche pour voir sa réputation avant un trade : '
-            + 'trust score sur 100, étoiles, vouches et signalements.\n\n'
-            + "Pour noter quelqu'un après un trade : `/vouch`. Un signalement demande une explication, "
-            + 'et le staff peut retirer un avis abusif.',
-        })],
-      });
+      const forumId = settings.salonVouch();
+      if (!forumId) throw new Error('indique le forum des vouches avec l\'option `forum`');
+
+      await salon.send(panneauVouch(forumId));
       const n = await assurerFils(interaction.client);
-      const notes = [`${n} fil(s) ouvert(s) pour les membres déjà vérifiés.`];
+      const notes = [`${n} post(s) ouvert(s) dans <#${forumId}> pour les membres déjà vérifiés.`];
       if (role) notes.push(`Les membres au palier Trusted recevront ${role}.`);
       return notes.join(' ');
     },
@@ -141,7 +137,10 @@ export const data = new SlashCommandBuilder()
       .addChannelOption((o) => o.setName('salon').setDescription('Le salon à rouvrir')))
   .addSubcommand((s) => sousCommande(s, 'ticket', 'Panneau de tickets pour les membres (réglages : /ticket setup)'))
   .addSubcommand((s) =>
-    sousCommande(s, 'vouches', 'Salon des avis : un fil verrouillé par membre vérifié')
+    sousCommande(s, 'vouches', 'Panneau pour noter un membre, avec le forum des réputations')
+      .addChannelOption((o) =>
+        o.setName('forum').setDescription('Forum où chaque membre vérifié a son post de réputation')
+          .addChannelTypes(ChannelType.GuildForum))
       .addRoleOption((o) => o.setName('role').setDescription('Rôle donné automatiquement au palier Trusted')));
 
 function sousCommande(s, nom, description) {

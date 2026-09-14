@@ -18,8 +18,9 @@ export const settings = {
   salonLink: () => lire('link.salon', config.baltop.salonLinkId),
   poserSalonLink: (id) => store.kvSet('link.salon', String(id)),
 
-  salonVouch: () => lire('vouch.salon'),
-  poserSalonVouch: (id) => store.kvSet('vouch.salon', String(id)),
+  // Forum des vouches : un post verrouille par joueur verifie.
+  salonVouch: () => lire('vouch.forum'),
+  poserSalonVouch: (id) => store.kvSet('vouch.forum', String(id)),
   roleTrusted: () => lire('vouch.role'),
   poserRoleTrusted: (id) => store.kvSet('vouch.role', id ? String(id) : ''),
 

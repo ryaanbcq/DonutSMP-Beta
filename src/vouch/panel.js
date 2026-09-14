@@ -74,8 +74,24 @@ export function rendre(b, note = '') {
 }
 
 // ---------------------------------------------------------------------------
-// Entree : /vouch
+// Panneau public (bouton) et entree /vouch
 // ---------------------------------------------------------------------------
+
+export function panneauVouch(forumId) {
+  const contenu = embed('⭐・RÉPUTATION', {
+    description:
+      "**Avant un trade, vérifiez. Après un trade, notez.**\n\n"
+      + `Chaque membre vérifié a son post dans <#${forumId}> : cherchez son pseudo pour voir son `
+      + 'trust score sur 100, ses étoiles, ses vouches et ses signalements.\n\n'
+      + "Pour noter quelqu'un, cliquez sur **Donner un avis** ou tapez `/vouch`. "
+      + 'Un signalement demande une explication, et le staff peut retirer un avis abusif.\n\n'
+      + '💎 Légende · 🥇 Trusted · 🥈 De confiance · 🥉 Fiable · 🌱 Nouveau · ☠️ Signalé',
+  });
+  const bouton = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('vouch:ouvrir').setLabel('Donner un avis').setEmoji('⭐').setStyle(ButtonStyle.Primary),
+  );
+  return { embeds: [contenu], components: [bouton] };
+}
 
 export async function ouvrir(interaction) {
   const moi = store.getLink(interaction.user.id);
@@ -88,7 +104,7 @@ export async function ouvrir(interaction) {
     });
   }
   if (!settings.salonVouch()) {
-    return interaction.reply({ content: "❌ Le salon des vouches n'est pas encore configuré (staff : `/panel vouches`).", ...EPH });
+    return interaction.reply({ content: "❌ Le forum des vouches n'est pas encore configuré (staff : `/panel vouches`).", ...EPH });
   }
   brouillons.delete(String(interaction.user.id));
   return interaction.reply({ ...rendre(brouillon(interaction.user.id)), ...EPH });
@@ -118,6 +134,7 @@ export async function onSelect(interaction) {
 export async function onBouton(interaction) {
   const id = interaction.customId;
   if (id.startsWith('vouch:suppr:')) return supprimer(interaction);
+  if (id === 'vouch:ouvrir') return ouvrir(interaction);
 
   const b = brouillon(interaction.user.id);
   if (id === 'vouch:annuler') {
