@@ -74,6 +74,12 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE INDEX IF NOT EXISTS idx_ticket_membre ON tickets(discord_id, etat);
 `);
 
+// Colonnes ajoutees apres coup : un seul message de log par ticket, edite au
+// fil de sa vie, et qui a change l etat en dernier.
+for (const col of ['log_message_id TEXT', 'etat_par TEXT']) {
+  try { db.exec(`ALTER TABLE tickets ADD COLUMN ${col}`); } catch { /* deja la */ }
+}
+
 const q = {
   linkByDiscord: db.prepare('SELECT * FROM links WHERE discord_id = ?'),
   linkByName: db.prepare('SELECT * FROM links WHERE mc_name_norm = ?'),
@@ -135,7 +141,8 @@ const q = {
   ticketOuvertDe: db.prepare(
     "SELECT * FROM tickets WHERE discord_id = ? AND etat != 'supprime' ORDER BY id DESC LIMIT 1",
   ),
-  setTicketEtat: db.prepare('UPDATE tickets SET etat = ?, closed_at = ? WHERE channel_id = ?'),
+  setTicketEtat: db.prepare('UPDATE tickets SET etat = ?, closed_at = ?, etat_par = ? WHERE channel_id = ?'),
+  setTicketLog: db.prepare('UPDATE tickets SET log_message_id = ? WHERE channel_id = ?'),
   setTicketPris: db.prepare('UPDATE tickets SET pris_par = ? WHERE channel_id = ?'),
   renameTicket: db.prepare('UPDATE tickets SET channel_id = ? WHERE channel_id = ?'),
   countTicketsEtat: db.prepare('SELECT COUNT(*) AS n FROM tickets WHERE etat = ?'),
@@ -186,8 +193,9 @@ export const store = {
   },
   getTicket: (channelId) => q.ticketBySalon.get(String(channelId)) ?? null,
   ticketEnCours: (discordId) => q.ticketOuvertDe.get(String(discordId)) ?? null,
-  setTicketEtat: (channelId, etat) =>
-    q.setTicketEtat.run(etat, etat === 'ouvert' ? null : Date.now(), String(channelId)),
+  setTicketEtat: (channelId, etat, par = null) =>
+    q.setTicketEtat.run(etat, etat === 'ouvert' ? null : Date.now(), par ? String(par) : null, String(channelId)),
+  setTicketLog: (channelId, messageId) => q.setTicketLog.run(String(messageId), String(channelId)),
   setTicketPris: (channelId, discordId) => q.setTicketPris.run(discordId ? String(discordId) : null, String(channelId)),
   renommerTicket: (avant, apres) => q.renameTicket.run(String(apres), String(avant)),
   countTickets: (etat) => q.countTicketsEtat.get(etat).n,

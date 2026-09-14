@@ -141,10 +141,7 @@ export async function onFormulaireOuverture(interaction) {
   await salon.send({ content: mentions, ...entete, allowedMentions: { users: [interaction.user.id], roles } });
 
   console.log(`[ticket] #${id} ouvert par ${interaction.user.tag} (${categorie?.nom ?? 'sans categorie'})`);
-  await journal(guild, embedLog(TITRE_TICKET,
-    `Ticket **#${id}** ouvert par <@${interaction.user.id}> dans ${salon}`
-    + (categorie ? `\nCatégorie : ${categorie.emoji} ${categorie.nom}` : '')
-    + `\nDemande : ${sujet.slice(0, 500)}`, FR.vert));
+  await majJournal(guild, ticket);
 
   return interaction.editReply(`✅ Votre ticket est ouvert : ${salon}`);
 }
@@ -188,15 +185,14 @@ async function fermer(interaction, ticket, { staff, auteur }) {
   if (ticket.etat !== 'ouvert') return refus(interaction, 'ℹ️ Ce ticket est déjà fermé.');
   await interaction.deferReply();
 
-  store.setTicketEtat(ticket.channel_id, 'ferme');
+  store.setTicketEtat(ticket.channel_id, 'ferme', interaction.user.id);
   const salon = interaction.channel;
   await salon.permissionOverwrites.edit(ticket.discord_id, { SendMessages: false }, { reason: 'Ticket fermé' }).catch(() => {});
   await salon.setName(nomSalon('ferme', ticket.id, salon.name.split('-').slice(2).join('-'))).catch(() => {});
   await majEntete(interaction, { ...ticket, etat: 'ferme' }, { prisPar: ticket.pris_par });
 
   console.log(`[ticket] #${ticket.id} ferme par ${interaction.user.tag}`);
-  await journal(interaction.guild, embedLog(TITRE_TICKET,
-    `Ticket **#${ticket.id}** (<@${ticket.discord_id}>) fermé par <@${interaction.user.id}>`, FR.jaune));
+  await majJournal(interaction.guild, store.getTicket(ticket.channel_id));
   return interaction.editReply({
     embeds: [embedLog('🔒・TICKET FERMÉ',
       `Fermé par <@${interaction.user.id}>. L'auteur ne peut plus y écrire.\n`
@@ -209,15 +205,14 @@ async function rouvrir(interaction, ticket, { staff }) {
   if (ticket.etat === 'ouvert') return refus(interaction, 'ℹ️ Ce ticket est déjà ouvert.');
   await interaction.deferReply();
 
-  store.setTicketEtat(ticket.channel_id, 'ouvert');
+  store.setTicketEtat(ticket.channel_id, 'ouvert', interaction.user.id);
   const salon = interaction.channel;
   await salon.permissionOverwrites.edit(ticket.discord_id, { SendMessages: true }, { reason: 'Ticket rouvert' }).catch(() => {});
   await salon.setName(nomSalon('ticket', ticket.id, salon.name.split('-').slice(2).join('-'))).catch(() => {});
   await majEntete(interaction, { ...ticket, etat: 'ouvert' }, { prisPar: ticket.pris_par });
 
   console.log(`[ticket] #${ticket.id} rouvert par ${interaction.user.tag}`);
-  await journal(interaction.guild, embedLog(TITRE_TICKET,
-    `Ticket **#${ticket.id}** (<@${ticket.discord_id}>) rouvert par <@${interaction.user.id}>`, FR.vert));
+  await majJournal(interaction.guild, store.getTicket(ticket.channel_id));
   return interaction.editReply({
     content: `<@${ticket.discord_id}>`,
     embeds: [embedLog('🔓・TICKET ROUVERT', `Rouvert par <@${interaction.user.id}>.`, FR.vert)],
@@ -235,6 +230,7 @@ async function prendre(interaction, ticket, { staff }) {
   store.setTicketPris(ticket.channel_id, nouveau);
   await interaction.deferUpdate();
   await majEntete(interaction, ticket, { prisPar: nouveau });
+  await majJournal(interaction.guild, store.getTicket(ticket.channel_id));
   await interaction.channel.send({
     embeds: [embedLog(TITRE_TICKET, nouveau
       ? `<@${nouveau}> prend ce ticket en charge.`
@@ -248,12 +244,8 @@ async function sauvegarder(interaction, ticket, { staff }) {
   const fichier = await transcript(interaction.client, interaction.channel, ticket);
   const logs = await salonLogs(interaction.guild);
   if (logs) {
-    await logs.send({
-      embeds: [embedLog(TITRE_TICKET,
-        `Logs du ticket **#${ticket.id}** (<@${ticket.discord_id}>), sauvegardés par <@${interaction.user.id}>`, FR.bleu)],
-      files: [fichier],
-    });
-    return interaction.editReply(`📄 Logs envoyés dans ${logs}.`);
+    await majJournal(interaction.guild, ticket, { fichier });
+    return interaction.editReply(`📄 Logs joints au suivi du ticket dans ${logs}.`);
   }
   return interaction.editReply({
     content: '📄 Aucun salon de logs configuré (`/panel ticket config logs`), voici le fichier :',
@@ -280,15 +272,9 @@ async function supprimer(interaction, ticket, { staff }) {
   await interaction.update({ content: '⏳ Sauvegarde des logs puis suppression...', components: [] });
 
   const logs = await salonLogs(interaction.guild);
-  if (logs) {
-    const fichier = await transcript(interaction.client, interaction.channel, ticket);
-    await logs.send({
-      embeds: [embedLog(TITRE_TICKET,
-        `Ticket **#${ticket.id}** (<@${ticket.discord_id}>) supprimé par <@${interaction.user.id}>`, FR.rouge)],
-      files: [fichier],
-    }).catch((e) => console.error('[ticket] logs :', e.message));
-  }
-  store.setTicketEtat(ticket.channel_id, 'supprime');
+  const fichier = logs ? await transcript(interaction.client, interaction.channel, ticket) : null;
+  store.setTicketEtat(ticket.channel_id, 'supprime', interaction.user.id);
+  if (logs) await majJournal(interaction.guild, store.getTicket(ticket.channel_id), { fichier });
   console.log(`[ticket] #${ticket.id} supprime par ${interaction.user.tag}`);
   await interaction.channel.delete(`Ticket #${ticket.id} supprimé par ${interaction.user.tag}`);
 }
@@ -312,7 +298,46 @@ async function salonLogs(guild) {
   return salon?.isTextBased?.() ? salon : null;
 }
 
-async function journal(guild, contenu) {
-  const salon = await salonLogs(guild);
-  await salon?.send({ embeds: [contenu] }).catch((e) => console.error('[ticket] logs :', e.message));
+const ETATS = {
+  ouvert: { texte: '🟢 Ouvert', couleur: FR.vert },
+  ferme: { texte: '🔒 Fermé', couleur: FR.jaune },
+  supprime: { texte: '🗑️ Supprimé', couleur: FR.rouge },
+};
+
+/**
+ * UN message de log par ticket, cree a l ouverture et edite ensuite : l etat,
+ * la prise en charge et le transcript s y ajoutent au lieu d empiler des
+ * messages. Sans salon de logs configure, rien ne part.
+ */
+async function majJournal(guild, ticket, { fichier } = {}) {
+  const logs = await salonLogs(guild);
+  if (!logs) return;
+
+  const etat = ETATS[ticket.etat] ?? ETATS.ouvert;
+  const par = ticket.etat !== 'ouvert' && ticket.etat_par ? ` par <@${ticket.etat_par}>` : '';
+  const contenu = embedLog(TITRE_TICKET,
+    `Ticket **#${ticket.id}** de <@${ticket.discord_id}>`
+    + (ticket.categorie ? ` · ${ticket.categorie}` : '')
+    + (ticket.etat !== 'supprime' ? ` · <#${ticket.channel_id}>` : ''),
+    etat.couleur)
+    .addFields(
+      { name: 'État', value: etat.texte + par, inline: true },
+      { name: 'Pris en charge', value: ticket.pris_par ? `<@${ticket.pris_par}>` : 'Personne', inline: true },
+    );
+  if (ticket.sujet) contenu.addFields({ name: 'Demande', value: ticket.sujet.slice(0, 1024) });
+
+  const charge = { embeds: [contenu], ...(fichier ? { files: [fichier] } : {}) };
+  const existant = ticket.log_message_id
+    ? await logs.messages.fetch(ticket.log_message_id).catch(() => null)
+    : null;
+  try {
+    if (existant) {
+      await existant.edit(charge);
+    } else {
+      const envoye = await logs.send(charge);
+      store.setTicketLog(ticket.channel_id, envoye.id);
+    }
+  } catch (e) {
+    console.error('[ticket] logs :', e.message);
+  }
 }

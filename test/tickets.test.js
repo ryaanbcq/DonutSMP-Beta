@@ -60,8 +60,11 @@ test('un ticket par membre, etats et prise en charge', () => {
   const id = store.createTicket('salon-1', 'membre-a', 'Service Build', 'Une maison');
   assert.equal(id, 1);
   assert.equal(store.ticketEnCours('membre-a').channel_id, 'salon-1');
-  store.setTicketEtat('salon-1', 'ferme');
+  store.setTicketEtat('salon-1', 'ferme', 'staff-x');
   assert.equal(store.getTicket('salon-1').etat, 'ferme');
+  assert.equal(store.getTicket('salon-1').etat_par, 'staff-x');
+  store.setTicketLog('salon-1', 'msg-log');
+  assert.equal(store.getTicket('salon-1').log_message_id, 'msg-log');
   assert.ok(store.getTicket('salon-1').closed_at, 'la fermeture est datee');
   assert.ok(store.ticketEnCours('membre-a'), 'ferme mais pas supprime : toujours son ticket');
   store.setTicketPris('salon-1', 'staff-x');
@@ -70,6 +73,7 @@ test('un ticket par membre, etats et prise en charge', () => {
   assert.equal(store.ticketEnCours('membre-a'), null);
   store.renommerTicket('salon-1', 'salon-final');
   assert.equal(store.getTicket('salon-final').id, 1);
+  assert.equal(store.getTicket('salon-final').log_message_id, 'msg-log', 'le message de log suit le ticket');
 });
 
 test('les boutons suivent l etat du ticket', () => {
