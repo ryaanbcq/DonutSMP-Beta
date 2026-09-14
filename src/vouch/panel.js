@@ -222,12 +222,15 @@ export async function onBouton(interaction) {
   }
   if (id === 'vouch:message') {
     const scam = b.verdict === 'neg';
+    const champ = new TextInputBuilder().setCustomId('message')
+      .setLabel(scam ? 'Décrivez le scam, avec des faits' : 'Un mot sur le trade')
+      .setStyle(TextInputStyle.Paragraph).setRequired(scam).setMaxLength(280);
+    if (scam) champ.setMinLength(MIN_SCAM);
+    // Une valeur vide sur un champ a minimum est refusee par Discord (vecu) :
+    // on ne pre-remplit que s il y a deja un message.
+    if (b.message) champ.setValue(b.message);
     const modal = new ModalBuilder().setCustomId('vouch:modal').setTitle(scam ? 'Que s\'est-il passé ?' : 'Votre message')
-      .addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('message').setLabel(scam ? 'Décrivez le scam, avec des faits' : 'Un mot sur le trade')
-          .setStyle(TextInputStyle.Paragraph).setRequired(scam).setMinLength(scam ? MIN_SCAM : 0).setMaxLength(280)
-          .setValue(b.message ?? ''),
-      ));
+      .addComponents(new ActionRowBuilder().addComponents(champ));
     return interaction.showModal(modal);
   }
   if (id === 'vouch:publier') return publier(interaction, b);
