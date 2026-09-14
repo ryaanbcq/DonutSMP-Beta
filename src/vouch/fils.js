@@ -212,7 +212,7 @@ export async function assurerFils(client) {
   for (const link of store.allLinks()) {
     const avant = store.getThread(link.discord_id);
     const fil = await filDe(client, link).catch((e) => { console.warn(`[vouch] fil de ${link.mc_name} :`, e.message); return null; });
-    if (fil && !avant) n += 1;
+    if (fil && avant?.thread_id !== fil.id) n += 1;
   }
   return n;
 }
