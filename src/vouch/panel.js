@@ -400,8 +400,8 @@ async function prevenirSignale(interaction, cible, auteur, message, fil) {
     const res = await fetch(a.url).catch(() => null);
     if (res?.ok) files.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
   }
-  const image = files.find((f) => /\.(png|jpe?g|gif|webp)$/i.test(f.name));
-  if (image) contenu.setImage(`attachment://${image.name}`);
+  // En piece jointe, pas dans l embed : le membre peut la telecharger et
+  // la reutiliser telle quelle pour contester.
 
   const user = await interaction.client.users.fetch(cible.discord_id);
   await user.send({ embeds: [contenu], components: boutons.components.length ? [boutons] : [], files });
