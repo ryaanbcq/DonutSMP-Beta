@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ThreadAutoArchiveDuration
 import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
-import { calculerTrust, etoiles, barre } from './trust.js';
+import { calculerTrust, etoiles, ligneScore } from './trust.js';
 
 // Un post par joueur link dans le FORUM des vouches, nomme « ⭐ Pseudo » pour
 // que la barre de recherche le trouve. Verrouille : le bot seul y ecrit. Le
@@ -115,7 +115,7 @@ export function carteReputation(link) {
       + `## ${t.palier.emoji} ${t.palier.nom}\n`
       + `${etoiles(t.moyenne)} ${t.pos ? t.moyenne.toFixed(1) : 'sans note'} · `
       + `${t.n} avis${pct === null ? '' : ` · ${pct} % positifs`}\n`
-      + `\`${barre(t.score)}\` **${t.score} / 100**`,
+      + ligneScore(t),
   }).addFields(
     { name: 'Vouches', value: `✅ ${t.pos}`, inline: true },
     { name: 'Signalements', value: `${t.neg ? '☠️' : '✅'} ${t.neg}`, inline: true },
@@ -213,6 +213,9 @@ export async function assurerFils(client) {
     const avant = store.getThread(link.discord_id);
     const fil = await filDe(client, link).catch((e) => { console.warn(`[vouch] fil de ${link.mc_name} :`, e.message); return null; });
     if (fil && avant?.thread_id !== fil.id) n += 1;
+    // Carte reecrite au passage : un changement d affichage se propage ainsi
+    // a tous les posts existants au redemarrage.
+    else if (fil) await rafraichir(client, link.discord_id).catch(() => {});
   }
   return n;
 }

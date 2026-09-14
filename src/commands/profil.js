@@ -4,7 +4,7 @@ import { ouSeLier } from '../settings.js';
 import { donut } from '../donut/api.js';
 import { embed, TITRES, FR } from '../lib/brand.js';
 import { shortMoney, duration } from '../lib/format.js';
-import { barre } from '../vouch/trust.js';
+import { ligneScore } from '../vouch/trust.js';
 import { trustDe } from '../vouch/fils.js';
 
 export const data = new SlashCommandBuilder()
@@ -39,7 +39,7 @@ export async function execute(interaction) {
     image: link.mc_name,
     description: `**${link.mc_name}**\n<@${target.id}>`,
   }).addFields(
-    { name: 'Réputation', value: `${t.palier.emoji} ${t.palier.nom}\n\`${barre(t.score, 8)}\` ${t.score} · ${t.n} avis`, inline: true },
+    { name: 'Réputation', value: `${t.palier.emoji} ${t.palier.nom}\n${ligneScore(t, 8)} · ${t.n} avis`, inline: true },
     { name: 'Vérifié', value: `<t:${Math.floor(link.linked_at / 1000)}:R>`, inline: true },
   );
 

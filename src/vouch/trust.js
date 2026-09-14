@@ -74,6 +74,12 @@ export function etoiles(n) {
   return '★'.repeat(Math.max(0, Math.min(5, k))) + '☆'.repeat(Math.max(0, 5 - k));
 }
 
+/** Ligne « barre + score », ou l attente tant qu il n y a pas assez d avis pour que le score veuille dire quelque chose. */
+export function ligneScore(t, largeur = 10) {
+  if (t.n < MIN_AVIS) return `*Trust score dès ${MIN_AVIS} avis (${t.n} / ${MIN_AVIS})*`;
+  return `\`${barre(t.score, largeur)}\` **${t.score} / 100**`;
+}
+
 export function barre(score, largeur = 10) {
   const pleins = Math.round((Math.max(0, Math.min(100, score)) / 100) * largeur);
   return '█'.repeat(pleins) + '░'.repeat(largeur - pleins);
