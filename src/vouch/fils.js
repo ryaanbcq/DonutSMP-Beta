@@ -64,7 +64,15 @@ export async function filDe(client, link) {
 
   const connu = store.getThread(link.discord_id);
   if (connu) {
-    const fil = await fetchFil(client, connu.thread_id);
+    let fil = await fetchFil(client, connu.thread_id);
+    // Un fil ouvert ailleurs (ancien salon, forum change) ne compte pas :
+    // on le retire et on repart dans le forum courant. Les cartes d avis
+    // qu il portait sont republiees au prochain rafraichissement.
+    if (fil && fil.parentId !== salon.id) {
+      await fil.delete('Forum des vouches déplacé').catch(() => {});
+      for (const v of store.vouchAll(link.discord_id)) store.setVouchMessage(v.from_id, v.to_id, null);
+      fil = null;
+    }
     if (fil) {
       if (connu.mc_name !== link.mc_name) {
         await reveiller(fil);
