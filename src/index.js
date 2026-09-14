@@ -22,6 +22,7 @@ import { presence } from './ingame/presence.js';
 import { repondreChallenge } from './link/flow.js';
 import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
+import { bypass } from './lib/names.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
@@ -131,7 +132,7 @@ async function onCommande(interaction) {
   if (!command) return;
 
   // Mur de verification : les fonctionnalites sont reservees aux comptes lies.
-  if (command.requiresLink && !store.getLink(interaction.user.id)) {
+  if (command.requiresLink && !store.getLink(interaction.user.id) && !bypass(interaction.member, config)) {
     return interaction.reply({
       embeds: [embed(TITRES.reserve, {
         couleur: FR.jaune,

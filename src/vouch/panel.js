@@ -7,7 +7,8 @@ import { settings, ouSeLier } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { etoiles, barre, ligneScore } from './trust.js';
 import { trustDe, posterAvis, retirerAvis, carteReputation, filDe } from './fils.js';
-import { isValidName } from '../lib/names.js';
+import { isValidName, bypass } from '../lib/names.js';
+import { config } from '../config.js';
 
 // /vouch sans argument : UN message prive qui se remplit en quatre clics.
 // Le brouillon vit en memoire par membre ; rien ne part avant « Publier ».
@@ -163,8 +164,9 @@ async function chercherParTexte(interaction) {
 
 export async function ouvrir(interaction) {
   const moi = store.getLink(interaction.user.id);
-  if (!moi) return interaction.reply({ content: `❌ Pour noter, ${ouSeLier()}.`, ...EPH });
-  if (Date.now() - moi.linked_at < MIN_ANCIENNETE_MS) {
+  const libre = bypass(interaction.member, config);
+  if (!moi && !libre) return interaction.reply({ content: `❌ Pour noter, ${ouSeLier()}.`, ...EPH });
+  if (moi && !libre && Date.now() - moi.linked_at < MIN_ANCIENNETE_MS) {
     const dans = Math.ceil((moi.linked_at + MIN_ANCIENNETE_MS - Date.now()) / 3_600_000);
     return interaction.reply({
       content: `⏳ Votre compte est vérifié depuis moins de 24 h : vous pourrez noter dans ${dans} h. Ça évite les comptes jetables.`,
@@ -254,8 +256,8 @@ async function publier(interaction, b) {
   brouillons.delete(String(interaction.user.id));
 
   const t = trustDe(cible.discord_id);
-  const auteur = store.getLink(interaction.user.id);
-  console.log(`[vouch] ${auteur.mc_name} ${scam ? 'signale' : `vouch ${b.etoiles}★`} ${cible.mc_name} (score ${t.score})`);
+  const auteur = store.getLink(interaction.user.id)?.mc_name ?? interaction.user.tag;
+  console.log(`[vouch] ${auteur} ${scam ? 'signale' : `vouch ${b.etoiles}★`} ${cible.mc_name} (score ${t.score})`);
   return interaction.editReply({
     embeds: [embed(scam ? '⚠️・SIGNALEMENT PUBLIÉ' : '✅・VOUCH PUBLIÉ', {
       couleur: scam ? FR.rouge : FR.vert,

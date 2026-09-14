@@ -14,3 +14,9 @@ export function isValidName(name) {
 export function money(n) {
   return '$' + Number(n).toLocaleString('en-US');
 }
+
+/** Vrai si le membre porte le role de bypass (beta) : plus de mur du /link ni d anciennete. */
+export function bypass(member, config) {
+  const id = config?.discord?.bypassRoleId;
+  return Boolean(id && member?.roles?.cache?.has?.(id));
+}

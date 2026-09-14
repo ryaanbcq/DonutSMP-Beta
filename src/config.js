@@ -11,6 +11,8 @@ export const config = {
     clientId: process.env.DISCORD_CLIENT_ID ?? '',
     guildId: process.env.DISCORD_GUILD_ID ?? '',
     verifiedRoleId: process.env.VERIFIED_ROLE_ID ?? '',
+    // Beta : ce role passe le mur du /link et le delai de 24 h avant de noter.
+    bypassRoleId: process.env.BYPASS_ROLE_ID ?? '',
     logChannelId: process.env.LOG_CHANNEL_ID ?? '',
     // Vide = avatar du bot. Ne jamais mettre une URL d attachement Discord
     // (parametres ex=/is=/hm=) : elle est signee et expire sous 24 h.
