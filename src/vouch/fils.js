@@ -1,4 +1,6 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ThreadAutoArchiveDuration, ChannelType } from 'discord.js';
+import {
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ThreadAutoArchiveDuration, ChannelType, EmbedBuilder, AttachmentBuilder,
+} from 'discord.js';
 import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
@@ -124,10 +126,18 @@ export function carteReputation(link) {
   return { embeds: [contenu] };
 }
 
-export function carteAvis(vouch, auteurLink, cibleLink) {
+const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
+
+/**
+ * Carte d un avis. noms : fichiers envoyes avec le message (attachment://) ;
+ * les images vont DANS l embed (la premiere en grand, jusqu a trois autres
+ * en galerie, meme URL de carte = Discord les groupe), le reste en piece jointe.
+ */
+export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null } = {}) {
   const positif = vouch.value > 0;
-  let preuves = [];
-  try { preuves = JSON.parse(vouch.preuves ?? '[]'); } catch { /* ancien avis */ }
+  const preuves = noms.length ? noms.map((name) => ({ name })) : (() => {
+    try { return JSON.parse(vouch.preuves ?? '[]'); } catch { return []; }
+  })();
   const contenu = embed(positif ? '✅・VOUCH' : '⚠️・SIGNALEMENT', {
     couleur: positif ? FR.vert : FR.rouge,
     image: auteurLink?.mc_name ?? 'aucune',
@@ -137,11 +147,18 @@ export function carteAvis(vouch, auteurLink, cibleLink) {
       + (vouch.comment ? `\n> ${vouch.comment.replace(/\n/g, '\n> ')}` : ''),
   }).setTimestamp(vouch.created_at);
   if (preuves.length) contenu.setFooter({ text: `📎 ${preuves.length} preuve(s) jointe(s)` });
+
+  const embeds = [contenu];
+  const images = noms.filter((n) => IMAGE.test(n)).slice(0, 4);
+  if (images.length && lien) {
+    contenu.setURL(lien).setImage(`attachment://${images[0]}`);
+    for (const n of images.slice(1)) embeds.push(new EmbedBuilder().setURL(lien).setImage(`attachment://${n}`));
+  }
   const boutons = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`vouch:suppr:${vouch.from_id}:${vouch.to_id}`)
       .setLabel('Retirer (staff)').setEmoji('🗑️').setStyle(ButtonStyle.Secondary),
   );
-  return { embeds: [contenu], components: [boutons] };
+  return { embeds, components: [boutons] };
 }
 
 /** Reecrit la carte de reputation et pose ou retire le role Trusted. */
@@ -175,16 +192,28 @@ export async function posterAvis(client, fromId, toId, { fichiers = [] } = {}) {
   // Les URL d upload du formulaire expirent : la carte publiee dans le fil
   // devient la copie de reference, on memorise SES pieces jointes.
   const preuvesDe = (m) => [...m.attachments.values()].map((a) => ({ name: a.name, url: a.url }));
-  const provisoire = fichiers.length ? { ...vouch, preuves: JSON.stringify(fichiers.map((f) => ({ name: f.name }))) } : vouch;
-  const carte = carteAvis(provisoire, store.getLink(fromId), cible);
   const ancien = vouch.message_id ? await fil.messages.fetch(vouch.message_id).catch(() => null) : null;
+
+  // Modification sans nouvelles preuves : les images vivent dans l embed en
+  // attachment://, il faut donc renvoyer les fichiers. On les reprend sur
+  // l ancienne carte, dont les liens sont frais au moment du fetch.
+  let files = fichiers;
+  if (!files.length && ancien?.attachments.size) {
+    files = [];
+    for (const a of ancien.attachments.values()) {
+      const res = await fetch(a.url).catch(() => null);
+      if (res?.ok) files.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
+    }
+  }
+  const lien = `https://discord.com/channels/${fil.guildId}/${fil.id}`;
+  const carte = carteAvis(vouch, store.getLink(fromId), cible, { noms: files.map((f) => f.name), lien });
   let m;
   if (ancien) {
-    m = await ancien.edit(fichiers.length ? { ...carte, files: fichiers, attachments: [] } : carte).catch(() => null);
+    m = await ancien.edit(files.length ? { ...carte, files, attachments: [] } : carte).catch((e) => { console.warn('[vouch] carte :', e.message); return null; });
   } else {
-    m = await fil.send(fichiers.length ? { ...carte, files: fichiers } : carte);
+    m = await fil.send(files.length ? { ...carte, files } : carte);
   }
-  if (m) store.setVouchMessage(fromId, toId, m.id, fichiers.length ? preuvesDe(m) : null);
+  if (m) store.setVouchMessage(fromId, toId, m.id, files.length ? preuvesDe(m) : null);
   await rafraichir(client, toId);
   return fil;
 }
