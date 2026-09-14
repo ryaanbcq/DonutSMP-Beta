@@ -255,11 +255,8 @@ async function sauvegarder(interaction, ticket, { staff }) {
 
 async function demanderSuppression(interaction, { staff }) {
   if (!staff) return refus(interaction);
-  const logs = reglagesTickets.salonLogs();
   return interaction.reply({
-    content: logs
-      ? '🗑️ Supprimer ce ticket ? Les logs seront d\'abord sauvegardés dans le salon des logs.'
-      : '🗑️ Supprimer ce ticket ? **Aucun salon de logs n\'est configuré : la conversation sera perdue.**',
+    content: '🗑️ Supprimer ce ticket ? La conversation sera perdue, sauf si vous avez cliqué **Sauvegarder les logs** avant.',
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('ticket:delete:ok').setLabel('Oui, supprimer').setStyle(ButtonStyle.Danger),
     )],
@@ -269,12 +266,12 @@ async function demanderSuppression(interaction, { staff }) {
 
 async function supprimer(interaction, ticket, { staff }) {
   if (!staff) return refus(interaction);
-  await interaction.update({ content: '⏳ Sauvegarde des logs puis suppression...', components: [] });
+  await interaction.update({ content: '⏳ Suppression...', components: [] });
 
-  const logs = await salonLogs(interaction.guild);
-  const fichier = logs ? await transcript(interaction.client, interaction.channel, ticket) : null;
+  // Pas de transcript automatique : les logs ne partent que sur un clic
+  // explicite de « Sauvegarder les logs », decision de Ryan.
   store.setTicketEtat(ticket.channel_id, 'supprime', interaction.user.id);
-  if (logs) await majJournal(interaction.guild, store.getTicket(ticket.channel_id), { fichier });
+  await majJournal(interaction.guild, store.getTicket(ticket.channel_id));
   console.log(`[ticket] #${ticket.id} supprime par ${interaction.user.tag}`);
   await interaction.channel.delete(`Ticket #${ticket.id} supprimé par ${interaction.user.tag}`);
 }
