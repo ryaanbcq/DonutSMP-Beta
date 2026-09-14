@@ -4,7 +4,7 @@ import {
 } from 'discord.js';
 import { embed, FR } from '../lib/brand.js';
 import { verrouiller, peutVerrouiller } from '../lib/salon.js';
-import { reglagesTickets } from './reglages.js';
+import { reglagesTickets, slugCategorie } from './reglages.js';
 import { panneauTicket, COULEUR_TICKET } from './panel.js';
 import { permissionsManquantes } from './manager.js';
 
@@ -32,7 +32,7 @@ export function rendreSetup(guild, note = '') {
       + `**Dossier des tickets** · ${r.dossier() ? `<#${r.dossier()}>` : 'à la racine du serveur'}\n`
       + `**Logs** · ${r.salonLogs() ? `<#${r.salonLogs()}>` : 'aucun'}\n`
       + `**Rôles staff** · ${roles.length ? roles.map((id) => `<@&${id}>`).join(' ') : 'aucun, seuls les « Gérer le serveur »'}\n`
-      + `**Catégories (${cats.length})** · ${cats.map((c) => `${c.emoji} ${c.nom}`).join(' · ') || 'aucune'}`
+      + `**Catégories (${cats.length})** · ${cats.map((c) => `${c.emoji} ${c.nom} \`${slugCategorie(c)}\``).join(' · ') || 'aucune'}`
       + (manque.length ? `\n\n⚠️ Il me manque **${manque.join('** et **')}** pour créer les salons de ticket.` : '')
       + (note ? `\n\n${note}` : ''),
   });
@@ -211,6 +211,10 @@ export async function onSetupBouton(interaction) {
           new TextInputBuilder().setCustomId('description').setLabel('Description').setStyle(TextInputStyle.Paragraph)
             .setRequired(false).setMaxLength(200).setPlaceholder('Une ligne pour expliquer quand ouvrir ce ticket.'),
         ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('slug').setLabel('Identifiant dans le nom du salon').setStyle(TextInputStyle.Short)
+            .setRequired(false).setMaxLength(16).setPlaceholder('middleman  →  pseudo-middleman-001'),
+        ),
       );
     return interaction.showModal(modal);
   }
@@ -232,6 +236,7 @@ export async function onSetupModal(interaction) {
       nom: champs.getTextInputValue('nom'),
       emoji: champs.getTextInputValue('emoji'),
       description: champs.getTextInputValue('description'),
+      slug: champs.getTextInputValue('slug'),
     });
     note = `✅ Catégorie **${champs.getTextInputValue('nom').trim()}** enregistrée.`;
   } catch (err) {

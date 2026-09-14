@@ -7,30 +7,42 @@ import { store } from '../db.js';
 //   ticket.dossier    categorie Discord ou naitront les salons de ticket
 //   ticket.logs       salon staff qui recoit les transcripts
 //   ticket.roles      roles staff qui voient les tickets, separes par |
-//   ticket.categories JSON [{ cle, emoji, nom, description }]
+//   ticket.categories JSON [{ cle, emoji, nom, description, slug }]
+//                     slug = identifiant court dans le nom du salon de ticket
+//                     (pseudo-slug-001), a-z0-9 uniquement
 
 const lire = (cle) => store.kvGet(cle) || null;
 
 // Les huit categories de la commu, posees au premier lancement. Le staff
 // peut ensuite en retirer ou en ajouter, la liste en base fait foi.
 export const CATEGORIES_DEFAUT = [
-  { emoji: '📬', nom: 'Support Général & Technique',
+  { emoji: '📬', nom: 'Support Général & Technique', slug: 'support',
     description: 'Problèmes techniques, bugs in-game/Discord, questions sur le serveur ou contestation de sanction.' },
-  { emoji: '🚨', nom: 'Signalement de Joueur',
+  { emoji: '🚨', nom: 'Signalement de Joueur', slug: 'signalement',
     description: 'Comportement toxique, insultes, envoi de fichiers dangereux/grabbers, ou non-respect des règles du serveur.' },
-  { emoji: '🎩', nom: 'Service Middleman',
+  { emoji: '🎩', nom: 'Service Middleman', slug: 'middleman',
     description: "Demande d'un intermédiaire officiel du staff pour sécuriser vos échanges et gros trades." },
-  { emoji: '🤝', nom: 'Partenariat & Média',
+  { emoji: '🤝', nom: 'Partenariat & Média', slug: 'partenariat',
     description: 'Demande de partenariat pour votre serveur ou statut Média (assurez-vous de respecter les prérequis).' },
-  { emoji: '🏗️', nom: 'Service Build',
+  { emoji: '🏗️', nom: 'Service Build', slug: 'build',
     description: 'Commandes personnalisées de builds et projets architecturaux.' },
-  { emoji: '🛒', nom: 'Trusted Market',
+  { emoji: '🛒', nom: 'Trusted Market', slug: 'market',
     description: 'Achats, transactions et questions relatifs aux objets du salon Trusted Market.' },
-  { emoji: '🎁', nom: 'Récupération de Giveaway',
+  { emoji: '🎁', nom: 'Récupération de Giveaway', slug: 'giveaway',
     description: "Réclamation de vos récompenses remportées lors d'un événement ou d'un concours." },
-  { emoji: '❓', nom: 'Autre Demande',
+  { emoji: '❓', nom: 'Autre Demande', slug: 'autre',
     description: 'Pour toute requête ne correspondant à aucune catégorie ci-dessus.' },
 ].map((c) => ({ cle: cleDe(c.nom), ...c }));
+
+/** Identifiant court pour le nom du salon : a-z0-9, 16 caracteres. Vide si rien d utilisable. */
+export function slugDe(texte) {
+  return String(texte ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 16);
+}
+
+/** Le slug d une categorie, avec repli sur le premier mot de son nom pour les anciennes entrees. */
+export function slugCategorie(c) {
+  return c?.slug || slugDe(String(c?.nom ?? '').split(/\s+/)[0]) || 'ticket';
+}
 
 /** Identifiant stable d une categorie, derive de son nom : « Service Build » → service-build. */
 export function cleDe(nom) {
@@ -83,12 +95,13 @@ export const reglagesTickets = {
     return lireCategories().find((c) => c.cle === cle) ?? null;
   },
   /** Ajoute ou remplace (meme cle) une categorie. Refuse au dela de 25, la limite d un menu Discord. */
-  poserCategorie({ emoji, nom, description }) {
+  poserCategorie({ emoji, nom, description, slug }) {
     const cle = cleDe(nom);
     if (!cle) throw new Error('nom de catégorie vide');
     const liste = lireCategories().filter((c) => c.cle !== cle);
     if (liste.length >= 25) throw new Error('25 catégories au maximum, la limite du menu Discord');
-    liste.push({ cle, emoji: emoji || '📩', nom: String(nom).trim(), description: String(description ?? '').trim() });
+    const court = slugDe(slug) || slugDe(String(nom).split(/\s+/)[0]);
+    liste.push({ cle, emoji: emoji || '📩', nom: String(nom).trim(), description: String(description ?? '').trim(), slug: court });
     store.kvSet('ticket.categories', JSON.stringify(liste));
     return cle;
   },

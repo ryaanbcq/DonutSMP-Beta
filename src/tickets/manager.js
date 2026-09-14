@@ -4,7 +4,7 @@ import {
 } from 'discord.js';
 import { store } from '../db.js';
 import { FR } from '../lib/brand.js';
-import { reglagesTickets } from './reglages.js';
+import { reglagesTickets, slugCategorie } from './reglages.js';
 import { enteteTicket, boutonsTicket, embedLog, TITRE_TICKET } from './panel.js';
 import { rendreTranscript, collecterMessages } from './transcript.js';
 
@@ -44,10 +44,12 @@ export function permissionsManquantes(guild) {
   return manque;
 }
 
-function nomSalon(prefixe, id, pseudo) {
-  const propre = String(pseudo ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
-  return `${prefixe}-${String(id).padStart(4, '0')}${propre ? `-${propre}` : ''}`;
+// pseudo-categorie-001 : le membre, la categorie en court, le numero du ticket.
+function nomSalon(pseudo, categorie, id) {
+  const propre = String(pseudo ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20) || 'membre';
+  return `${propre}-${slugCategorie(categorie)}-${String(id).padStart(3, '0')}`;
 }
+const FERME = 'ferme-';
 
 // ---------------------------------------------------------------------------
 // Ouverture
@@ -121,7 +123,7 @@ export async function onFormulaireOuverture(interaction) {
   let salon;
   try {
     salon = await guild.channels.create({
-      name: nomSalon('ticket', id, interaction.user.username),
+      name: nomSalon(interaction.user.username, categorie, id),
       type: ChannelType.GuildText,
       parent,
       permissionOverwrites: overwrites,
@@ -190,7 +192,7 @@ async function fermer(interaction, ticket, { staff, auteur }) {
   store.setTicketEtat(ticket.channel_id, 'ferme', interaction.user.id);
   const salon = interaction.channel;
   await salon.permissionOverwrites.edit(ticket.discord_id, { SendMessages: false }, { reason: 'Ticket fermé' }).catch(() => {});
-  await salon.setName(nomSalon('ferme', ticket.id, salon.name.split('-').slice(2).join('-'))).catch(() => {});
+  if (!salon.name.startsWith(FERME)) await salon.setName(`${FERME}${salon.name}`.slice(0, 100)).catch(() => {});
   await majEntete(interaction, { ...ticket, etat: 'ferme' }, { prisPar: ticket.pris_par });
 
   console.log(`[ticket] #${ticket.id} ferme par ${interaction.user.tag}`);
@@ -210,7 +212,7 @@ async function rouvrir(interaction, ticket, { staff }) {
   store.setTicketEtat(ticket.channel_id, 'ouvert', interaction.user.id);
   const salon = interaction.channel;
   await salon.permissionOverwrites.edit(ticket.discord_id, { SendMessages: true }, { reason: 'Ticket rouvert' }).catch(() => {});
-  await salon.setName(nomSalon('ticket', ticket.id, salon.name.split('-').slice(2).join('-'))).catch(() => {});
+  if (salon.name.startsWith(FERME)) await salon.setName(salon.name.slice(FERME.length)).catch(() => {});
   await majEntete(interaction, { ...ticket, etat: 'ouvert' }, { prisPar: ticket.pris_par });
 
   console.log(`[ticket] #${ticket.id} rouvert par ${interaction.user.tag}`);

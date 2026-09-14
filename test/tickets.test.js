@@ -6,7 +6,7 @@ process.env.DB_PATH = './data/test-tickets.db';
 for (const f of ['.db', '.db-wal', '.db-shm']) rmSync('./data/test-tickets' + f, { force: true });
 
 const { store } = await import('../src/db.js');
-const { reglagesTickets, CATEGORIES_DEFAUT, cleDe } = await import('../src/tickets/reglages.js');
+const { reglagesTickets, CATEGORIES_DEFAUT, cleDe, slugCategorie, slugDe } = await import('../src/tickets/reglages.js');
 const { rendreTranscript } = await import('../src/tickets/transcript.js');
 const { panneauTicket, boutonsTicket } = await import('../src/tickets/panel.js');
 
@@ -126,4 +126,13 @@ test('le panneau de setup reflete la configuration et tient en 5 rangees', async
   const ids = vue.components.flatMap((r) => r.components.map((c) => c.toJSON().custom_id));
   assert.deepEqual(ids.slice(0, 4), ['tsetup:salon', 'tsetup:dossier', 'tsetup:logs', 'tsetup:roles']);
   assert.ok(ids.includes('tsetup:cat:add'));
+});
+
+test('chaque categorie a un identifiant court pour le nom du salon', () => {
+  assert.equal(slugCategorie(CATEGORIES_DEFAUT[1]), 'signalement');
+  assert.equal(slugDe('Trusted Market!'), 'trustedmarket');
+  assert.equal(slugCategorie({ nom: 'Vieille Catégorie' }), 'vieille', 'repli sur le premier mot');
+  reglagesTickets.poserCategorie({ nom: 'Test Slug', slug: 'Mon Slug' });
+  assert.equal(reglagesTickets.categorie('test-slug').slug, 'monslug');
+  reglagesTickets.retirerCategorie('Test Slug');
 });
