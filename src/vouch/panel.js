@@ -198,13 +198,31 @@ export async function onSelect(interaction) {
   const cible = store.getLink(id);
   if (!cible) return interaction.update(rendre(b, `❌ <@${id}> n'a pas de compte vérifié : seuls les membres link peuvent être notés.`));
   const existant = store.getVouch(interaction.user.id, id);
-  const note = existant ? 'ℹ️ Vous aviez déjà noté ce membre : publier remplacera votre avis.' : '';
-  return interaction.update(rendre(poser(interaction.user.id, {
-    cible: id,
-    verdict: existant ? (existant.value > 0 ? 'pos' : 'neg') : null,
-    etoiles: existant?.stars ?? null,
-    message: existant?.comment ?? '',
-  }), note));
+  if (existant) {
+    // Garde-fou : un avis existe deja, on ne le remplace pas sans le dire.
+    poser(interaction.user.id, { cible: id, verdict: null, etoiles: null, message: '', preuves: [] });
+    return interaction.update(vueExistant(existant, cible));
+  }
+  return interaction.update(rendre(poser(interaction.user.id, { cible: id })));
+}
+
+function vueExistant(existant, cible) {
+  const positif = existant.value > 0;
+  const contenu = embed(positif ? '✅・VOUS AVEZ DÉJÀ VOUCH CE JOUEUR' : '⚠️・VOUS AVEZ DÉJÀ SIGNALÉ CE JOUEUR', {
+    couleur: positif ? FR.vert : FR.rouge,
+    image: cible.mc_name,
+    description:
+      `Votre avis sur **${cible.mc_name}** existe déjà, publié <t:${Math.floor(existant.created_at / 1000)}:R> :\n`
+      + `${positif ? etoiles(existant.stars ?? 5) : '⚠️ Signalement'}`
+      + (existant.comment ? `\n> ${existant.comment.replace(/\n/g, '\n> ')}` : '')
+      + '\n\nUn seul avis par joueur. Vous pouvez le **modifier** (il sera remplacé) ou le **supprimer**.',
+  });
+  const boutons = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('vouch:existant:modifier').setLabel('Modifier').setEmoji('✏️').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('vouch:existant:supprimer').setLabel('Supprimer').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('vouch:annuler').setLabel('Annuler').setStyle(ButtonStyle.Secondary),
+  );
+  return { embeds: [contenu], components: [boutons] };
 }
 
 export async function onBouton(interaction) {
@@ -217,6 +235,29 @@ export async function onBouton(interaction) {
   if (id === 'vouch:annuler') {
     brouillons.delete(String(interaction.user.id));
     return interaction.update({ embeds: [embed('⭐・DONNER UN AVIS', { description: 'Avis annulé, rien n\'a été publié.' })], components: [] });
+  }
+  if (id === 'vouch:existant:modifier') {
+    const existant = b.cible ? store.getVouch(interaction.user.id, b.cible) : null;
+    if (!existant) return interaction.update(rendre(b));
+    return interaction.update(rendre(poser(interaction.user.id, {
+      verdict: existant.value > 0 ? 'pos' : 'neg',
+      etoiles: existant.stars ?? null,
+      message: existant.comment ?? '',
+    }), 'ℹ️ Publier remplacera votre avis précédent.'));
+  }
+  if (id === 'vouch:existant:supprimer') {
+    await interaction.deferUpdate();
+    const ok = b.cible ? await retirerAvis(interaction.client, interaction.user.id, b.cible) : false;
+    const cible = b.cible ? store.getLink(b.cible) : null;
+    brouillons.delete(String(interaction.user.id));
+    console.log(`[vouch] ${interaction.user.tag} retire son avis sur ${cible?.mc_name ?? b.cible}`);
+    return interaction.editReply({
+      embeds: [embed('🗑️・AVIS SUPPRIMÉ', {
+        couleur: FR.jaune, image: cible?.mc_name ?? 'aucune',
+        description: ok ? `Votre avis sur **${cible?.mc_name}** est retiré, son score est recalculé.` : 'Cet avis n\'existait plus.',
+      })],
+      components: [],
+    });
   }
   if (id.startsWith('vouch:verdict:')) {
     const verdict = id.slice('vouch:verdict:'.length);
