@@ -133,6 +133,32 @@ export function carteReputation(link) {
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 /**
+ * Les pieces d une carte. PIEGE : une piece jointe consommee par un embed
+ * (attachment://) DISPARAIT de message.attachments, seule l URL de l image
+ * de l embed reste. On lit donc les deux.
+ */
+export function piecesDe(message) {
+  const pieces = [...message.attachments.values()].map((a) => ({ name: a.name, url: a.url }));
+  for (const e of message.embeds ?? []) {
+    const url = e.image?.url;
+    if (!url || pieces.some((p) => p.url === url)) continue;
+    const name = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'preuve.png');
+    pieces.push({ name, url });
+  }
+  return pieces;
+}
+
+/** Retelecharge les pieces d une carte pour les renvoyer (les URL sont fraiches au fetch). */
+export async function fichiersDe(message) {
+  const files = [];
+  for (const p of piecesDe(message)) {
+    const res = await fetch(p.url).catch(() => null);
+    if (res?.ok) files.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: p.name }));
+  }
+  return files;
+}
+
+/**
  * Carte d un avis. noms : fichiers envoyes avec le message (attachment://) ;
  * les images vont DANS l embed (la premiere en grand, jusqu a trois autres
  * en galerie, meme URL de carte = Discord les groupe), le reste en piece jointe.
@@ -195,20 +221,13 @@ export async function posterAvis(client, fromId, toId, { fichiers = [] } = {}) {
 
   // Les URL d upload du formulaire expirent : la carte publiee dans le fil
   // devient la copie de reference, on memorise SES pieces jointes.
-  const preuvesDe = (m) => [...m.attachments.values()].map((a) => ({ name: a.name, url: a.url }));
   const ancien = vouch.message_id ? await fil.messages.fetch(vouch.message_id).catch(() => null) : null;
 
   // Modification sans nouvelles preuves : les images vivent dans l embed en
   // attachment://, il faut donc renvoyer les fichiers. On les reprend sur
   // l ancienne carte, dont les liens sont frais au moment du fetch.
   let files = fichiers;
-  if (!files.length && ancien?.attachments.size) {
-    files = [];
-    for (const a of ancien.attachments.values()) {
-      const res = await fetch(a.url).catch(() => null);
-      if (res?.ok) files.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
-    }
-  }
+  if (!files.length && ancien) files = await fichiersDe(ancien);
   const lien = `https://discord.com/channels/${fil.guildId}/${fil.id}`;
   const carte = carteAvis(vouch, store.getLink(fromId), cible, { noms: files.map((f) => f.name), lien });
   let m;
@@ -217,7 +236,7 @@ export async function posterAvis(client, fromId, toId, { fichiers = [] } = {}) {
   } else {
     m = await fil.send(files.length ? { ...carte, files } : carte);
   }
-  if (m) store.setVouchMessage(fromId, toId, m.id, files.length ? preuvesDe(m) : null);
+  if (m) store.setVouchMessage(fromId, toId, m.id, files.length ? piecesDe(m) : null);
   await rafraichir(client, toId);
   return fil;
 }

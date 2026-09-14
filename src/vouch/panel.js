@@ -7,7 +7,7 @@ import { store } from '../db.js';
 import { settings, ouSeLier } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { etoiles, barre, ligneScore } from './trust.js';
-import { trustDe, posterAvis, retirerAvis, carteReputation, filDe } from './fils.js';
+import { trustDe, posterAvis, retirerAvis, carteReputation, filDe, fichiersDe } from './fils.js';
 import { isValidName, bypass } from '../lib/names.js';
 import { config } from '../config.js';
 import { reglagesTickets } from '../tickets/reglages.js';
@@ -382,6 +382,10 @@ export async function envoyerMpSignale(client, { guildId, cible, vouch, auteur, 
   }
   const lienCarte = fil && vouch?.message_id ? `https://discord.com/channels/${guildId}/${fil.id}/${vouch.message_id}` : null;
   const salonTickets = reglagesTickets.salonPanneau();
+  // Les preuves voyagent avec le MP, en pieces jointes telechargeables :
+  // reprises sur la carte publiee, dont les liens sont frais au fetch.
+  const carte = fil && vouch?.message_id ? await fil.messages.fetch(vouch.message_id).catch(() => null) : null;
+  const files = carte ? await fichiersDe(carte) : [];
 
   const contenu = embed('⚠️・VOUS AVEZ ÉTÉ SIGNALÉ', {
     couleur: FR.rouge,
@@ -389,7 +393,7 @@ export async function envoyerMpSignale(client, { guildId, cible, vouch, auteur, 
     description:
       `**${auteur}** <@${vouch.from_id}> a publié un signalement de scam sur votre profil **${cible.mc_name}**.\n`
       + `> ${message.replace(/\n/g, '\n> ')}\n`
-      + (nbPreuves(vouch) ? `📎 ${nbPreuves(vouch)} preuve(s) jointe(s), ci-dessous\n` : '')
+      + (files.length ? `📎 ${files.length} preuve(s) jointe(s), ci-dessous\n` : '')
       + '\nSi vous estimez ce signalement injustifié, **ouvrez un ticket** : le staff examinera les preuves des deux côtés '
       + 'et pourra retirer l\'avis. Un signalement pèse lourd dans votre trust score, ne le laissez pas sans réponse.',
   });
@@ -403,17 +407,7 @@ export async function envoyerMpSignale(client, { guildId, cible, vouch, auteur, 
   }
   // Les preuves voyagent avec le MP, en pieces jointes telechargeables :
   // reprises sur la carte publiee, dont les liens sont frais au fetch.
-  const files = [];
-  const carte = fil && vouch?.message_id ? await fil.messages.fetch(vouch.message_id).catch(() => null) : null;
-  for (const a of carte?.attachments.values() ?? []) {
-    const res = await fetch(a.url).catch(() => null);
-    if (res?.ok) files.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
-  }
   const user = await client.users.fetch(cible.discord_id);
   await user.send({ embeds: [contenu], components: boutons.components.length ? [boutons] : [], files });
   console.log(`[vouch] ${cible.mc_name} prevenu en MP du signalement`);
-}
-
-function nbPreuves(vouch) {
-  try { return JSON.parse(vouch?.preuves ?? '[]').length; } catch { return 0; }
 }
