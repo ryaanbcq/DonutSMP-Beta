@@ -1,17 +1,19 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../db.js';
-import { embed, TITRES, FR } from '../lib/brand.js';
-import { reputation, MEDALS } from '../lib/format.js';
+import { embed, TITRES } from '../lib/brand.js';
+import { MEDALS } from '../lib/format.js';
+import { calculerTrust, barre, etoiles } from '../vouch/trust.js';
+import { carteReputation, filDe, retirerAvis } from '../vouch/fils.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vouches')
   .setDescription('Consultez la réputation de la commu')
   .addSubcommand((s) =>
     s.setName('membre')
-      .setDescription('Les avis reçus par un membre')
+      .setDescription('La carte de réputation d\'un membre et son fil d\'avis')
       .addUserOption((o) => o.setName('membre').setDescription('Le membre à consulter')))
   .addSubcommand((s) =>
-    s.setName('top').setDescription('Le classement des membres les mieux notés'))
+    s.setName('top').setDescription('Les membres au meilleur trust score'))
   .addSubcommand((s) =>
     s.setName('retirer')
       .setDescription("Retirez l'avis que vous aviez laissé")
@@ -24,58 +26,38 @@ export async function execute(interaction) {
 
   if (sub === 'retirer') {
     const target = interaction.options.getUser('membre', true);
-    const removed = store.removeVouch(interaction.user.id, target.id);
-    return interaction.reply({
-      content: removed
-        ? `✅ Votre avis sur **${target.username}** a été retiré.`
-        : "Vous n'aviez pas d'avis sur ce membre.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const removed = await retirerAvis(interaction.client, interaction.user.id, target.id);
+    return interaction.editReply(removed
+      ? `✅ Votre avis sur **${target.username}** a été retiré.`
+      : "Vous n'aviez pas d'avis sur ce membre.");
   }
 
   if (sub === 'top') {
-    const rows = store.vouchTop(10);
-    if (rows.length === 0) {
+    const classes = store.vouchTargets()
+      .map((id) => ({ id, link: store.getLink(id), t: calculerTrust(store.vouchAll(id)) }))
+      .filter((r) => r.link && r.t.n >= 1)
+      .sort((a, b) => b.t.score - a.t.score || b.t.n - a.t.n)
+      .slice(0, 10);
+    if (!classes.length) {
       return interaction.reply({ content: 'Aucun avis pour le moment.', flags: MessageFlags.Ephemeral });
     }
-    const lignes = rows.map((r, i) => {
-      const link = store.getLink(r.to_id);
-      const nom = link ? link.mc_name : 'inconnu';
+    const lignes = classes.map((r, i) => {
       const medaille = MEDALS[i] ?? `\`${String(i + 1).padStart(2, ' ')}\``;
-      return `${medaille} **${nom}** · \`+${r.pos}\` / \`-${r.neg}\` <@${r.to_id}>`;
+      return `${medaille} ${r.t.palier.emoji} **${r.link.mc_name}** · \`${barre(r.t.score, 6)}\` ${r.t.score} · ${etoiles(r.t.moyenne)} · ${r.t.n} avis`;
     });
     return interaction.reply({
-      embeds: [embed(TITRES.reputation, {
-        description: `**Les plus fiables de la commu**\n\n${lignes.join('\n')}`,
-      })],
+      embeds: [embed(TITRES.reputation, { description: `**Les plus fiables de la commu**\n\n${lignes.join('\n')}` })],
     });
   }
 
   const target = interaction.options.getUser('membre') ?? interaction.user;
   const link = store.getLink(target.id);
   if (!link) {
-    return interaction.reply({
-      content: `**${target.username}** n'est pas vérifié.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    return interaction.reply({ content: `**${target.username}** n'est pas vérifié.`, flags: MessageFlags.Ephemeral });
   }
-
-  const { pos, neg } = store.vouchScore(target.id);
-  const rep = reputation(pos, neg);
-  const recents = store.vouchList(target.id, 8);
-
-  const lignes = recents.map((v) => {
-    const auteur = store.getLink(v.from_id);
-    const qui = auteur ? auteur.mc_name : `<@${v.from_id}>`;
-    const icone = v.value > 0 ? '👍' : '👎';
-    return `${icone} **${qui}** <t:${Math.floor(v.created_at / 1000)}:R>${v.comment ? `\n> ${v.comment}` : ''}`;
-  });
-
-  return interaction.reply({
-    embeds: [embed(TITRES.reputation, {
-      couleur: neg > pos ? FR.rouge : FR.vert,
-      image: link.mc_name,
-      description: `**${link.mc_name}**\n${rep.label} · \`+${pos}\` positifs / \`-${neg}\` négatifs`,
-    }).addFields({ name: 'Derniers avis', value: lignes.join('\n') || 'Aucun avis.' })],
-  });
+  await interaction.deferReply();
+  const fil = await filDe(interaction.client, link).catch(() => null);
+  const carte = carteReputation(link);
+  return interaction.editReply({ ...carte, content: fil ? `Tous ses avis : ${fil}` : undefined });
 }

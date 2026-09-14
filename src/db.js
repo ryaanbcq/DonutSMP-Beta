@@ -58,6 +58,13 @@ CREATE TABLE IF NOT EXISTS vouches (
 );
 CREATE INDEX IF NOT EXISTS idx_vouch_to ON vouches(to_id);
 
+CREATE TABLE IF NOT EXISTS vouch_threads (
+  discord_id TEXT PRIMARY KEY,
+  thread_id  TEXT NOT NULL,
+  card_id    TEXT,
+  mc_name    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS tickets (
@@ -78,6 +85,10 @@ CREATE INDEX IF NOT EXISTS idx_ticket_membre ON tickets(discord_id, etat);
 // fil de sa vie, et qui a change l etat en dernier.
 for (const col of ['log_message_id TEXT', 'etat_par TEXT']) {
   try { db.exec(`ALTER TABLE tickets ADD COLUMN ${col}`); } catch { /* deja la */ }
+}
+// Avis : etoiles (1-5, null = ancien avis sans note) et carte publiee dans le fil.
+for (const col of ['stars INTEGER', 'message_id TEXT']) {
+  try { db.exec(`ALTER TABLE vouches ADD COLUMN ${col}`); } catch { /* deja la */ }
 }
 
 const q = {
@@ -111,11 +122,25 @@ const q = {
   ),
 
   upsertVouch: db.prepare(`
-    INSERT INTO vouches (from_id, to_id, value, comment, created_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO vouches (from_id, to_id, value, comment, created_at, stars)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(from_id, to_id) DO UPDATE SET
-      value = excluded.value, comment = excluded.comment, created_at = excluded.created_at
+      value = excluded.value, comment = excluded.comment, created_at = excluded.created_at,
+      stars = excluded.stars
   `),
+  vouchGet: db.prepare('SELECT * FROM vouches WHERE from_id = ? AND to_id = ?'),
+  vouchAll: db.prepare('SELECT * FROM vouches WHERE to_id = ? ORDER BY created_at DESC'),
+  vouchTargets: db.prepare('SELECT DISTINCT to_id FROM vouches'),
+  vouchSetMessage: db.prepare('UPDATE vouches SET message_id = ? WHERE from_id = ? AND to_id = ?'),
+  vouchCountFrom: db.prepare('SELECT COUNT(*) AS n FROM vouches WHERE from_id = ?'),
+  allLinks: db.prepare('SELECT * FROM links ORDER BY linked_at'),
+
+  threadGet: db.prepare('SELECT * FROM vouch_threads WHERE discord_id = ?'),
+  threadSet: db.prepare(`
+    INSERT INTO vouch_threads (discord_id, thread_id, card_id, mc_name) VALUES (?, ?, ?, ?)
+    ON CONFLICT(discord_id) DO UPDATE SET thread_id = excluded.thread_id, card_id = excluded.card_id, mc_name = excluded.mc_name
+  `),
+  threadDel: db.prepare('DELETE FROM vouch_threads WHERE discord_id = ?'),
   deleteVouch: db.prepare('DELETE FROM vouches WHERE from_id = ? AND to_id = ?'),
   vouchScore: db.prepare(`
     SELECT
@@ -179,8 +204,20 @@ export const store = {
     q.insertPayment.run(p.from, normName(p.from), p.amount, p.raw ?? null, Date.now(), outcome, challengeId),
 
   // Vouches
-  setVouch: (fromId, toId, value, comment) =>
-    q.upsertVouch.run(String(fromId), String(toId), value, comment ?? null, Date.now()),
+  setVouch: (fromId, toId, value, comment, stars = null) =>
+    q.upsertVouch.run(String(fromId), String(toId), value, comment ?? null, Date.now(), stars),
+  getVouch: (fromId, toId) => q.vouchGet.get(String(fromId), String(toId)) ?? null,
+  vouchAll: (toId) => q.vouchAll.all(String(toId)),
+  vouchTargets: () => q.vouchTargets.all().map((r) => r.to_id),
+  setVouchMessage: (fromId, toId, messageId) =>
+    q.vouchSetMessage.run(messageId ? String(messageId) : null, String(fromId), String(toId)),
+  vouchCountFrom: (fromId) => q.vouchCountFrom.get(String(fromId)).n,
+  allLinks: () => q.allLinks.all(),
+
+  getThread: (discordId) => q.threadGet.get(String(discordId)) ?? null,
+  setThread: (discordId, threadId, cardId, mcName) =>
+    q.threadSet.run(String(discordId), String(threadId), cardId ? String(cardId) : null, mcName),
+  removeThread: (discordId) => q.threadDel.run(String(discordId)),
   removeVouch: (fromId, toId) => q.deleteVouch.run(String(fromId), String(toId)).changes > 0,
   vouchScore: (toId) => q.vouchScore.get(String(toId)),
   vouchList: (toId, limit = 5) => q.vouchList.all(String(toId), limit),

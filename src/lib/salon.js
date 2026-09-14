@@ -23,10 +23,15 @@ export async function verrouiller(salon, moi) {
   });
   // Le bot fait partie de @everyone : sans cette exception il se verrouille
   // lui meme et ne pourra plus reecrire son propre panneau.
+  // Fils compris : le salon des vouches est verrouille mais le bot y ouvre
+  // un fil par joueur et y poste les avis.
   await salon.permissionOverwrites.edit(moi.id, {
     SendMessages: true,
     EmbedLinks: true,
     ReadMessageHistory: true,
+    CreatePublicThreads: true,
+    SendMessagesInThreads: true,
+    ManageThreads: true,
   }, { reason: 'Le bot doit pouvoir tenir son panneau a jour' });
 }
 

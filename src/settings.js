@@ -18,6 +18,11 @@ export const settings = {
   salonLink: () => lire('link.salon', config.baltop.salonLinkId),
   poserSalonLink: (id) => store.kvSet('link.salon', String(id)),
 
+  salonVouch: () => lire('vouch.salon'),
+  poserSalonVouch: (id) => store.kvSet('vouch.salon', String(id)),
+  roleTrusted: () => lire('vouch.role'),
+  poserRoleTrusted: (id) => store.kvSet('vouch.role', id ? String(id) : ''),
+
   emojis: () => {
     const perso = store.kvGet('baltop.emojis');
     if (perso) return perso.split('|');

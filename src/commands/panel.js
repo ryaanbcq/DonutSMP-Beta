@@ -10,6 +10,7 @@ import { settings } from '../settings.js';
 import { reglagesTickets } from '../tickets/reglages.js';
 import { permissionsManquantes } from '../tickets/manager.js';
 import { publierPanneau } from '../tickets/setup.js';
+import { assurerFils } from '../vouch/fils.js';
 
 export const requiresLink = false;
 
@@ -82,6 +83,28 @@ const PANNEAUX = {
       return notes.join(' ');
     },
   },
+  vouches: {
+    nom: 'Vouches',
+    async poser(interaction, salon) {
+      settings.poserSalonVouch(salon.id);
+      const role = interaction.options.getRole('role');
+      if (role) settings.poserRoleTrusted(role.id);
+      await salon.send({
+        embeds: [embed(TITRES.reputation, {
+          description:
+            "**Ici, chaque membre vérifié a son fil d'avis.**\n\n"
+            + 'Cherchez un pseudo dans la barre de recherche pour voir sa réputation avant un trade : '
+            + 'trust score sur 100, étoiles, vouches et signalements.\n\n'
+            + "Pour noter quelqu'un après un trade : `/vouch`. Un signalement demande une explication, "
+            + 'et le staff peut retirer un avis abusif.',
+        })],
+      });
+      const n = await assurerFils(interaction.client);
+      const notes = [`${n} fil(s) ouvert(s) pour les membres déjà vérifiés.`];
+      if (role) notes.push(`Les membres au palier Trusted recevront ${role}.`);
+      return notes.join(' ');
+    },
+  },
   ticket: {
     nom: 'Tickets',
     async poser(interaction, salon) {
@@ -116,7 +139,10 @@ export const data = new SlashCommandBuilder()
     s.setName('deverrouiller')
       .setDescription('Rouvre un salon de panneau à tout le monde')
       .addChannelOption((o) => o.setName('salon').setDescription('Le salon à rouvrir')))
-  .addSubcommand((s) => sousCommande(s, 'ticket', 'Panneau de tickets pour les membres (réglages : /ticket setup)'));
+  .addSubcommand((s) => sousCommande(s, 'ticket', 'Panneau de tickets pour les membres (réglages : /ticket setup)'))
+  .addSubcommand((s) =>
+    sousCommande(s, 'vouches', 'Salon des avis : un fil verrouillé par membre vérifié')
+      .addRoleOption((o) => o.setName('role').setDescription('Rôle donné automatiquement au palier Trusted')));
 
 function sousCommande(s, nom, description) {
   return s.setName(nom)

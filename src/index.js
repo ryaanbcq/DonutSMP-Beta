@@ -24,6 +24,8 @@ import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
+import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
+import { filDe, assurerFils } from './vouch/fils.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -86,6 +88,8 @@ client.once('clientReady', async (c) => {
     console.log('[baltop] aucun panneau pose, utilise /panel baltop dans un salon');
   }
   await startWatcher(c);
+  const fils = await assurerFils(c).catch((e) => { console.error('[vouch] fils :', e.message); return 0; });
+  if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -103,6 +107,7 @@ client.on('interactionCreate', async (interaction) => {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
       if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
+      if (interaction.customId.startsWith('vouch:')) return await onVouchSelect(interaction);
       return;
     }
     if (interaction.isChatInputCommand()) {
@@ -143,6 +148,7 @@ async function onCommande(interaction) {
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
+  if (interaction.customId.startsWith('vouch:')) return onVouchBouton(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 
@@ -208,6 +214,7 @@ async function onDelier(interaction) {
 async function onModal(interaction) {
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);
+  if (interaction.customId === 'vouch:modal') return onVouchModal(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
 }
@@ -224,6 +231,7 @@ async function startWatcher(c) {
     console.log(`[link] ${challenge.mc_name} verifie pour ${discordId} (${shortMoney(payment.amount)})`);
     balances.suivre({ mc_name: challenge.mc_name, discord_id: discordId });
     publierSuivis().catch((e) => console.error('[baltop] liste des suivis :', e.message));
+    filDe(c, store.getLink(discordId)).catch((e) => console.error('[vouch] fil :', e.message));
 
     // Solde releve tout de suite : sans ca le nouveau membre attendrait le
     // prochain tour de cycle, jusqu a un quart d heure, pour apparaitre au

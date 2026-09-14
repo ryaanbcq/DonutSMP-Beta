@@ -3,7 +3,9 @@ import { store } from '../db.js';
 import { ouSeLier } from '../settings.js';
 import { donut } from '../donut/api.js';
 import { embed, TITRES, FR } from '../lib/brand.js';
-import { shortMoney, duration, reputation } from '../lib/format.js';
+import { shortMoney, duration } from '../lib/format.js';
+import { barre } from '../vouch/trust.js';
+import { trustDe } from '../vouch/fils.js';
 
 export const data = new SlashCommandBuilder()
   .setName('profil')
@@ -26,8 +28,7 @@ export async function execute(interaction) {
   }
 
   await interaction.deferReply();
-  const { pos, neg } = store.vouchScore(target.id);
-  const rep = reputation(pos, neg);
+  const t = trustDe(target.id);
 
   let stats = null;
   try {
@@ -38,7 +39,7 @@ export async function execute(interaction) {
     image: link.mc_name,
     description: `**${link.mc_name}**\n<@${target.id}>`,
   }).addFields(
-    { name: 'Réputation', value: `${rep.label}\n\`+${pos}\` / \`-${neg}\``, inline: true },
+    { name: 'Réputation', value: `${t.palier.emoji} ${t.palier.nom}\n\`${barre(t.score, 8)}\` ${t.score} · ${t.n} avis`, inline: true },
     { name: 'Vérifié', value: `<t:${Math.floor(link.linked_at / 1000)}:R>`, inline: true },
   );
 
