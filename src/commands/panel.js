@@ -3,6 +3,7 @@ import {
   PermissionFlagsBits, MessageFlags, ChannelType,
 } from 'discord.js';
 import { config } from '../config.js';
+import { store } from '../db.js';
 import { embed, TITRES } from '../lib/brand.js';
 import { verrouiller, deverrouiller, peutVerrouiller } from '../lib/salon.js';
 import { publier as publierClassement, majRoleTop } from '../baltop/panel.js';
@@ -92,9 +93,10 @@ const PANNEAUX = {
       const role = interaction.options.getRole('role');
       if (role) settings.poserRoleTrusted(role.id);
       const forumId = settings.salonVouch();
-      if (!forumId) throw new Error('indique le forum des vouches avec l\'option `forum`');
+      if (!forumId) throw new Error('indique le forum des vouches avec l\'option `forum`, ou passe par `/setup vouches`');
 
       await salon.send(panneauVouch(forumId));
+      store.kvSet('vouch.salonPanneau', salon.id);
       const n = await assurerFils(interaction.client);
       const notes = [`${n} post(s) ouvert(s) dans <#${forumId}> pour les membres déjà vérifiés.`];
       if (role) notes.push(`Les membres au palier Trusted recevront ${role}.`);
@@ -111,7 +113,7 @@ const PANNEAUX = {
       const manque = permissionsManquantes(interaction.guild);
       if (manque.length) notes.push(`⚠️ Il me manque ${manque.join(' et ')} pour créer les salons de ticket.`);
       if (!reglagesTickets.roles().length || !reglagesTickets.salonLogs()) {
-        notes.push('Rôles staff, dossier et logs se règlent dans `/ticket setup`.');
+        notes.push('Rôles staff, dossier et logs se règlent dans `/setup tickets`.');
       }
       return notes.join(' ');
     },
@@ -135,7 +137,7 @@ export const data = new SlashCommandBuilder()
     s.setName('deverrouiller')
       .setDescription('Rouvre un salon de panneau à tout le monde')
       .addChannelOption((o) => o.setName('salon').setDescription('Le salon à rouvrir')))
-  .addSubcommand((s) => sousCommande(s, 'ticket', 'Panneau de tickets pour les membres (réglages : /ticket setup)'))
+  .addSubcommand((s) => sousCommande(s, 'ticket', 'Panneau de tickets pour les membres (réglages : /setup tickets)'))
   .addSubcommand((s) =>
     sousCommande(s, 'vouches', 'Panneau pour noter un membre, avec le forum des réputations')
       .addChannelOption((o) =>

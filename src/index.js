@@ -26,6 +26,7 @@ import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket } from './t
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
 import { filDe, assurerFils } from './vouch/fils.js';
+import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -108,6 +109,7 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
       if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
       if (interaction.customId.startsWith('vouch:')) return await onVouchSelect(interaction);
+      if (interaction.customId.startsWith('vsetup:')) return await onVsetupSelect(interaction);
       return;
     }
     if (interaction.isChatInputCommand()) {
@@ -149,6 +151,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchBouton(interaction);
+  if (interaction.customId.startsWith('vsetup:')) return onVsetupBouton(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 

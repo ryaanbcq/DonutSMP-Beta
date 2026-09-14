@@ -8,7 +8,7 @@ import { reglagesTickets } from './reglages.js';
 import { panneauTicket, COULEUR_TICKET } from './panel.js';
 import { permissionsManquantes } from './manager.js';
 
-// /ticket setup : un panneau prive ou tout se regle a la souris. Chaque
+// /setup tickets : un panneau prive ou tout se regle a la souris. Chaque
 // choix est enregistre tout de suite et le panneau se redessine sur place.
 // Choisir le salon du panneau membres le publie (ou le met a jour) aussitot.
 
