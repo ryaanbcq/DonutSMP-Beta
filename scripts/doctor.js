@@ -151,6 +151,14 @@ if (!token) {
         else ok(`${quoi} donnable`, r.name);
       };
       sousLeBot(process.env.VERIFIED_ROLE_ID, 'VERIFIED_ROLE_ID');
+      if (process.env.ADMIN_ROLE_ID) {
+        const r = roles.find((x) => x.id === process.env.ADMIN_ROLE_ID);
+        // Pas besoin d etre sous le bot : ce role n est jamais donne, seulement lu.
+        (r ? ok : ko)('ADMIN_ROLE_ID', r ? r.name : `introuvable : ${process.env.ADMIN_ROLE_ID}`);
+      }
+      const admins = (process.env.ADMIN_USER_IDS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+      if (admins.length) ok(`${admins.length} membre(s) admin par id`);
+      if (!process.env.ADMIN_ROLE_ID && !admins.length) warn('aucun admin configure', 'seuls les « Gerer le serveur » ont les commandes staff');
       sousLeBot(process.env.BALTOP_TOP_ROLE_ID, 'BALTOP_TOP_ROLE_ID');
 
       for (const [cle, quoi] of [['LOG_CHANNEL_ID', 'salon de logs'], ['BALTOP_CHANNEL_ID', 'salon du classement'], ['LINK_CHANNEL_ID', 'salon de connexion']]) {

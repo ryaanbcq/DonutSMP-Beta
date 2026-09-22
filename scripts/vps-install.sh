@@ -135,5 +135,6 @@ etape "Controle final"
 node scripts/doctor.js || true
 
 printf '\nInstalle dans %s\n' "$RACINE"
-printf 'Logs      : pm2 logs fr-discord\n'
-printf 'Mise a jour : bash scripts/update.sh\n\n'
+printf 'Reglages  : donut config\n'
+printf 'Logs      : donut logs\n'
+printf 'Mise a jour : donut update\n\n'

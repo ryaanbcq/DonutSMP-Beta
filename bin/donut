@@ -3,6 +3,7 @@
 # lien dans /usr/local/bin/donut. Depuis n importe quel dossier :
 #
 #   donut setup      installe ou reinstalle (idempotent)
+#   donut config     menu de configuration (token, roles, salons, admins)
 #   donut update     met a jour et redemarre
 #   donut doctor     diagnostic complet
 #   donut status     etat des deux process
@@ -43,6 +44,7 @@ aide() {
 donut - bot DonutSMP FR
 
   donut setup              installe tout sur cette machine (idempotent)
+  donut config             menu de configuration, propose de redemarrer
   donut update             git pull, dependances, commandes, redemarrage
   donut doctor             diagnostic complet, ne modifie rien
   donut status             etat des process et du bot en jeu
@@ -53,7 +55,7 @@ donut - bot DonutSMP FR
   donut logs    [cible]    logs en direct (Ctrl+C pour sortir)
   donut logs    [cible] 50 les 50 dernieres lignes, sans suivre
 
-  donut env                ouvre le .env dans ton editeur, puis redemarre
+  donut env                ouvre le .env brut dans ton editeur
   donut token              saisit un nouveau token Discord
   donut auth               refait la connexion Microsoft du compte en jeu
   donut deploy             reenregistre les slash commands
@@ -73,6 +75,10 @@ case "$cmd" in
 
   setup|install)
     bash scripts/vps-install.sh "$@"
+    ;;
+
+  config|conf)
+    node scripts/config.js
     ;;
 
   update|up)

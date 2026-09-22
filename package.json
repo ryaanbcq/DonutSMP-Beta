@@ -13,6 +13,7 @@
     "start": "node src/index.js",
     "deploy": "node scripts/deploy-commands.js",
     "setup": "node scripts/setup.js",
+    "config": "node scripts/config.js",
     "auth": "node scripts/auth.js",
     "doctor": "node scripts/doctor.js",
     "install:vps": "bash scripts/vps-install.sh",

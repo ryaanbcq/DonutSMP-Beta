@@ -4,6 +4,7 @@ import {
 } from 'discord.js';
 import { store } from '../db.js';
 import { FR } from '../lib/brand.js';
+import { estAdmin } from '../lib/admin.js';
 import { reglagesTickets, slugCategorie } from './reglages.js';
 import { enteteTicket, boutonsTicket, embedLog, TITRE_TICKET } from './panel.js';
 import { rendreTranscript, collecterMessages } from './transcript.js';
@@ -29,7 +30,7 @@ const PERMS_BOT = [
 
 export function estStaff(membre) {
   if (!membre) return false;
-  if (membre.permissions?.has?.(PermissionFlagsBits.ManageGuild)) return true;
+  if (estAdmin(membre)) return true;
   const roles = reglagesTickets.roles();
   return roles.some((id) => membre.roles?.cache?.has(id));
 }

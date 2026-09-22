@@ -14,6 +14,9 @@ export const config = {
     // Beta : ce role passe le mur du /link et le delai de 24 h avant de noter.
     bypassRoleId: process.env.BYPASS_ROLE_ID ?? '',
     logChannelId: process.env.LOG_CHANNEL_ID ?? '',
+    // Acces aux commandes staff, en plus de la permission « Gerer le serveur ».
+    adminRoleId: process.env.ADMIN_ROLE_ID ?? '',
+    adminUserIds: (process.env.ADMIN_USER_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     // Vide = avatar du bot. Ne jamais mettre une URL d attachement Discord
     // (parametres ex=/is=/hm=) : elle est signee et expire sous 24 h.
     logoUrl: process.env.LOGO_URL ?? '',

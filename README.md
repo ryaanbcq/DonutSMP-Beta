@@ -68,7 +68,8 @@ donut restart [cible]    recharge le code ET le .env
 donut logs    [cible]    logs en direct
 donut logs    ingame 50  les 50 dernieres lignes, sans suivre
 
-donut env                ouvre le .env dans ton editeur, puis redemarre
+donut config             menu de configuration (voir plus bas)
+donut env                ouvre le .env brut dans ton editeur
 donut token              saisit un nouveau token Discord
 donut auth               refait la connexion Microsoft du compte en jeu
 donut deploy             reenregistre les slash commands
@@ -85,6 +86,42 @@ Sur une machine de dev, le lien se pose a la main :
 ```bash
 sudo ln -sf "$PWD/bin/donut" /usr/local/bin/donut
 ```
+
+## Le menu `donut config`
+
+Tout ce qui se regle sans ouvrir le `.env` a la main. Les roles et les salons
+sont **lus sur ton serveur et proposes dans une liste numerotee** : plus d'id a
+copier coller, plus de faute de frappe qui casse une fonction en silence.
+
+```
+donut config
+```
+
+```
+  1. Discord            token, serveur, roles, salons
+  2. Administrateurs    qui a acces aux commandes staff
+  3. Compte Minecraft   pseudo, Microsoft, cle API
+  4. Interrupteurs      remboursements, releves, mock
+  5. Valeurs            delais, montants, cycles
+  6. Diagnostic         relance le doctor
+```
+
+- **Discord** : coller un nouveau token (jamais reaffiche, seulement masque),
+  choisir le serveur parmi ceux ou le bot est invite, puis le role des
+  verifies, le role beta, le role du premier du classement et les trois salons.
+- **Administrateurs** : `ADMIN_ROLE_ID` et `ADMIN_USER_IDS`, qui ouvrent les
+  commandes staff. La permission Discord « Gerer le serveur » les ouvre de
+  toute facon : ces deux cles s'ajoutent a elle, elles ne la remplacent pas,
+  sinon un role supprime enfermerait le proprietaire dehors.
+- **Compte Minecraft** : pseudo receveur, adresse Microsoft, etat du jeton
+  prismarine (`valide`, `expire`, `absent`) et refaire l'authentification sur
+  place, hote et version du serveur, cle API DonutSMP.
+- **Interrupteurs** : remboursement des micro-paiements, releve des soldes,
+  demande de cle en jeu, intent Message Content, faux soldes de dev, source des
+  paiements (`jsonl` ou `mock`).
+
+Rien n'est ecrit tant qu'une valeur n'est pas validee, le `.env` garde ses
+commentaires, et a la sortie le menu propose de redemarrer les process.
 
 ## Mise a jour
 
