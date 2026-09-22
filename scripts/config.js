@@ -1,36 +1,25 @@
-// Menu de configuration. Tout ce qui se regle sans ouvrir le .env a la main :
+// Menu de configuration du bot. Tout ce qui se regle sans ouvrir le .env :
 // token, serveur, roles et salons choisis dans une liste lue sur Discord,
-// admins, compte Minecraft, interrupteurs, valeurs numeriques.
+// admins, compte Minecraft, interrupteurs, valeurs.
 //
 //   donut config            (ou node scripts/config.js)
 //
-// Rien n est ecrit tant qu une valeur n est pas validee. Les secrets ne sont
-// jamais reaffiches en clair, seulement masques.
+// Fleches pour naviguer, Entree pour ouvrir, q pour revenir. Sans clavier
+// (entree redirigee) le meme menu s affiche numerote.
 
 import 'dotenv/config';
 import { readFile, writeFile, chmod, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { createInterface } from 'node:readline/promises';
-import { stdin, stdout } from 'node:process';
-import { execFile, spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import {
+  menu, saisie, confirmer, pause, demander, fermer, effacer, banniere, degrade,
+  masquer, entreeFermee, tty,
+  RESET, GRAS, PALE, BLEU, OR, VERT, ROUGE, JAUNE, GRIS,
+} from './lib/tui.js';
 
 const run = promisify(execFile);
 const API = 'https://discord.com/api/v10';
-const rl = createInterface({ input: stdin, output: stdout });
-
-// stdin ferme (Ctrl+D, entree redirigee, session qui tombe) : on sort du menu
-// proprement au lieu de jeter un ERR_USE_AFTER_CLOSE sur la question suivante.
-let ferme = false;
-rl.on('close', () => { ferme = true; });
-async function demander(question) {
-  if (ferme) return '0';
-  try { return await rl.question(question); } catch { ferme = true; return '0'; }
-}
-
-const G = '\x1b[1m'; const N = '\x1b[0m'; const V = '\x1b[32m';
-const R = '\x1b[31m'; const J = '\x1b[33m'; const D = '\x1b[2m';
-
 const modifiees = new Set();
 
 // ------------------------------------------------------------------ fichier
@@ -55,12 +44,18 @@ async function poser(cle, valeur) {
   modifiees.add(cle);
 }
 
-const masque = (v) => (v ? (v.length > 12 ? `${v.slice(0, 6)}...${v.slice(-4)}` : '******') : '');
-const vide = `${D}(vide)${N}`;
-const affiche = (v) => (v ? v : vide);
+const vide = `${PALE}vide${RESET}`;
+const val = (v) => (v ? `${OR}${v}${RESET}` : vide);
 
 // ------------------------------------------------------------------ discord
+// Les noms de roles et de salons sont relus a chaque ecran mais le serveur ne
+// change pas toutes les secondes : un cache evite de repayer trois appels par
+// affichage, il saute des qu on ecrit quelque chose.
+let cache = {};
+const oublier = () => { cache = {}; };
+
 async function api(chemin) {
+  if (cache[chemin]) return cache[chemin];
   const token = process.env.DISCORD_TOKEN;
   if (!token) throw new Error('pas de token');
   const res = await fetch(`${API}${chemin}`, {
@@ -68,239 +63,294 @@ async function api(chemin) {
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`Discord ${res.status}`);
-  return res.json();
+  cache[chemin] = await res.json();
+  return cache[chemin];
 }
 
-// Liste numerotee : entree vide = on ne touche a rien, 0 = on efface,
-// un id colle a la main passe aussi (utile pour un salon d une autre categorie).
-async function choisir(titre, elements, actuel) {
-  console.log(`\n${G}${titre}${N}`);
-  elements.forEach((e, i) => {
-    const ici = e.id === actuel ? `  ${V}<= actuel${N}` : '';
-    console.log(`  ${String(i + 1).padStart(2)}. ${e.nom}${ici}`);
-  });
-  console.log(`   0. ${D}aucun (vider)${N}`);
-  const r = (await demander('\nNumero, id, ou Entree pour garder : ')).trim();
-  if (!r) return undefined;
-  if (r === '0') return '';
-  if (/^\d{15,}$/.test(r)) return r;
-  const i = Number(r);
-  if (Number.isInteger(i) && i >= 1 && i <= elements.length) return elements[i - 1].id;
-  console.log(`${J}Choix ignore.${N}`);
-  return undefined;
+const guilde = () => process.env.DISCORD_GUILD_ID;
+
+async function roles() {
+  try { return await api(`/guilds/${guilde()}/roles`); } catch { return null; }
 }
-
-async function choisirRole(cle, titre) {
-  let roles;
-  try { roles = await api(`/guilds/${process.env.DISCORD_GUILD_ID}/roles`); }
-  catch (e) { console.log(`${R}Roles illisibles (${e.message}).${N}`); return; }
-  const liste = roles
-    .filter((r) => r.id !== process.env.DISCORD_GUILD_ID && !r.managed)
-    .sort((a, b) => b.position - a.position)
-    .map((r) => ({ id: r.id, nom: `${r.name}${D} (${r.id})${N}` }));
-  const choix = await choisir(titre, liste, process.env[cle]);
-  if (choix !== undefined) await poser(cle, choix);
-}
-
-async function choisirSalon(cle, titre, types = [0]) {
-  let salons;
-  try { salons = await api(`/guilds/${process.env.DISCORD_GUILD_ID}/channels`); }
-  catch (e) { console.log(`${R}Salons illisibles (${e.message}).${N}`); return; }
-  const cats = new Map(salons.filter((c) => c.type === 4).map((c) => [c.id, c.name]));
-  const liste = salons
-    .filter((c) => types.includes(c.type))
-    .sort((a, b) => a.position - b.position)
-    .map((c) => ({ id: c.id, nom: `#${c.name}${D} ${cats.get(c.parent_id) ?? ''} (${c.id})${N}` }));
-  const choix = await choisir(titre, liste, process.env[cle]);
-  if (choix !== undefined) await poser(cle, choix);
-}
-
-// -------------------------------------------------------------------- menus
-async function menuDiscord() {
-  for (;;) {
-    const txt = await texteEnv();
-    let identite = '';
-    try {
-      const me = await api('/users/@me');
-      identite = `${V}${me.username}${N}`;
-    } catch { identite = `${R}token refuse ou absent${N}`; }
-
-    let serveur = lire(txt, 'DISCORD_GUILD_ID');
-    try {
-      const gs = await api('/users/@me/guilds');
-      const g = gs.find((x) => x.id === serveur);
-      serveur = g ? `${g.name} ${D}(${g.id})${N}` : `${R}le bot n y est pas${N} ${serveur}`;
-    } catch { /* deja signale plus haut */ }
-
-    console.log(`\n${G}Discord${N}`);
-    console.log(`  1. Token                ${masque(lire(txt, 'DISCORD_TOKEN')) || vide}   ${identite}`);
-    console.log(`  2. Serveur              ${serveur || vide}`);
-    console.log(`  3. Role des verifies    ${affiche(await nomRole(lire(txt, 'VERIFIED_ROLE_ID')))}`);
-    console.log(`  4. Role beta (bypass)   ${affiche(await nomRole(lire(txt, 'BYPASS_ROLE_ID')))}`);
-    console.log(`  5. Role du premier      ${affiche(await nomRole(lire(txt, 'BALTOP_TOP_ROLE_ID')))}`);
-    console.log(`  6. Salon des logs       ${affiche(await nomSalon(lire(txt, 'LOG_CHANNEL_ID')))}`);
-    console.log(`  7. Salon du classement  ${affiche(await nomSalon(lire(txt, 'BALTOP_CHANNEL_ID')))}`);
-    console.log(`  8. Salon de connexion   ${affiche(await nomSalon(lire(txt, 'LINK_CHANNEL_ID')))}`);
-    console.log(`  9. Logo des embeds      ${affiche(lire(txt, 'LOGO_URL'))}`);
-    console.log(`  0. Retour`);
-
-    const c = (await demander('\n> ')).trim();
-    if (c === '0' || c === '') return;
-    if (c === '1') { rl.pause(); await lancer(process.execPath, ['scripts/setup.js', '--new']); rl.resume(); await recharger(); }
-    else if (c === '2') await choisirServeur();
-    else if (c === '3') await choisirRole('VERIFIED_ROLE_ID', 'Role donne aux comptes verifies');
-    else if (c === '4') await choisirRole('BYPASS_ROLE_ID', 'Role beta qui saute le /link (vide en prod)');
-    else if (c === '5') await choisirRole('BALTOP_TOP_ROLE_ID', 'Role du premier du classement');
-    else if (c === '6') await choisirSalon('LOG_CHANNEL_ID', 'Salon des logs');
-    else if (c === '7') await choisirSalon('BALTOP_CHANNEL_ID', 'Salon du classement');
-    else if (c === '8') await choisirSalon('LINK_CHANNEL_ID', 'Salon de connexion');
-    else if (c === '9') await saisir('LOGO_URL', 'URL du logo (vide = avatar du bot)');
-  }
+async function salons() {
+  try { return await api(`/guilds/${guilde()}/channels`); } catch { return null; }
 }
 
 async function nomRole(id) {
   if (!id) return '';
-  try {
-    const roles = await api(`/guilds/${process.env.DISCORD_GUILD_ID}/roles`);
-    const r = roles.find((x) => x.id === id);
-    return r ? `${r.name} ${D}(${id})${N}` : `${R}introuvable${N} ${id}`;
-  } catch { return id; }
+  const rs = await roles();
+  if (!rs) return `${PALE}${id}${RESET}`;
+  const r = rs.find((x) => x.id === id);
+  return r ? `${OR}${r.name}${RESET}` : `${ROUGE}introuvable${RESET} ${PALE}${id}${RESET}`;
 }
 
 async function nomSalon(id) {
   if (!id) return '';
-  try { const c = await api(`/channels/${id}`); return `#${c.name} ${D}(${id})${N}`; }
-  catch { return `${R}introuvable${N} ${id}`; }
+  const cs = await salons();
+  const c = cs?.find((x) => x.id === id);
+  return c ? `${OR}#${c.name}${RESET}` : `${ROUGE}introuvable${RESET} ${PALE}${id}${RESET}`;
+}
+
+/** Ecran de choix : la liste du serveur, plus « aucun » et « id a la main ». */
+async function choisirDansListe({ titre, sous, elements, actuel }) {
+  if (!elements) {
+    effacer();
+    banniere(titre, 'liste illisible');
+    console.log(`\n  ${ROUGE}Discord n a pas repondu.${RESET} Verifie le token et le serveur.\n`);
+    await pause();
+    return undefined;
+  }
+  const items = elements.map((e) => ({
+    cle: e.id,
+    libelle: e.nom,
+    etat: e.id === actuel ? 'ok' : undefined,
+    note: e.id === actuel ? 'actuel' : '',
+    valeur: `${PALE}${e.id}${RESET}`,
+  }));
+  items.push({ separateur: '' });
+  items.push({ cle: '__vide', libelle: `${PALE}aucun (vider)${RESET}` });
+  items.push({ cle: '__id', libelle: `${PALE}saisir un id a la main${RESET}` });
+
+  const c = await menu({ titre, sous, items, aide: '↑↓ naviguer   ↵ choisir   q annuler' });
+  if (c === null) return undefined;
+  if (c === '__vide') return '';
+  if (c === '__id') {
+    const r = await saisie('Id Discord', actuel, { aide: 'clic droit sur le role ou le salon, Copier l identifiant' });
+    return r;
+  }
+  return c;
+}
+
+async function choisirRole(cle, titre) {
+  const rs = await roles();
+  const elements = rs && rs
+    .filter((r) => r.id !== guilde() && !r.managed)
+    .sort((a, b) => b.position - a.position)
+    .map((r) => ({ id: r.id, nom: r.name }));
+  const choix = await choisirDansListe({ titre, sous: 'roles du serveur', elements, actuel: process.env[cle] });
+  if (choix !== undefined) { await poser(cle, choix); oublier(); }
+}
+
+async function choisirSalon(cle, titre, types = [0]) {
+  const cs = await salons();
+  const cats = new Map((cs ?? []).filter((c) => c.type === 4).map((c) => [c.id, c.name]));
+  const elements = cs && cs
+    .filter((c) => types.includes(c.type))
+    .sort((a, b) => a.position - b.position)
+    .map((c) => ({ id: c.id, nom: `#${c.name}  ${PALE}${cats.get(c.parent_id) ?? ''}${RESET}` }));
+  const choix = await choisirDansListe({ titre, sous: 'salons du serveur', elements, actuel: process.env[cle] });
+  if (choix !== undefined) { await poser(cle, choix); oublier(); }
 }
 
 async function choisirServeur() {
   let gs = [];
-  try { gs = await api('/users/@me/guilds'); } catch (e) { console.log(`${R}${e.message}${N}`); return; }
+  try { gs = await api('/users/@me/guilds'); } catch { gs = []; }
   if (gs.length === 0) {
-    console.log(`\n${J}Le bot n est sur aucun serveur.${N} Invite le, puis reviens ici.`);
-    console.log(`https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&scope=bot%20applications.commands&permissions=268954112\n`);
+    effacer();
+    banniere('Serveur', 'le bot n est sur aucun serveur');
+    console.log(`\n  Invite le, puis reviens ici :\n`);
+    console.log(`  ${BLEU}https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}`
+      + `&scope=bot%20applications.commands&permissions=268954112${RESET}\n`);
+    await pause();
     return;
   }
-  const choix = await choisir('Serveur du bot', gs.map((g) => ({ id: g.id, nom: `${g.name} ${D}(${g.id})${N}` })), process.env.DISCORD_GUILD_ID);
-  if (choix !== undefined && choix !== '') await poser('DISCORD_GUILD_ID', choix);
+  const choix = await choisirDansListe({
+    titre: 'Serveur du bot',
+    sous: 'la ou le bot est deja invite',
+    elements: gs.map((g) => ({ id: g.id, nom: g.name })),
+    actuel: guilde(),
+  });
+  if (choix) { await poser('DISCORD_GUILD_ID', choix); oublier(); }
 }
 
-async function menuAdmin() {
+// -------------------------------------------------------------------- ecrans
+async function ecranDiscord() {
   for (;;) {
     const txt = await texteEnv();
-    console.log(`\n${G}Administrateurs du bot${N}`);
-    console.log(`${D}  Qui peut utiliser les commandes staff. La permission Discord${N}`);
-    console.log(`${D}  « Gerer le serveur » ouvre toujours l acces, ceci s ajoute.${N}`);
-    console.log(`  1. Role admin           ${affiche(await nomRole(lire(txt, 'ADMIN_ROLE_ID')))}`);
-    console.log(`  2. Membres admin        ${affiche(lire(txt, 'ADMIN_USER_IDS'))}`);
-    console.log(`  0. Retour`);
-    const c = (await demander('\n> ')).trim();
-    if (c === '0' || c === '') return;
-    if (c === '1') await choisirRole('ADMIN_ROLE_ID', 'Role qui donne l acces staff');
-    else if (c === '2') await saisir('ADMIN_USER_IDS', 'Ids Discord separes par des virgules');
+    let identite = `${ROUGE}token absent${RESET}`;
+    let etatToken = 'ko';
+    if (lire(txt, 'DISCORD_TOKEN')) {
+      try { const me = await api('/users/@me'); identite = `${VERT}${me.username}${RESET}`; etatToken = 'ok'; }
+      catch { identite = `${ROUGE}refuse par Discord${RESET}`; }
+    }
+    let serveur = vide;
+    let etatServeur = 'ko';
+    if (guilde()) {
+      try {
+        const gs = await api('/users/@me/guilds');
+        const g = gs.find((x) => x.id === guilde());
+        if (g) { serveur = `${OR}${g.name}${RESET}`; etatServeur = 'ok'; }
+        else serveur = `${ROUGE}le bot n y est pas${RESET}`;
+      } catch { serveur = `${PALE}${guilde()}${RESET}`; etatServeur = 'tiede'; }
+    }
+
+    const c = await menu({
+      titre: '  DISCORD',
+      sous: 'identite du bot, serveur, roles et salons',
+      items: [
+        { cle: 'token', libelle: 'Token', valeur: masquer(lire(txt, 'DISCORD_TOKEN')) || vide, note: identite, etat: etatToken },
+        { cle: 'serveur', libelle: 'Serveur', valeur: serveur, etat: etatServeur },
+        { separateur: 'roles' },
+        { cle: 'verifie', libelle: 'Role des verifies', valeur: (await nomRole(lire(txt, 'VERIFIED_ROLE_ID'))) || vide, etat: lire(txt, 'VERIFIED_ROLE_ID') ? 'ok' : 'off' },
+        { cle: 'bypass', libelle: 'Role beta (bypass)', valeur: (await nomRole(lire(txt, 'BYPASS_ROLE_ID'))) || vide, note: lire(txt, 'BYPASS_ROLE_ID') ? 'a vider en prod' : '', etat: lire(txt, 'BYPASS_ROLE_ID') ? 'tiede' : 'off' },
+        { cle: 'top', libelle: 'Role du premier', valeur: (await nomRole(lire(txt, 'BALTOP_TOP_ROLE_ID'))) || vide, etat: lire(txt, 'BALTOP_TOP_ROLE_ID') ? 'ok' : 'off' },
+        { separateur: 'salons' },
+        { cle: 'logs', libelle: 'Salon des logs', valeur: (await nomSalon(lire(txt, 'LOG_CHANNEL_ID'))) || vide, etat: lire(txt, 'LOG_CHANNEL_ID') ? 'ok' : 'off' },
+        { cle: 'classement', libelle: 'Salon du classement', valeur: (await nomSalon(lire(txt, 'BALTOP_CHANNEL_ID'))) || vide, etat: lire(txt, 'BALTOP_CHANNEL_ID') ? 'ok' : 'off' },
+        { cle: 'connexion', libelle: 'Salon de connexion', valeur: (await nomSalon(lire(txt, 'LINK_CHANNEL_ID'))) || vide, etat: lire(txt, 'LINK_CHANNEL_ID') ? 'ok' : 'off' },
+        { separateur: '' },
+        { cle: 'logo', libelle: 'Logo des embeds', valeur: val(lire(txt, 'LOGO_URL')), note: 'vide = avatar du bot' },
+      ],
+    });
+    if (c === null) return;
+    if (c === 'token') { await lancer(process.execPath, ['scripts/setup.js', '--new']); await recharger(); oublier(); }
+    else if (c === 'serveur') await choisirServeur();
+    else if (c === 'verifie') await choisirRole('VERIFIED_ROLE_ID', 'Role donne aux comptes verifies');
+    else if (c === 'bypass') await choisirRole('BYPASS_ROLE_ID', 'Role beta qui saute le /link');
+    else if (c === 'top') await choisirRole('BALTOP_TOP_ROLE_ID', 'Role du premier du classement');
+    else if (c === 'logs') await choisirSalon('LOG_CHANNEL_ID', 'Salon des logs');
+    else if (c === 'classement') await choisirSalon('BALTOP_CHANNEL_ID', 'Salon du classement');
+    else if (c === 'connexion') await choisirSalon('LINK_CHANNEL_ID', 'Salon de connexion');
+    else if (c === 'logo') await editer('LOGO_URL', 'Logo des embeds', 'URL publique, jamais une piece jointe Discord (elle expire)');
   }
 }
 
-async function menuMinecraft() {
+async function ecranAdmin() {
   for (;;) {
     const txt = await texteEnv();
-    let cache = `${R}absent${N}`;
-    if (await access(process.env.MC_PROFILES_FOLDER ?? './data/msa-cache', constants.F_OK).then(() => true, () => false)) {
-      try { await run(process.execPath, ['scripts/auth.js', '--check'], { timeout: 60_000 }); cache = `${V}valide${N}`; }
-      catch { cache = `${R}expire${N}`; }
+    const ids = lire(txt, 'ADMIN_USER_IDS').split(',').map((s) => s.trim()).filter(Boolean);
+    const c = await menu({
+      titre: '  ADMINISTRATEURS',
+      sous: 'qui a acces aux commandes staff du bot',
+      entete: `\n  ${PALE}La permission Discord « Gerer le serveur » ouvre toujours l acces.${RESET}`
+        + `\n  ${PALE}Ces deux reglages s y ajoutent, ils ne la remplacent pas.${RESET}`,
+      items: [
+        { cle: 'role', libelle: 'Role admin', valeur: (await nomRole(lire(txt, 'ADMIN_ROLE_ID'))) || vide, etat: lire(txt, 'ADMIN_ROLE_ID') ? 'ok' : 'off' },
+        { cle: 'ids', libelle: 'Membres admin', valeur: ids.length ? `${OR}${ids.length} id(s)${RESET}  ${PALE}${ids.join(', ')}${RESET}` : vide, etat: ids.length ? 'ok' : 'off' },
+      ],
+    });
+    if (c === null) return;
+    if (c === 'role') await choisirRole('ADMIN_ROLE_ID', 'Role qui donne l acces staff');
+    else if (c === 'ids') await editer('ADMIN_USER_IDS', 'Membres admin', 'ids Discord separes par des virgules');
+  }
+}
+
+async function ecranMinecraft() {
+  for (;;) {
+    const txt = await texteEnv();
+    const dossier = lire(txt, 'MC_PROFILES_FOLDER') || './data/msa-cache';
+    let jeton = `${ROUGE}absent${RESET}`;
+    let etatJeton = 'ko';
+    if (await access(dossier, constants.F_OK).then(() => true, () => false)) {
+      try { await run(process.execPath, ['scripts/auth.js', '--check'], { timeout: 60_000 }); jeton = `${VERT}valide${RESET}`; etatJeton = 'ok'; }
+      catch { jeton = `${ROUGE}expire${RESET}`; }
     }
-    console.log(`\n${G}Compte Minecraft${N}`);
-    console.log(`  1. Pseudo receveur      ${affiche(lire(txt, 'MC_LINK_ACCOUNT'))}`);
-    console.log(`  2. Adresse Microsoft    ${affiche(lire(txt, 'MC_EMAIL'))}`);
-    console.log(`  3. Jeton (prismarine)   ${cache}   ${D}${lire(txt, 'MC_PROFILES_FOLDER')}${N}`);
-    console.log(`  4. Serveur              ${lire(txt, 'MC_HOST')}:${lire(txt, 'MC_PORT')}   version ${affiche(lire(txt, 'MC_VERSION'))}`);
-    console.log(`  5. Cle API DonutSMP     ${masque(lire(txt, 'DONUT_API_KEY')) || vide}`);
-    console.log(`  0. Retour`);
-    const c = (await demander('\n> ')).trim();
-    if (c === '0' || c === '') return;
-    if (c === '1') await saisir('MC_LINK_ACCOUNT', 'Pseudo du compte qui encaisse (jamais celui du casino)');
-    else if (c === '2') await saisir('MC_EMAIL', 'Adresse du compte Microsoft');
-    else if (c === '3') {
-      console.log(`${D}Microsoft affiche un code a saisir dans un navigateur.${N}`);
-      rl.pause();
+    const c = await menu({
+      titre: '  COMPTE MINECRAFT',
+      sous: 'le compte qui encaisse les paiements de verification',
+      items: [
+        { cle: 'pseudo', libelle: 'Pseudo receveur', valeur: val(lire(txt, 'MC_LINK_ACCOUNT')), note: 'jamais le compte du casino', etat: lire(txt, 'MC_LINK_ACCOUNT') ? 'ok' : 'ko' },
+        { cle: 'mail', libelle: 'Adresse Microsoft', valeur: val(lire(txt, 'MC_EMAIL')), etat: lire(txt, 'MC_EMAIL') ? 'ok' : 'off' },
+        { cle: 'auth', libelle: 'Jeton prismarine', valeur: jeton, note: dossier, etat: etatJeton },
+        { separateur: '' },
+        { cle: 'serveur', libelle: 'Serveur', valeur: `${OR}${lire(txt, 'MC_HOST')}:${lire(txt, 'MC_PORT')}${RESET}`, note: `version ${lire(txt, 'MC_VERSION') || 'auto'}` },
+        { cle: 'api', libelle: 'Cle API DonutSMP', valeur: masquer(lire(txt, 'DONUT_API_KEY')) || vide, note: '/api en jeu', etat: lire(txt, 'DONUT_API_KEY') ? 'ok' : 'off' },
+      ],
+    });
+    if (c === null) return;
+    if (c === 'pseudo') await editer('MC_LINK_ACCOUNT', 'Pseudo du compte receveur', 'jamais le compte du casino : un link serait relu comme un depot');
+    else if (c === 'mail') await editer('MC_EMAIL', 'Adresse du compte Microsoft');
+    else if (c === 'auth') {
+      effacer();
+      banniere('  CONNEXION MICROSOFT', 'un code a saisir dans un navigateur, aucun mot de passe ici');
+      console.log('');
       await lancer(process.execPath, ['scripts/auth.js', '--force']);
-      rl.resume();
-    } else if (c === '4') {
-      await saisir('MC_HOST', 'Hote');
-      await saisir('MC_PORT', 'Port');
-      await saisir('MC_VERSION', 'Version (vide = detection auto)');
-    } else if (c === '5') await saisir('DONUT_API_KEY', 'Cle API (/api en jeu)', true);
+      await pause();
+    } else if (c === 'serveur') {
+      await editer('MC_HOST', 'Hote du serveur');
+      await editer('MC_PORT', 'Port');
+      await editer('MC_VERSION', 'Version', 'vide = detection automatique');
+    } else if (c === 'api') await editer('DONUT_API_KEY', 'Cle API DonutSMP', '/api en jeu', true);
   }
 }
 
 const INTERRUPTEURS = [
-  ['REFUND_ENABLED', 'Rembourser le paiement de verification'],
-  ['BALANCE_POLL', 'Relever les soldes en jeu avec /balance'],
-  ['DONUT_KEY_FETCH', 'Demander la cle API en jeu au demarrage'],
-  ['DISCORD_MESSAGE_CONTENT', 'Intent Message Content (texte dans les transcripts)'],
-  ['DONUT_MOCK', 'Faux soldes de developpement'],
+  ['REFUND_ENABLED', 'Rembourser le paiement de verification', ''],
+  ['BALANCE_POLL', 'Relever les soldes en jeu', '/balance, pour le classement'],
+  ['DONUT_KEY_FETCH', 'Demander la cle API en jeu', 'au demarrage du bot'],
+  ['DISCORD_MESSAGE_CONTENT', 'Intent Message Content', 'a cocher aussi dans le portail dev'],
+  ['DONUT_MOCK', 'Faux soldes de developpement', 'jamais en prod'],
 ];
 
-async function menuInterrupteurs() {
+async function ecranInterrupteurs() {
   for (;;) {
     const txt = await texteEnv();
-    console.log(`\n${G}Interrupteurs${N}`);
-    INTERRUPTEURS.forEach(([cle, nom], i) => {
+    const items = INTERRUPTEURS.map(([cle, nom, note]) => {
       const on = lire(txt, cle) === 'true';
-      const etat = on ? `${V}[on] ${N}` : `${D}[off]${N}`;
-      const alerte = cle === 'DONUT_MOCK' && on ? `  ${R}de faux soldes seraient publies${N}` : '';
-      const alerte2 = cle === 'DISCORD_MESSAGE_CONTENT' && !on ? `  ${D}a cocher aussi dans le portail dev${N}` : '';
-      console.log(`  ${i + 1}. ${etat} ${nom}${alerte}${alerte2}`);
+      const danger = cle === 'DONUT_MOCK' && on;
+      return {
+        cle,
+        libelle: nom,
+        valeur: on ? `${danger ? ROUGE : VERT}on${RESET}` : `${PALE}off${RESET}`,
+        note: danger ? `${ROUGE}de faux soldes seraient publies${RESET}` : note,
+        etat: on ? (danger ? 'ko' : 'ok') : 'off',
+      };
     });
     const source = lire(txt, 'PAYMENT_SOURCE');
-    console.log(`  ${INTERRUPTEURS.length + 1}. ${source === 'jsonl' ? `${V}[jsonl]${N}` : `${J}[mock]${N} `} Source des paiements`);
-    console.log(`  0. Retour`);
-    const c = (await demander('\n> ')).trim();
-    if (c === '0' || c === '') return;
-    const i = Number(c) - 1;
-    if (INTERRUPTEURS[i]) {
-      const [cle] = INTERRUPTEURS[i];
-      await poser(cle, lire(txt, cle) === 'true' ? 'false' : 'true');
-    } else if (Number(c) === INTERRUPTEURS.length + 1) {
-      await poser('PAYMENT_SOURCE', source === 'jsonl' ? 'mock' : 'jsonl');
-    }
+    items.push({ separateur: '' });
+    items.push({
+      cle: 'PAYMENT_SOURCE',
+      libelle: 'Source des paiements',
+      valeur: source === 'jsonl' ? `${VERT}jsonl${RESET}` : `${JAUNE}mock${RESET}`,
+      note: source === 'jsonl' ? 'le bot en jeu ecrit le fichier' : 'injection a la main, dev seulement',
+      etat: source === 'jsonl' ? 'ok' : 'tiede',
+    });
+
+    const c = await menu({
+      titre: '  INTERRUPTEURS',
+      sous: 'Entree bascule la ligne',
+      items,
+      aide: '↑↓ naviguer   ↵ basculer   q revenir',
+    });
+    if (c === null) return;
+    if (c === 'PAYMENT_SOURCE') await poser('PAYMENT_SOURCE', source === 'jsonl' ? 'mock' : 'jsonl');
+    else await poser(c, lire(txt, c) === 'true' ? 'false' : 'true');
   }
 }
 
 const NOMBRES = [
-  ['LINK_TTL_MINUTES', 'Validite d un challenge, en minutes'],
-  ['LINK_AMOUNT_MIN', 'Montant minimum tire'],
-  ['LINK_AMOUNT_MAX', 'Montant maximum tire'],
-  ['REFUND_DELAY_MIN_S', 'Delai avant remboursement, min (s)'],
-  ['REFUND_DELAY_MAX_S', 'Delai avant remboursement, max (s)'],
-  ['REFUND_DAILY_MAX', 'Total rembourse par jour, garde-fou'],
-  ['BALTOP_CYCLE_MINUTES', 'Duree d un tour de classement (min)'],
-  ['BALANCE_INTERVAL_S', 'Espacement entre deux /balance (s)'],
-  ['BALANCE_CYCLE_MINUTES', 'Duree d un releve complet (min)'],
+  ['LINK_TTL_MINUTES', 'Validite d un challenge', 'minutes'],
+  ['LINK_AMOUNT_MIN', 'Montant minimum tire', ''],
+  ['LINK_AMOUNT_MAX', 'Montant maximum tire', ''],
+  ['REFUND_DELAY_MIN_S', 'Delai avant remboursement, min', 'secondes'],
+  ['REFUND_DELAY_MAX_S', 'Delai avant remboursement, max', 'secondes'],
+  ['REFUND_DAILY_MAX', 'Total rembourse par jour', 'garde-fou'],
+  ['BALTOP_CYCLE_MINUTES', 'Tour de classement complet', 'minutes'],
+  ['BALANCE_INTERVAL_S', 'Espacement entre deux /balance', 'secondes'],
+  ['BALANCE_CYCLE_MINUTES', 'Releve de tous les soldes', 'minutes'],
 ];
 
-async function menuNombres() {
+async function ecranNombres() {
   for (;;) {
     const txt = await texteEnv();
-    console.log(`\n${G}Valeurs${N}`);
-    NOMBRES.forEach(([cle, nom], i) => {
-      console.log(`  ${String(i + 1).padStart(2)}. ${nom.padEnd(40)} ${lire(txt, cle) || vide}`);
+    const c = await menu({
+      titre: '  VALEURS',
+      sous: 'delais, montants, cycles',
+      items: NOMBRES.map(([cle, nom, unite]) => ({
+        cle, libelle: nom, valeur: val(lire(txt, cle)), note: unite,
+      })),
     });
-    console.log(`   0. Retour`);
-    const c = (await demander('\n> ')).trim();
-    if (c === '0' || c === '') return;
-    const e = NOMBRES[Number(c) - 1];
-    if (e) await saisir(e[0], e[1]);
+    if (c === null) return;
+    const e = NOMBRES.find((x) => x[0] === c);
+    await editer(c, e[1], e[2]);
   }
 }
 
 // ----------------------------------------------------------------- communs
-async function saisir(cle, question, secret = false) {
+async function editer(cle, libelle, aide = '', secret = false) {
   const actuel = lire(await texteEnv(), cle);
-  const vu = secret ? masque(actuel) : actuel;
-  const r = (await demander(`\n${question}\n${D}actuel : ${vu || 'vide'}${N}\nNouvelle valeur (Entree = garder, "-" = vider) : `)).trim();
-  if (!r) return;
-  await poser(cle, r === '-' ? '' : r);
+  const r = await saisie(libelle, actuel, { secret, aide: `${aide}${aide ? '   ' : ''}Entree = garder, « - » = vider` });
+  if (r !== undefined) await poser(cle, r);
 }
 
 function lancer(cmd, args) {
@@ -318,50 +368,79 @@ async function recharger() {
   }
 }
 
-// -------------------------------------------------------------------- main
+async function redemarrer() {
+  for (const app of ['fr-discord', 'fr-ingame']) {
+    try {
+      await run('pm2', ['describe', app]);
+      await run('pm2', ['delete', app]);
+      await run('pm2', ['start', 'ecosystem.config.cjs', '--only', app]);
+      console.log(`  ${VERT}●${RESET} ${app} redemarre`);
+    } catch {
+      console.log(`  ${PALE}○ ${app} n est pas gere par pm2${RESET}`);
+    }
+  }
+}
+
+// -------------------------------------------------------------------- boucle
 await recharger();
 
 for (;;) {
   const txt = await texteEnv();
-  const pret = ['DISCORD_TOKEN', 'DISCORD_GUILD_ID', 'MC_LINK_ACCOUNT'].every((k) => lire(txt, k));
-  console.log(`\n${G}Configuration du bot DonutSMP FR${N}`);
-  console.log(`${D}${process.cwd()}${N}`);
-  console.log(pret ? `${V}  configuration minimale complete${N}` : `${J}  il manque le token, le serveur ou le compte en jeu${N}`);
-  console.log(`\n  1. Discord            token, serveur, roles, salons`);
-  console.log(`  2. Administrateurs    qui a acces aux commandes staff`);
-  console.log(`  3. Compte Minecraft   pseudo, Microsoft, cle API`);
-  console.log(`  4. Interrupteurs      remboursements, releves, mock`);
-  console.log(`  5. Valeurs            delais, montants, cycles`);
-  console.log(`  6. Diagnostic         relance le doctor`);
-  console.log(`  0. Quitter`);
+  const aToken = Boolean(lire(txt, 'DISCORD_TOKEN'));
+  const aServeur = Boolean(lire(txt, 'DISCORD_GUILD_ID'));
+  const aCompte = Boolean(lire(txt, 'MC_LINK_ACCOUNT'));
+  const pret = aToken && aServeur && aCompte;
+  const admins = Boolean(lire(txt, 'ADMIN_ROLE_ID') || lire(txt, 'ADMIN_USER_IDS'));
 
-  const c = (await demander('\n> ')).trim();
-  if (c === '0' || c === '') break;
-  if (c === '1') await menuDiscord();
-  else if (c === '2') await menuAdmin();
-  else if (c === '3') await menuMinecraft();
-  else if (c === '4') await menuInterrupteurs();
-  else if (c === '5') await menuNombres();
-  else if (c === '6') { rl.pause(); await lancer(process.execPath, ['scripts/doctor.js']); rl.resume(); }
+  const c = await menu({
+    titre: '  DONUTSMP FR  ·  configuration',
+    sous: process.cwd(),
+    entete: pret
+      ? `\n  ${VERT}●${RESET} ${PALE}token, serveur et compte en jeu sont poses${RESET}`
+      : `\n  ${JAUNE}●${RESET} ${PALE}il manque ${[!aToken && 'le token', !aServeur && 'le serveur', !aCompte && 'le compte en jeu'].filter(Boolean).join(', ')}${RESET}`,
+    items: [
+      { cle: 'discord', libelle: 'Discord', note: 'token, serveur, roles, salons', etat: aToken && aServeur ? 'ok' : 'ko' },
+      { cle: 'admin', libelle: 'Administrateurs', note: 'acces aux commandes staff', etat: admins ? 'ok' : 'off' },
+      { cle: 'mc', libelle: 'Compte Minecraft', note: 'pseudo, Microsoft, cle API', etat: aCompte ? 'ok' : 'ko' },
+      { cle: 'switch', libelle: 'Interrupteurs', note: 'remboursements, releves, mock' },
+      { cle: 'nombres', libelle: 'Valeurs', note: 'delais, montants, cycles' },
+      { separateur: '' },
+      { cle: 'doctor', libelle: 'Diagnostic', note: 'relance le doctor' },
+      { cle: 'quitter', libelle: 'Quitter', note: modifiees.size ? `${modifiees.size} reglage(s) modifie(s)` : '' },
+    ],
+    aide: '↑↓ naviguer   ↵ ouvrir   1-9 acces direct   q quitter',
+  });
+
+  if (c === null || c === 'quitter') break;
+  if (c === 'discord') await ecranDiscord();
+  else if (c === 'admin') await ecranAdmin();
+  else if (c === 'mc') await ecranMinecraft();
+  else if (c === 'switch') await ecranInterrupteurs();
+  else if (c === 'nombres') await ecranNombres();
+  else if (c === 'doctor') {
+    effacer();
+    banniere('  DIAGNOSTIC', 'rien n est modifie');
+    console.log('');
+    await lancer(process.execPath, ['scripts/doctor.js']);
+    await pause();
+  }
 }
 
+effacer();
+banniere('  DONUTSMP FR  ·  configuration');
 if (modifiees.size) {
-  console.log(`\n${G}${modifiees.size} reglage(s) modifie(s)${N} : ${[...modifiees].join(', ')}`);
-  const r = ferme ? 'n' : (await demander('Redemarrer les process maintenant ? [O/n] ')).trim();
-  if (!ferme) rl.close();
-  if (ferme) console.log('Entree fermee : applique avec  donut restart');
-  if (!/^n/i.test(r)) {
-    // delete + start : un pm2 restart ne relit ni ecosystem.config.cjs ni le .env.
-    for (const app of ['fr-discord', 'fr-ingame']) {
-      try {
-        await run('pm2', ['describe', app]);
-        await run('pm2', ['delete', app]);
-        await run('pm2', ['start', 'ecosystem.config.cjs', '--only', app]);
-        console.log(`  ${V}${app} redemarre${N}`);
-      } catch { console.log(`  ${D}${app} non gere par pm2, rien a faire${N}`); }
-    }
+  console.log(`\n  ${GRAS}${modifiees.size} reglage(s) modifie(s)${RESET}  ${PALE}${[...modifiees].join(', ')}${RESET}\n`);
+  if (entreeFermee()) {
+    console.log(`  ${PALE}Entree fermee : applique avec${RESET} ${BLEU}donut restart${RESET}\n`);
+  } else if (await confirmer('Redemarrer les process maintenant ?')) {
+    console.log('');
+    await redemarrer();
+    console.log('');
+  } else {
+    console.log(`\n  ${PALE}A appliquer plus tard avec${RESET} ${BLEU}donut restart${RESET}\n`);
   }
 } else {
-  console.log(`\n${D}Rien de modifie.${N}`);
-  if (!ferme) rl.close();
+  console.log(`\n  ${PALE}Rien de modifie.${RESET}\n`);
 }
+fermer();
+process.exit(0);

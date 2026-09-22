@@ -89,13 +89,20 @@ sudo ln -sf "$PWD/bin/donut" /usr/local/bin/donut
 
 ## Le menu `donut config`
 
-Tout ce qui se regle sans ouvrir le `.env` a la main. Les roles et les salons
-sont **lus sur ton serveur et proposes dans une liste numerotee** : plus d'id a
-copier coller, plus de faute de frappe qui casse une fonction en silence.
+Tout ce qui se regle sans ouvrir le `.env` a la main. Fleches pour naviguer,
+Entree pour ouvrir, `q` pour revenir, `1` a `9` en acces direct. Les roles et
+les salons sont **lus sur ton serveur et proposes dans une liste** : plus d'id
+a copier coller, plus de faute de frappe qui casse une fonction en silence.
+Chaque ligne porte une pastille : vert pose, gris vide, jaune a surveiller,
+rouge cassé.
 
 ```
 donut config
 ```
+
+Sans clavier (entree redirigee, script, CI) le meme menu s'affiche numerote et
+se pilote au chiffre : un menu sans terminal doit se lire et s'automatiser, pas
+planter.
 
 ```
   1. Discord            token, serveur, roles, salons
