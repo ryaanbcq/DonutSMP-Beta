@@ -132,8 +132,14 @@ case "$cmd" in
     ;;
 
   logs|log)
-    cible="$(resoudre "${1:-all}" | tr '\n' ' ')"
-    [ $# -gt 0 ] && shift || true
+    # `donut logs 50` = les 50 dernieres lignes des deux process : un nombre
+    # seul est un nombre de lignes, pas un nom de process.
+    if [ $# -gt 0 ] && printf '%s' "$1" | grep -qE '^[0-9]+$'; then
+      cible="$(resoudre all | tr '\n' ' ')"
+    else
+      cible="$(resoudre "${1:-all}" | tr '\n' ' ')"
+      [ $# -gt 0 ] && shift || true
+    fi
     lignes="${1:-}"
     if [ -n "$lignes" ]; then pm2 logs $cible --lines "$lignes" --nostream
     else pm2 logs $cible; fi

@@ -43,9 +43,6 @@ export function creerSuperviseur({
       vuA = maintenant();
     },
 
-    /** Signe de vie sans reconnexion (le bot est toujours la). */
-    battement() { vuA = maintenant(); },
-
     /**
      * Programme une relance. Rend le delai retenu, ou null si la demande est
      * ignoree (relance deja prevue, ou generation perimee).

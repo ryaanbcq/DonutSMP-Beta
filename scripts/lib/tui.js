@@ -173,43 +173,90 @@ async function menuNumerote({ titre, sous, items, entete }) {
 }
 
 // ------------------------------------------------------------------- saisies
+// PIEGE VECU : apres un menu, stdin est en mode brut. Forcer setRawMode(false)
+// avant de poser une question coupe le flux pour de bon, plus une seule touche
+// n arrive et le programme reste pendu sur la question. readline veut gerer le
+// terminal lui meme : on lui laisse le mode brut et on ferme son interface
+// apres chaque reponse, sinon elle continue a lire les fleches du menu suivant.
 let rl = null;
 let ferme = false;
-function interface_() {
-  if (!rl) {
-    rl = createInterface({ input: stdin, output: stdout });
-    rl.on('close', () => { ferme = true; });
-  }
+
+function interfacePartagee() {
+  if (!rl) rl = createInterface({ input: stdin, output: stdout });
   return rl;
+}
+
+// Sans terminal, tout le script peut arriver d un coup : readline emet alors
+// ses lignes PUIS se ferme dans la foulee. Un simple drapeau « ferme » sautait
+// toutes les questions suivantes alors que les reponses etaient deja la. On
+// consomme les lignes une par une avec l iterateur, qui ne dit « fini » qu au
+// vrai bout du flux.
+let lignes = null;
+async function ligneSuivante() {
+  if (!lignes) lignes = interfacePartagee()[Symbol.asyncIterator]();
+  const { value, done } = await lignes.next();
+  if (done) { ferme = true; return ''; }
+  return value;
 }
 
 export const entreeFermee = () => ferme;
 
+/**
+ * Ce qui a ete tape avant que la question soit posee. Un terminal livre une
+ * rafale (frappe rapide, coller) en un seul bloc : ces touches ont deja ete
+ * lues par le decodeur, readline ne les verra jamais. Les jeter perdait un
+ * token colle juste apres avoir choisi la ligne.
+ */
+function texteEnAttente() {
+  let texte = '';
+  while (attente.length) {
+    const [car, k] = attente.shift();
+    const nom = k?.name;
+    if (nom === 'return' || nom === 'enter') return { texte, complet: true };
+    if (nom === 'backspace') { texte = texte.slice(0, -1); continue; }
+    if (k?.ctrl || k?.meta) continue;
+    if (typeof car === 'string' && car.length === 1 && car >= ' ') texte += car;
+  }
+  return { texte, complet: false };
+}
+
 export async function demander(question) {
   if (ferme) return '';
-  const it = interface_();
-  if (tty) {
-    // readline lit le flux lui meme : on lui rend la main et on oublie les
-    // touches en attente, qui appartenaient a l ecran precedent.
-    abonne = null;
-    attente.length = 0;
-    stdin.setRawMode(false);
-    stdin.resume();
+  abonne = null;
+  const avance = tty ? texteEnAttente() : { texte: '', complet: false };
+  if (avance.complet) {
+    // La ligne entiere etait deja tapee : on l affiche et on repond.
+    console.log(`${question}${avance.texte}`);
+    return avance.texte;
   }
-  // Une question posee a un flux deja termine ne se resout jamais : on court
-  // aussi apres la fermeture, sinon le programme reste pendu sur un await.
+  if (!tty) {
+    stdout.write(question);
+    const r = await ligneSuivante();
+    if (r) stdout.write(`${r}\n`);
+    return r;
+  }
+  const it = createInterface({ input: stdin, output: stdout });
+  stdin.resume();
+
   return new Promise((resolve) => {
     let repondu = false;
-    const surFermeture = () => {
+    const fermeture = () => {
       if (repondu) return;
       repondu = true;
-      ferme = true;
+      ferme = true;      // stdin est mort : plus personne ne repondra
       resolve('');
     };
-    it.once('close', surFermeture);
-    it.question(question).then(
-      (r) => { repondu = true; it.off('close', surFermeture); resolve(r); },
-      () => surFermeture(),
+    it.once('close', fermeture);
+    const promesse = it.question(question);
+    if (avance.texte) it.write(avance.texte);   // la rafale deja tapee, rejouee
+    promesse.then(
+      (r) => {
+        repondu = true;
+        it.off('close', fermeture);
+        it.close();
+        resolve(r);
+      },
+      () => fermeture(),
     );
   });
 }
@@ -235,6 +282,6 @@ export async function pause(texte = 'Entree pour continuer') {
   await demander(`\n  ${PALE}${texte}${RESET} `);
 }
 
-export function fermer() { if (rl && !ferme) rl.close(); }
+export function fermer() { if (rl && !ferme) rl.close(); rl = null; }
 
 export const masquer = (v) => (v ? (v.length > 12 ? `${v.slice(0, 6)}${PALE}...${RESET}${v.slice(-4)}` : '******') : '');

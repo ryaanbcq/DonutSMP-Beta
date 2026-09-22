@@ -122,7 +122,10 @@ function connect() {
   // emettre des evenements, ils ne doivent plus rien declencher.
   const generation = superviseur.nouvelleGeneration();
   console.log(`[mc] connexion a ${cfg.host}:${cfg.port} en ${cfg.auth}`);
-  bot = mineflayer.createBot({
+  // `ceBot` est CETTE connexion. Les handlers ne doivent jamais passer par la
+  // variable partagee : elle vaut null des qu on a rendu la main, et elle
+  // pointe la connexion suivante une fois qu on a relance.
+  const ceBot = mineflayer.createBot({
     host: cfg.host,
     port: cfg.port,
     username: cfg.username,
@@ -138,6 +141,7 @@ function connect() {
       console.warn('[mc] ou lance : node scripts/auth.js --force');
     },
   });
+  bot = ceBot;
 
   // Sonde brute : DEBUG_PACKETS=true liste les paquets recus, pour decouvrir
   // par quel canal une commande repond.
@@ -151,14 +155,14 @@ function connect() {
       'entity_equipment', 'set_slot', 'ping', 'bundle_delimiter', 'chunk_biomes',
       'damage_event', 'entity_status', 'update_attributes', 'teams', 'scoreboard_score',
     ]);
-    bot._client.on('packet', (data, meta) => {
+    ceBot._client.on('packet', (data, meta) => {
       if (bruyants.has(meta.name)) return;
       console.log(`[pkt] ${meta.name} ${JSON.stringify(data).slice(0, 200)}`);
     });
   }
 
   // Sonde : DEBUG_WINDOW=true vide le contenu de toute interface qui s ouvre.
-  bot.on('windowOpen', (fenetre) => {
+  ceBot.on('windowOpen', (fenetre) => {
     if (process.env.DEBUG_WINDOW !== 'true') return;
     console.log(`[gui] titre=${JSON.stringify(fenetre.title)} slots=${fenetre.slots.length}`);
     fenetre.slots.forEach((item, i) => {
@@ -170,19 +174,19 @@ function connect() {
     });
   });
 
-  bot._client.on('show_dialog', traiterDialogue);
+  ceBot._client.on('show_dialog', traiterDialogue);
 
-  bot.once('spawn', async () => {
+  ceBot.once('spawn', async () => {
     superviseur.connecte();
-    console.log(`[mc] connecte en tant que ${bot.username}`);
-    if (cfg.expectedName && bot.username.toLowerCase() !== cfg.expectedName.toLowerCase()) {
-      console.warn(`[mc] ATTENTION : connecte en ${bot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
+    console.log(`[mc] connecte en tant que ${ceBot.username}`);
+    if (cfg.expectedName && ceBot.username.toLowerCase() !== cfg.expectedName.toLowerCase()) {
+      console.warn(`[mc] ATTENTION : connecte en ${ceBot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
       console.warn('[mc] les joueurs paieront le mauvais compte, corrige le .env.');
     }
     await saveStatus();
   });
 
-  bot.on('message', (msg) => {
+  ceBot.on('message', (msg) => {
     const line = msg.toString();
 
     // Mise au point : DEBUG_CHAT=true loggue le chat, en masquant toute suite
@@ -223,18 +227,22 @@ function connect() {
     }
   });
 
-  bot.on('kicked', (reason) => {
+  ceBot.on('kicked', (reason) => {
     console.warn(`[mc] kick : ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
     saveStatus({ online: false }).catch(() => {});
   });
-  bot.on('error', (err) => {
+  ceBot.on('error', (err) => {
     console.error(`[mc] erreur : ${err.message}`);
     // Une erreur AVANT d etre en jeu (ping de detection de version, DNS, TCP)
     // n est jamais suivie d un `end` : sans cette relance le bot ne repart
     // plus du tout. Vecu le 15/09, sept jours hors ligne.
-    if (!bot?.player) rendreLaMain(`erreur avant connexion (${err.message})`, generation);
+    if (ceBot.player) return;
+    // Couper pour de bon : une connexion laissee en vol peut arriver en jeu
+    // apres qu on a relance, et deux clients sur le meme compte se chassent.
+    try { ceBot.end('erreur avant connexion'); } catch { /* deja morte */ }
+    rendreLaMain(`erreur avant connexion (${err.message})`, generation);
   });
-  bot.on('end', (reason) => rendreLaMain(`deconnecte (${reason})`, generation));
+  ceBot.on('end', (reason) => rendreLaMain(`deconnecte (${reason})`, generation));
 }
 
 /** Coupe la connexion courante et laisse le superviseur programmer la suite. */
