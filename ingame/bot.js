@@ -179,17 +179,6 @@ function connect() {
       console.warn(`[mc] ATTENTION : connecte en ${bot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
       console.warn('[mc] les joueurs paieront le mauvais compte, corrige le .env.');
     }
-    if (!process.env.DONUT_API_KEY && (process.env.DONUT_KEY_FETCH ?? 'true') !== 'false') {
-      setTimeout(() => {
-        cleDemandee = true;
-        console.log('[api] demande de la cle avec /api');
-        bot.chat('/api');
-        // On arrete d ecouter au bout d une minute pour ne pas prendre
-        // n importe quelle ligne de chat pour une cle.
-        setTimeout(() => { cleDemandee = false; }, 60_000);
-      }, 8_000);
-    }
-
     await saveStatus();
   });
 
@@ -216,7 +205,6 @@ function connect() {
     }
 
     if (traiterReponseSolde(line)) return;
-    if (capturerCle(line)) return;
 
     // Confirmation d un remboursement parti.
     const envoye = parsePaymentSent(line);
@@ -447,46 +435,6 @@ setInterval(async () => {
     await new Promise((r) => setTimeout(r, 600));
   }
 }, 2_000).unref();
-
-// ---------------------------------------------------------------------------
-// Cle API DonutSMP : elle se recupere en jeu avec /api. Le bot la demande une
-// fois au demarrage si elle manque, l ecrit dans .env et ne la loggue JAMAIS
-// en clair.
-// ---------------------------------------------------------------------------
-
-const CLE = /\b([A-Za-z0-9_\-]{24,}(?:\.[A-Za-z0-9_\-]{8,}){0,2})\b/;
-let cleDemandee = false;
-
-const masque = (k) => `${k.slice(0, 4)}...${k.slice(-4)} (${k.length} car.)`;
-
-async function ecrireCle(cle) {
-  let contenu;
-  try { contenu = await readFile('.env', 'utf8'); } catch { return false; }
-  const ligne = `DONUT_API_KEY=${cle}`;
-  contenu = /^DONUT_API_KEY=.*$/m.test(contenu)
-    ? contenu.replace(/^DONUT_API_KEY=.*$/m, ligne)
-    : `${contenu.trimEnd()}\n${ligne}\n`;
-  await writeFile('.env', contenu, { mode: 0o600 });
-  return true;
-}
-
-function capturerCle(line) {
-  if (!cleDemandee || process.env.DONUT_API_KEY) return false;
-  if (!/\bapi\b|\bkey\b|\btoken\b/i.test(line)) return false;
-  const m = line.match(CLE);
-  if (!m) {
-    console.log('[api] reponse sans cle reconnue, ajuster le motif si besoin');
-    return false;
-  }
-  const cle = m[1];
-  process.env.DONUT_API_KEY = cle;
-  ecrireCle(cle)
-    .then((ok) => console.log(ok
-      ? `[api] cle recuperee et ecrite dans .env : ${masque(cle)} (redemarre le bot Discord)`
-      : `[api] cle recuperee mais .env introuvable : ${masque(cle)}`))
-    .catch((e) => console.error('[api] ecriture impossible :', e.message));
-  return true;
-}
 
 // ---------------------------------------------------------------------------
 // Remboursement : le micro-paiement n est qu une preuve, on le rend au joueur

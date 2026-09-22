@@ -124,8 +124,8 @@ planter.
   prismarine (`valide`, `expire`, `absent`) et refaire l'authentification sur
   place, hote et version du serveur, cle API DonutSMP.
 - **Interrupteurs** : remboursement des micro-paiements, releve des soldes,
-  demande de cle en jeu, intent Message Content, faux soldes de dev, source des
-  paiements (`jsonl` ou `mock`).
+  intent Message Content, faux soldes de dev, source des paiements (`jsonl` ou
+  `mock`).
 
 Rien n'est ecrit tant qu'une valeur n'est pas validee, le `.env` garde ses
 commentaires, et a la sortie le menu propose de redemarrer les process.
@@ -188,7 +188,7 @@ Node 22.5+ requis (le bot utilise `node:sqlite`, aucune dependance native).
 | `LINK_AMOUNT_MIN` / `MAX` | Bornes du montant de verification (1 a 1000 par defaut). |
 | `LINK_TTL_MINUTES` | Duree de validite d'un challenge. |
 | `VERIFIED_ROLE_ID` | Role donne automatiquement au membre verifie. |
-| `DONUT_API_KEY` | Cle de l'API DonutSMP (`/api` en jeu). Vide = stats de test. |
+| `DONUT_API_KEY` | Cle de l'API DonutSMP, posee a la main. Vide = stats de test. |
 
 ## Le bot en jeu
 

@@ -94,7 +94,7 @@ let envBrut = '';
     ko('MC_LINK_ACCOUNT est le compte du casino', 'prendre un compte dedie');
   }
   if (process.env.DONUT_MOCK === 'true') ko('DONUT_MOCK=true', 'de faux soldes seraient publies en prod');
-  if (!process.env.DONUT_API_KEY) warn('DONUT_API_KEY vide', 'le bot la demande en jeu avec /api si DONUT_KEY_FETCH=true');
+  if (!process.env.DONUT_API_KEY) warn('DONUT_API_KEY vide', '/baltop et /stats ne peuvent pas interroger DonutSMP');
   if (process.env.BYPASS_ROLE_ID) warn('BYPASS_ROLE_ID pose', 'role beta qui saute le /link, a vider en prod');
 }
 

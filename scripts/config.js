@@ -254,7 +254,7 @@ async function ecranMinecraft() {
         { cle: 'auth', libelle: 'Jeton prismarine', valeur: jeton, note: dossier, etat: etatJeton },
         { separateur: '' },
         { cle: 'serveur', libelle: 'Serveur', valeur: `${OR}${lire(txt, 'MC_HOST')}:${lire(txt, 'MC_PORT')}${RESET}`, note: `version ${lire(txt, 'MC_VERSION') || 'auto'}` },
-        { cle: 'api', libelle: 'Cle API DonutSMP', valeur: masquer(lire(txt, 'DONUT_API_KEY')) || vide, note: '/api en jeu', etat: lire(txt, 'DONUT_API_KEY') ? 'ok' : 'off' },
+        { cle: 'api', libelle: 'Cle API DonutSMP', valeur: masquer(lire(txt, 'DONUT_API_KEY')) || vide, note: 'saisie a la main', etat: lire(txt, 'DONUT_API_KEY') ? 'ok' : 'off' },
       ],
     });
     if (c === null) return;
@@ -270,14 +270,13 @@ async function ecranMinecraft() {
       await editer('MC_HOST', 'Hote du serveur');
       await editer('MC_PORT', 'Port');
       await editer('MC_VERSION', 'Version', 'vide = detection automatique');
-    } else if (c === 'api') await editer('DONUT_API_KEY', 'Cle API DonutSMP', '/api en jeu', true);
+    } else if (c === 'api') await editer('DONUT_API_KEY', 'Cle API DonutSMP', 'sans elle, pas de /baltop ni de /stats', true);
   }
 }
 
 const INTERRUPTEURS = [
   ['REFUND_ENABLED', 'Rembourser le paiement de verification', ''],
   ['BALANCE_POLL', 'Relever les soldes en jeu', '/balance, pour le classement'],
-  ['DONUT_KEY_FETCH', 'Demander la cle API en jeu', 'au demarrage du bot'],
   ['DISCORD_MESSAGE_CONTENT', 'Intent Message Content', 'a cocher aussi dans le portail dev'],
   ['DONUT_MOCK', 'Faux soldes de developpement', 'jamais en prod'],
 ];
