@@ -2,6 +2,7 @@ import { db } from '../db.js';
 import { presence } from './presence.js';
 import { embed, FR } from '../lib/brand.js';
 import { config } from '../config.js';
+import { journal } from '../ops/journal.js';
 
 // Un joueur peut avoir son montant en main au moment ou le bot en jeu tombe.
 // Refuser les nouveaux /link ne le protege pas : lui a deja l instruction de
@@ -35,6 +36,12 @@ export function surveillerPresence(client, { intervalMs = 30_000 } = {}) {
 
     if (!etat.enLigne) {
       console.warn(`[presence] bot en jeu hors ligne (${etat.raison}), /link suspendu`);
+      journal({
+        niveau: 'warn',
+        titre: 'Verifications suspendues',
+        texte: `Le bot en jeu n est plus la (${etat.raison}) : les nouveaux /link sont refuses`
+          + ' et les paiements en cours ne seraient pas vus.',
+      });
       const n = await prevenir(client, (c) => embed('⚠️・PAIEMENT SUSPENDU', {
         couleur: FR.jaune,
         description:
@@ -49,6 +56,7 @@ export function surveillerPresence(client, { intervalMs = 30_000 } = {}) {
     }
 
     console.log('[presence] bot en jeu de retour, /link rouvert');
+    journal({ niveau: 'ok', titre: 'Verifications rouvertes', texte: 'Le bot en jeu est revenu.' });
     await prevenir(client, (c) => embed('✅・PAIEMENT POSSIBLE', {
       couleur: FR.vert,
       description:

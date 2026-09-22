@@ -4,6 +4,7 @@ import {
   AttachmentBuilder,
 } from 'discord.js';
 import { store } from '../db.js';
+import { journal } from '../ops/journal.js';
 import { settings, ouSeLier } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { etoiles, barre, ligneScore } from './trust.js';
@@ -342,6 +343,19 @@ async function publier(interaction, b) {
   const auteur = store.getLink(interaction.user.id)?.mc_name ?? interaction.user.tag;
   if (scam) prevenirSignale(interaction, cible, auteur, b.message, fil).catch((e) => console.warn('[vouch] MP :', e.message));
   console.log(`[vouch] ${auteur} ${scam ? 'signale' : `vouch ${b.etoiles}★`} ${cible.mc_name} (score ${t.score})`);
+  journal(scam
+    ? {
+      niveau: 'warn',
+      titre: 'Signalement',
+      texte: `**${auteur}** signale **${cible.mc_name}**.`,
+      champs: { Score: `${t.score}/100`, Auteur: auteur },
+    }
+    : {
+      niveau: 'info',
+      titre: 'Nouvel avis',
+      texte: `**${auteur}** note **${cible.mc_name}** ${b.etoiles}★.`,
+      champs: { Score: `${t.score}/100` },
+    });
   return interaction.editReply({
     embeds: [embed(scam ? '⚠️・SIGNALEMENT PUBLIÉ' : '✅・VOUCH PUBLIÉ', {
       couleur: scam ? FR.rouge : FR.vert,

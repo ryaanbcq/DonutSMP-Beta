@@ -96,6 +96,7 @@ let envBrut = '';
   if (process.env.DONUT_MOCK === 'true') ko('DONUT_MOCK=true', 'de faux soldes seraient publies en prod');
   if (!process.env.DONUT_API_KEY) warn('DONUT_API_KEY vide', '/baltop et /stats ne peuvent pas interroger DonutSMP');
   if (process.env.BYPASS_ROLE_ID) warn('BYPASS_ROLE_ID pose', 'role beta qui saute le /link, a vider en prod');
+  if (!process.env.OPS_CHANNEL_ID) warn('OPS_CHANNEL_ID vide', 'aucun journal Discord : les pannes ne se voient que dans les logs');
 }
 
 // ----------------------------------------------------------------- discord
@@ -161,7 +162,7 @@ if (!token) {
       if (!process.env.ADMIN_ROLE_ID && !admins.length) warn('aucun admin configure', 'seuls les « Gerer le serveur » ont les commandes staff');
       sousLeBot(process.env.BALTOP_TOP_ROLE_ID, 'BALTOP_TOP_ROLE_ID');
 
-      for (const [cle, quoi] of [['LOG_CHANNEL_ID', 'salon de logs'], ['BALTOP_CHANNEL_ID', 'salon du classement'], ['LINK_CHANNEL_ID', 'salon de connexion']]) {
+      for (const [cle, quoi] of [['LOG_CHANNEL_ID', 'salon de logs'], ['BALTOP_CHANNEL_ID', 'salon du classement'], ['LINK_CHANNEL_ID', 'salon de connexion'], ['OPS_CHANNEL_ID', 'salon du journal']]) {
         const id = process.env[cle];
         if (!id) continue;
         try {

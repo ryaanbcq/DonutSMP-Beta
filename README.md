@@ -130,6 +130,31 @@ planter.
 Rien n'est ecrit tant qu'une valeur n'est pas validee, le `.env` garde ses
 commentaires, et a la sortie le menu propose de redemarrer les process.
 
+## Journal Discord
+
+Un salon staff (`OPS_CHANNEL_ID`, choisi dans `donut config`) recoit un embed par
+evenement, pour comprendre une panne sans ouvrir les logs :
+
+| Couleur | Ce qui arrive |
+|---|---|
+| Vert | bot Discord demarre, bot en jeu connecte, compte verifie, verifications rouvertes |
+| Bleu | nouvel avis |
+| Jaune | bot en jeu deconnecte (avec le delai avant la prochaine tentative), verifications suspendues, paiement sans verification, remboursement refuse, signalement |
+| Rouge | jeton Microsoft expire, mauvais compte en jeu, chien de garde declenche, remboursement abandonne, verification en conflit, commande en echec |
+
+Le bot en jeu n'a pas de client Discord : il ecrit ses evenements dans
+`data/events.jsonl` et le bot Discord les lit par offset, comme les paiements.
+Une panne du salon ne peut donc ni bloquer le bot ni lui faire perdre un
+evenement.
+
+Deux garde-fous : un evenement identique qui se repete en moins d'une minute
+n'est pas repose, le message existant affiche « N fois en moins d'une minute »
+(une boucle de reconnexion ne noie pas le salon), et **le code Microsoft n'est
+jamais poste** : qui le lit prend le compte. Le journal dit seulement de lancer
+`donut auth` sur la machine.
+
+Sans `OPS_CHANNEL_ID`, tout reste silencieux et rien d'autre ne change.
+
 ## Mise a jour
 
 ```bash

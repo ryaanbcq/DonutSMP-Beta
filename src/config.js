@@ -14,6 +14,8 @@ export const config = {
     // Beta : ce role passe le mur du /link et le delai de 24 h avant de noter.
     bypassRoleId: process.env.BYPASS_ROLE_ID ?? '',
     logChannelId: process.env.LOG_CHANNEL_ID ?? '',
+    // Salon staff du journal technique : liens, avis, pannes, erreurs.
+    opsChannelId: process.env.OPS_CHANNEL_ID ?? '',
     // Acces aux commandes staff, en plus de la permission « Gerer le serveur ».
     adminRoleId: process.env.ADMIN_ROLE_ID ?? '',
     adminUserIds: (process.env.ADMIN_USER_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
@@ -54,6 +56,7 @@ export const config = {
     priorityFile: process.env.BALANCE_PRIORITY_FILE ?? './data/balance-priority.txt',
     statsRequestFile: process.env.STATS_PRIORITY_FILE ?? './data/stats-priority.txt',
     statsFile: process.env.STATS_FILE ?? './data/stats.jsonl',
+    eventsFile: process.env.EVENTS_FILE ?? './data/events.jsonl',
   },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),

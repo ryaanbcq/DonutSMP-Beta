@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { config } from './config.js';
 import { store } from './db.js';
+import { demarrerJournal, journal } from './ops/journal.js';
 import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
@@ -51,6 +52,12 @@ client.commands = await loadCommands();
 
 client.once('clientReady', async (c) => {
   setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
+  await demarrerJournal(c);
+  journal({
+    niveau: 'ok',
+    titre: 'Bot Discord demarre',
+    texte: `${client.commands.size} commandes, ${store.countLinks()} comptes lies.`,
+  });
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
   console.log(`[link] compte receveur : ${config.mc.linkAccount}`);
@@ -119,6 +126,12 @@ client.on('interactionCreate', async (interaction) => {
     }
   } catch (err) {
     console.error(`[ui] echec pour ${qui} :`, err);
+    journal({
+      niveau: 'err',
+      titre: 'Commande en echec',
+      texte: `\`${err.message}\``,
+      champs: { Membre: qui, Action: interaction.commandName ?? interaction.customId ?? 'inconnue' },
+    });
     const payload = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
     if (interaction.isRepliable()) {
       if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
@@ -277,10 +290,23 @@ async function startWatcher(c) {
       image: challenge.mc_name,
       description: `Nouveau compte vérifié : <@${discordId}> → **${challenge.mc_name}**`,
     }).addFields({ name: 'Payé', value: shortMoney(payment.amount), inline: true }).setTimestamp());
+
+    journal({
+      niveau: 'ok',
+      titre: 'Compte verifie',
+      texte: `<@${discordId}> est lie a **${challenge.mc_name}**.`,
+      champs: { Paye: shortMoney(payment.amount) },
+    });
   });
 
   watcher.on('unmatched', ({ payment }) => {
     console.log(`[link] paiement sans challenge : ${payment.from} ${shortMoney(payment.amount)}`);
+    // Souvent un joueur qui s est trompe de montant : il attend son lien.
+    journal({
+      niveau: 'warn',
+      titre: 'Paiement sans verification',
+      texte: `**${payment.from}** a paye ${shortMoney(payment.amount)} sans montant correspondant.`,
+    });
   });
 
   watcher.on('conflict', async ({ challenge, payment }) => {
@@ -290,9 +316,19 @@ async function startWatcher(c) {
       description: `Vérification en conflit : **${challenge.mc_name}** a payé ${shortMoney(payment.amount)} `
         + 'mais le compte était déjà lié. À traiter à la main.',
     }).setTimestamp());
+
+    journal({
+      niveau: 'err',
+      titre: 'Verification en conflit',
+      texte: `**${challenge.mc_name}** a paye ${shortMoney(payment.amount)} mais le compte etait deja lie.`
+        + ' A traiter a la main.',
+    });
   });
 
-  watcher.on('error', (err) => console.error('[link] watcher :', err.message));
+  watcher.on('error', (err) => {
+    console.error('[link] watcher :', err.message);
+    journal({ niveau: 'err', titre: 'Lecture des paiements en echec', texte: `\`${err.message}\`` });
+  });
 
   await watcher.start();
   console.log(`[link] surveillance de ${config.payments.file}`);

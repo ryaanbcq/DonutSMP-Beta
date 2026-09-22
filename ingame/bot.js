@@ -7,6 +7,7 @@
 
 import mineflayer from 'mineflayer';
 import { creerSuperviseur } from './superviseur.js';
+import { note } from './journal.js';
 import { appendFile, writeFile, readFile, mkdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import 'dotenv/config';
@@ -137,6 +138,9 @@ function connect() {
     // plutot que de laisser le process attendre en silence.
     onMsaCode: (res) => {
       console.warn('[mc] jeton expire, reconnexion Microsoft demandee');
+      // Le code Microsoft n est jamais poste sur Discord : qui l a prend le compte.
+      note('err', 'Jeton Microsoft expire',
+        'Le bot ne peut plus se connecter a DonutSMP. Sur la machine : `donut auth`.');
       console.warn(`[mc] ouvre ${res.verification_uri} et saisis le code ${res.user_code}`);
       console.warn('[mc] ou lance : node scripts/auth.js --force');
     },
@@ -179,9 +183,13 @@ function connect() {
   ceBot.once('spawn', async () => {
     superviseur.connecte();
     console.log(`[mc] connecte en tant que ${ceBot.username}`);
+    note('ok', 'Bot en jeu connecte', `Connecte a ${cfg.host} en tant que **${ceBot.username}**.`);
     if (cfg.expectedName && ceBot.username.toLowerCase() !== cfg.expectedName.toLowerCase()) {
       console.warn(`[mc] ATTENTION : connecte en ${ceBot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
       console.warn('[mc] les joueurs paieront le mauvais compte, corrige le .env.');
+      note('err', 'Mauvais compte en jeu',
+        `Connecte en **${ceBot.username}** alors que les joueurs paient **${cfg.expectedName}**.`
+        + ' Les paiements de verification ne seront jamais vus.');
     }
     await saveStatus();
   });
@@ -250,12 +258,19 @@ function rendreLaMain(raison, generation) {
   if (!superviseur.courante(generation)) return;
   bot = null;
   saveStatus({ online: false }).catch(() => {});
-  superviseur.relancer(raison, generation);
+  const dans = superviseur.relancer(raison, generation);
+  if (dans !== null) {
+    note('warn', 'Bot en jeu deconnecte',
+      `${raison}. Nouvelle tentative dans ${Math.round(dans / 1000)} s.`
+      + ' Les paiements de verification ne sont plus vus pendant ce temps.');
+  }
 }
 
 // Le chien de garde : la ceinture quand aucun evenement n arrive.
 setInterval(() => {
   if (superviseur.chienDeGarde(Boolean(bot?.player))) {
+    note('err', 'Chien de garde declenche',
+      'Aucun evenement depuis trop longtemps et toujours pas en jeu : connexion relancee de force.');
     try { bot?.end?.('watchdog'); } catch { /* deja mort */ }
     bot = null;
   }
@@ -456,6 +471,8 @@ function planifierRemboursement(payment) {
   const { entry, skipped } = ledger.queue({ ...payment, receivedAt: Date.now() });
   if (skipped) {
     console.warn(`[refund] pas rendu a ${payment.from} (${payment.amount}) : ${skipped}`);
+    note('warn', 'Remboursement refuse',
+      `**${payment.from}** ne sera pas rembourse de ses $${payment.amount} : ${skipped}.`);
     return;
   }
   const dans = Math.round((entry.dueAt - Date.now()) / 1000);
@@ -495,6 +512,9 @@ setInterval(() => {
       const e = ledger.retryOrFail(enVol.id);
       if (e.status === 'failed') {
         console.error(`[refund] ABANDON : ${e.amount} a rendre a ${e.to} a la main`);
+        note('err', 'Remboursement abandonne',
+          `**${e.to}** attend toujours ses $${e.amount} apres ${e.attempts} essais.`
+          + ' A rendre a la main.', { Joueur: e.to, Montant: `$${e.amount}` });
       }
       ledger.save().catch(() => {});
     }
