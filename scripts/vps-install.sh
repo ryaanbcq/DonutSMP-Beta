@@ -104,6 +104,17 @@ if [ "$SANS_INGAME" -eq 0 ]; then
   fi
 fi
 
+etape "Commande donut"
+# Un lien dans le PATH, pour piloter le bot depuis n importe quel dossier.
+LIEN=/usr/local/bin/donut
+if [ -L "$LIEN" ] && [ "$(readlink "$LIEN")" = "$RACINE/bin/donut" ]; then
+  info "donut deja en place"
+elif $SUDO ln -sf "$RACINE/bin/donut" "$LIEN" 2>/dev/null; then
+  info "donut installe ($LIEN)"
+else
+  info "pas de droits sur $LIEN : utilise $RACINE/bin/donut"
+fi
+
 etape "Demarrage pm2"
 # Un seul --only par commande : deux dans la meme ligne et seul le dernier part.
 pm2 delete fr-discord >/dev/null 2>&1 || true

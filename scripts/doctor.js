@@ -209,8 +209,12 @@ titre('Donnees et bot en jeu');
     try {
       const s = JSON.parse(await readFile(statut, 'utf8'));
       const age = Math.round((Date.now() - (s.at ?? s.updatedAt ?? 0)) / 1000);
-      if (Number.isFinite(age) && age < 300) ok('bot en jeu vu recemment', `${age} s`);
-      else warn('statut du bot en jeu perime', `${age} s`);
+      if (!Number.isFinite(age) || age > 300) warn('statut du bot en jeu perime', `${age} s`);
+      else if (s.online) ok('bot en jeu connecte a DonutSMP', s.username ?? '');
+      // Le process peut tourner tout en ayant lache la connexion : dans cet
+      // etat plus personne n encaisse les paiements de link, donc plus aucun
+      // /link ne se termine. C est bloquant, pas cosmetique.
+      else ko('bot en jeu deconnecte de DonutSMP', 'les paiements de link ne sont plus vus : pm2 logs fr-ingame');
     } catch { warn('statut du bot en jeu illisible', statut); }
   } else {
     warn('bot en jeu jamais demarre', `pm2 start ecosystem.config.cjs --only fr-ingame`);

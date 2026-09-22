@@ -50,10 +50,46 @@ A la fin, `scripts/doctor.js` affiche l'etat de l'installation. Ce qui reste a
 remplir a la main dans `.env` : `VERIFIED_ROLE_ID`, `LOG_CHANNEL_ID` et les
 salons du classement, puisque ce sont des ids de ton serveur.
 
+## La commande `donut`
+
+`scripts/vps-install.sh` pose un lien dans `/usr/local/bin/donut`. Tout se
+pilote ensuite depuis n'importe quel dossier, sans se souvenir du chemin ni de
+la syntaxe pm2 :
+
+```
+donut setup              installe tout sur cette machine (idempotent)
+donut update             git pull, dependances, commandes, redemarrage
+donut doctor             diagnostic complet, ne modifie rien
+donut status             etat des process et du bot en jeu
+
+donut start   [cible]    demarre    (cible : discord, ingame, all)
+donut stop    [cible]    arrete
+donut restart [cible]    recharge le code ET le .env
+donut logs    [cible]    logs en direct
+donut logs    ingame 50  les 50 dernieres lignes, sans suivre
+
+donut env                ouvre le .env dans ton editeur, puis redemarre
+donut token              saisit un nouveau token Discord
+donut auth               refait la connexion Microsoft du compte en jeu
+donut deploy             reenregistre les slash commands
+donut admin ...          outil staff (list, link, unlink, pending, payments)
+donut test               la suite de tests
+```
+
+`donut restart` supprime puis recree les process : un `pm2 restart` ne relit ni
+`ecosystem.config.cjs` ni le `.env`, et c'est la panne classique du « j'ai
+change le .env mais rien ne bouge ».
+
+Sur une machine de dev, le lien se pose a la main :
+
+```bash
+sudo ln -sf "$PWD/bin/donut" /usr/local/bin/donut
+```
+
 ## Mise a jour
 
 ```bash
-cd /opt/donutsmp-fr-bot && bash scripts/update.sh
+donut update
 ```
 
 Pull, `npm ci`, nouvelles cles ajoutees au `.env`, slash commands reenregistrees,
@@ -64,7 +100,7 @@ modifications locales trainent.
 ## Diagnostic
 
 ```bash
-npm run doctor
+donut doctor
 ```
 
 Un ecran, aucune modification, aucun secret affiche : version de node, droits et

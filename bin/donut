@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# Commande unique du bot. Installee par scripts/vps-install.sh, qui pose un
+# lien dans /usr/local/bin/donut. Depuis n importe quel dossier :
+#
+#   donut setup      installe ou reinstalle (idempotent)
+#   donut update     met a jour et redemarre
+#   donut doctor     diagnostic complet
+#   donut status     etat des deux process
+#   donut logs       logs en direct
+#
+# `donut` sans argument affiche l aide.
+set -euo pipefail
+
+# Resolution du vrai chemin du script, meme appele par un lien symbolique
+# (readlink -f n existe pas sur macOS, d ou la boucle).
+cible="${BASH_SOURCE[0]}"
+while [ -L "$cible" ]; do
+  dir="$(cd -P "$(dirname "$cible")" && pwd)"
+  cible="$(readlink "$cible")"
+  [[ "$cible" != /* ]] && cible="$dir/$cible"
+done
+RACINE="$(cd -P "$(dirname "$cible")/.." && pwd)"
+cd "$RACINE"
+
+G='\033[1m'; N='\033[0m'; J='\033[33m'
+titre() { printf "\n${G}%s${N}\n" "$1"; }
+erreur() { printf "${J}%s${N}\n" "$1" >&2; }
+
+APPS=(fr-discord fr-ingame)
+
+# `donut logs discord` doit marcher aussi bien que `donut logs fr-discord`.
+resoudre() {
+  case "${1:-all}" in
+    all|'')            printf '%s\n' "${APPS[@]}" ;;
+    discord|fr-discord) echo fr-discord ;;
+    ingame|jeu|mc|fr-ingame) echo fr-ingame ;;
+    *) erreur "Process inconnu : $1  (discord, ingame, all)"; exit 1 ;;
+  esac
+}
+
+aide() {
+  cat <<'AIDE'
+donut - bot DonutSMP FR
+
+  donut setup              installe tout sur cette machine (idempotent)
+  donut update             git pull, dependances, commandes, redemarrage
+  donut doctor             diagnostic complet, ne modifie rien
+  donut status             etat des process et du bot en jeu
+
+  donut start   [cible]    demarre    (cible : discord, ingame, all)
+  donut stop    [cible]    arrete
+  donut restart [cible]    recharge le code ET le .env
+  donut logs    [cible]    logs en direct (Ctrl+C pour sortir)
+  donut logs    [cible] 50 les 50 dernieres lignes, sans suivre
+
+  donut env                ouvre le .env dans ton editeur, puis redemarre
+  donut token              saisit un nouveau token Discord
+  donut auth               refait la connexion Microsoft du compte en jeu
+  donut deploy             reenregistre les slash commands
+  donut admin ...          outil staff (list, link, unlink, pending, payments)
+  donut test               la suite de tests
+
+Le bot est installe dans :
+AIDE
+  printf '  %s\n\n' "$RACINE"
+}
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift || true
+
+case "$cmd" in
+  ''|-h|--help|help) aide ;;
+
+  setup|install)
+    bash scripts/vps-install.sh "$@"
+    ;;
+
+  update|up)
+    bash scripts/update.sh "$@"
+    ;;
+
+  doctor|check)
+    node scripts/doctor.js
+    ;;
+
+  status|st)
+    titre "Process"
+    pm2 list 2>/dev/null | grep -E "name|fr-discord|fr-ingame" || erreur "pm2 ne tourne pas"
+    titre "Bot en jeu"
+    node -e '
+      import("dotenv/config").then(async () => {
+        const { readFile } = await import("node:fs/promises");
+        const f = process.env.INGAME_STATUS ?? "./data/ingame-status.json";
+        try {
+          const s = JSON.parse(await readFile(f, "utf8"));
+          const age = Math.round((Date.now() - (s.at ?? 0)) / 1000);
+          const frais = age < 120;
+          console.log(`  connecte a DonutSMP  ${s.online ? "oui" : "NON"}`);
+          console.log(`  compte               ${s.username ?? process.env.MC_LINK_ACCOUNT ?? "?"}`);
+          if (s.refunds) console.log(`  remboursements       ${s.refunds.paid} payes, ${s.refunds.pending} en attente, ${s.refunds.failed} echoues`);
+          if (s.rssMb) console.log(`  memoire              rss ${s.rssMb} Mo, heap ${s.heapMb} Mo`);
+          console.log(`  statut ecrit il y a  ${age} s${frais ? "" : "   (perime : le process ecrit-il encore ?)"}`);
+          if (!s.online) console.log("\n  Le bot Discord tourne, mais personne n encaisse les paiements de link.\n  donut logs ingame 40");
+        } catch { console.log("  jamais demarre"); }
+      });
+    '
+    echo
+    ;;
+
+  start)
+    for app in $(resoudre "${1:-all}"); do pm2 start ecosystem.config.cjs --only "$app"; done
+    pm2 save >/dev/null
+    ;;
+
+  stop)
+    for app in $(resoudre "${1:-all}"); do pm2 stop "$app" || true; done
+    ;;
+
+  restart|reload)
+    # delete + start : un pm2 restart ne relit ni ecosystem.config.cjs ni le .env.
+    for app in $(resoudre "${1:-all}"); do
+      pm2 delete "$app" >/dev/null 2>&1 || true
+      pm2 start ecosystem.config.cjs --only "$app"
+    done
+    pm2 save >/dev/null
+    ;;
+
+  logs|log)
+    cible="$(resoudre "${1:-all}" | tr '\n' ' ')"
+    [ $# -gt 0 ] && shift || true
+    lignes="${1:-}"
+    if [ -n "$lignes" ]; then pm2 logs $cible --lines "$lignes" --nostream
+    else pm2 logs $cible; fi
+    ;;
+
+  env|config)
+    ed="${EDITOR:-nano}"
+    "$ed" .env
+    chmod 600 .env
+    printf 'Redemarrer les process pour appliquer ? [O/n] '
+    read -r r
+    case "$r" in [nN]*) ;; *) exec "$0" restart all ;; esac
+    ;;
+
+  token)
+    node scripts/setup.js --new
+    ;;
+
+  auth)
+    node scripts/auth.js "$@"
+    ;;
+
+  deploy)
+    npm run deploy
+    ;;
+
+  admin)
+    node scripts/admin.js "$@"
+    ;;
+
+  test)
+    npm test
+    ;;
+
+  *)
+    erreur "Commande inconnue : $cmd"
+    aide
+    exit 1
+    ;;
+esac
