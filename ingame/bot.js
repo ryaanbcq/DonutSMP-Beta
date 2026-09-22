@@ -6,6 +6,7 @@
 // `sendSafe` refuse la commande meme si quelqu'un l'ajoute par accident.
 
 import mineflayer from 'mineflayer';
+import { creerSuperviseur } from './superviseur.js';
 import { appendFile, writeFile, readFile, mkdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import 'dotenv/config';
@@ -71,8 +72,15 @@ if (!cfg.username) {
 const FORBIDDEN = /^\/(pay|eco|give|trade|ah|sell|shop|drop)\b/i;
 
 let bot = null;
-let attempt = 0;
 let lastPayment = null;
+
+// Relances et chien de garde : voir ingame/superviseur.js.
+const superviseur = creerSuperviseur({
+  connecter: () => connect(),
+  silenceMax: (Number(process.env.MC_WATCHDOG_MINUTES) || 5) * 60_000,
+  journal: (m) => console.warn(`[mc] ${m}`),
+});
+
 
 async function feed(line) {
   await mkdir(dirname(cfg.feed), { recursive: true });
@@ -110,6 +118,9 @@ function sendSafe(command) {
 }
 
 function connect() {
+  // Chaque tentative porte un numero : une connexion abandonnee peut encore
+  // emettre des evenements, ils ne doivent plus rien declencher.
+  const generation = superviseur.nouvelleGeneration();
   console.log(`[mc] connexion a ${cfg.host}:${cfg.port} en ${cfg.auth}`);
   bot = mineflayer.createBot({
     host: cfg.host,
@@ -162,7 +173,7 @@ function connect() {
   bot._client.on('show_dialog', traiterDialogue);
 
   bot.once('spawn', async () => {
-    attempt = 0;
+    superviseur.connecte();
     console.log(`[mc] connecte en tant que ${bot.username}`);
     if (cfg.expectedName && bot.username.toLowerCase() !== cfg.expectedName.toLowerCase()) {
       console.warn(`[mc] ATTENTION : connecte en ${bot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
@@ -228,15 +239,31 @@ function connect() {
     console.warn(`[mc] kick : ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
     saveStatus({ online: false }).catch(() => {});
   });
-  bot.on('error', (err) => console.error(`[mc] erreur : ${err.message}`));
-  bot.on('end', (reason) => {
-    console.warn(`[mc] deconnecte (${reason}), reconnexion...`);
-    bot = null;
-    saveStatus({ online: false }).catch(() => {});
-    const delay = Math.min(60_000, 5_000 * 2 ** attempt++);
-    setTimeout(connect, delay);
+  bot.on('error', (err) => {
+    console.error(`[mc] erreur : ${err.message}`);
+    // Une erreur AVANT d etre en jeu (ping de detection de version, DNS, TCP)
+    // n est jamais suivie d un `end` : sans cette relance le bot ne repart
+    // plus du tout. Vecu le 15/09, sept jours hors ligne.
+    if (!bot?.player) rendreLaMain(`erreur avant connexion (${err.message})`, generation);
   });
+  bot.on('end', (reason) => rendreLaMain(`deconnecte (${reason})`, generation));
 }
+
+/** Coupe la connexion courante et laisse le superviseur programmer la suite. */
+function rendreLaMain(raison, generation) {
+  if (!superviseur.courante(generation)) return;
+  bot = null;
+  saveStatus({ online: false }).catch(() => {});
+  superviseur.relancer(raison, generation);
+}
+
+// Le chien de garde : la ceinture quand aucun evenement n arrive.
+setInterval(() => {
+  if (superviseur.chienDeGarde(Boolean(bot?.player))) {
+    try { bot?.end?.('watchdog'); } catch { /* deja mort */ }
+    bot = null;
+  }
+}, 30_000).unref();
 
 // ---------------------------------------------------------------------------
 // Releve des soldes en jeu. Le bot Discord depose la liste des comptes
