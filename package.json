@@ -9,6 +9,11 @@
   "scripts": {
     "start": "node src/index.js",
     "deploy": "node scripts/deploy-commands.js",
+    "setup": "node scripts/setup.js",
+    "auth": "node scripts/auth.js",
+    "doctor": "node scripts/doctor.js",
+    "install:vps": "bash scripts/vps-install.sh",
+    "update": "bash scripts/update.sh",
     "test": "node --test test/*.test.js",
     "pay": "node scripts/fake-payment.js"
   },

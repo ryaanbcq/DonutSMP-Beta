@@ -19,11 +19,67 @@ dans le message systeme, et **le montant exact**, unique parmi tous les
 challenges en cours. Connaitre le montant de quelqu'un d'autre ne sert a rien :
 il faudrait aussi payer depuis son compte.
 
-## Installation
+## Installation sur un VPS neuf
+
+Debian 12 ou Ubuntu 22.04+, en root ou avec sudo. Trois commandes, le reste est
+pose par le script (node 22, pm2, dependances, `.env`, slash commands, compte
+Microsoft, demarrage au boot) :
+
+```bash
+git clone git@github.com:ryaanbcq/donutsmp-fr-bot.git /opt/donutsmp-fr-bot
+cd /opt/donutsmp-fr-bot
+bash scripts/vps-install.sh
+```
+
+Le script pose deux questions, les seules choses qu'une machine ne peut pas
+deviner :
+
+1. **le token du bot** (portail dev > ton application > Bot > Reset Token),
+   colle une fois, ecrit en chmod 600, jamais reaffiche ;
+2. **le code Microsoft** du compte en jeu, a saisir dans un navigateur. Aucun
+   mot de passe ne passe par le script.
+
+Le depot etant prive, la machine a besoin d'une cle SSH autorisee sur GitHub
+(`ssh-keygen -t ed25519` puis la cle publique en deploy key du depot).
+
+Il est idempotent : le relancer ne casse rien, il saute ce qui est deja fait.
+`--sans-ingame` installe le bot Discord seul, `--auto` ne pose aucune question
+et s'arrete si le `.env` est incomplet.
+
+A la fin, `scripts/doctor.js` affiche l'etat de l'installation. Ce qui reste a
+remplir a la main dans `.env` : `VERIFIED_ROLE_ID`, `LOG_CHANNEL_ID` et les
+salons du classement, puisque ce sont des ids de ton serveur.
+
+## Mise a jour
+
+```bash
+cd /opt/donutsmp-fr-bot && bash scripts/update.sh
+```
+
+Pull, `npm ci`, nouvelles cles ajoutees au `.env`, slash commands reenregistrees,
+les deux process recrees (un `pm2 restart` ne relit ni `ecosystem.config.cjs`
+ni le `.env`), puis diagnostic. Le script refuse de tourner si des
+modifications locales trainent.
+
+## Diagnostic
+
+```bash
+npm run doctor
+```
+
+Un ecran, aucune modification, aucun secret affiche : version de node, droits et
+cles du `.env`, token accepte par Discord, presence sur le serveur, permissions
+et **position du role des verifies** (au dessus du bot, il ne pourra jamais le
+donner), intent Message Content, nombre de slash commands enregistrees, salons
+cites dans le `.env`, dossiers de donnees ecrivables, validite du cache
+Microsoft, fraicheur du bot en jeu, etat pm2. Sortie 1 s'il reste un point
+bloquant.
+
+## Installation en local (dev)
 
 ```bash
 npm install
-node scripts/setup.js   # colle le token, le reste se remplit tout seul
+npm run setup           # colle le token, le reste se remplit tout seul
 npm run deploy          # enregistre les slash commands
 npm start
 ```
@@ -153,7 +209,7 @@ joueur qui s'est trompe de montant.
 ## Dev
 
 ```bash
-npm test                       # 20 tests, dont tous les scenarios de triche
+npm test                       # 88 tests, dont tous les scenarios de triche
 node scripts/demo.js           # deroule le flux complet sans Discord
 npm run pay -- Sp4cz 944       # simule un paiement recu en jeu
 ```
