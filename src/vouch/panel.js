@@ -348,13 +348,15 @@ async function publier(interaction, b) {
       niveau: 'warn',
       titre: 'Signalement',
       texte: `**${auteur}** signale **${cible.mc_name}**.`,
-      champs: { Score: `${t.score}/100`, Auteur: auteur },
+      champs: { Auteur: auteur, Cible: cible.mc_name, Score: `${t.score}/100` },
+      joueur: cible.mc_name,
     }
     : {
       niveau: 'info',
       titre: 'Nouvel avis',
-      texte: `**${auteur}** note **${cible.mc_name}** ${b.etoiles}★.`,
-      champs: { Score: `${t.score}/100` },
+      texte: `**${auteur}** note **${cible.mc_name}** ${etoiles(b.etoiles)}`,
+      champs: { Auteur: auteur, Cible: cible.mc_name, Score: `${t.score}/100` },
+      joueur: cible.mc_name,
     });
   return interaction.editReply({
     embeds: [embed(scam ? '⚠️・SIGNALEMENT PUBLIÉ' : '✅・VOUCH PUBLIÉ', {

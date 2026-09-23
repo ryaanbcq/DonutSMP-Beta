@@ -7,8 +7,10 @@
 
 import mineflayer from 'mineflayer';
 import { creerSuperviseur } from './superviseur.js';
-import { note } from './journal.js';
-import { appendFile, writeFile, readFile, mkdir, stat } from 'node:fs/promises';
+import { note, noteSync, deposerCodeMsa, effacerCodeMsa } from './journal.js';
+import { diagnostiquerKick, diagnostiquerErreur, duree } from './diagnostic.js';
+import { shortMoney } from '../src/lib/format.js';
+import { appendFile, writeFile, readFile, mkdir, stat, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import 'dotenv/config';
 import { parsePayment, parsePaymentSent, parseBalance } from '../src/minecraft/payments.js';
@@ -75,6 +77,29 @@ const FORBIDDEN = /^\/(pay|eco|give|trade|ah|sell|shop|drop)\b/i;
 let bot = null;
 let lastPayment = null;
 
+// Une coupure = UN message au debut, une relance si elle s eternise, un
+// message au retour avec sa duree. Avant, chaque tentative postait le sien.
+let panne = null; // { depuis, tentatives, raison, alerte }
+const PANNE_ALERTES_MIN = [10, 60, 360];
+let msaEnAttente = false;
+
+// Un meme diagnostic (ban, maintenance...) revient a chaque tentative : on ne
+// le reposte qu apres ce delai, ou si le motif change.
+const DIAG_SILENCE_MS = 15 * 60_000;
+const diagsVus = new Map();
+function signaler(diag) {
+  if (!diag) return;
+  const cle = `${diag.titre}|${diag.motif}`;
+  const vu = diagsVus.get(cle);
+  if (vu && Date.now() - vu < DIAG_SILENCE_MS) return;
+  diagsVus.set(cle, Date.now());
+  if (panne) panne.raison = diag.titre;
+  note(diag.niveau, diag.titre, diag.texte, {
+    champs: { Motif: `\`${diag.motif.slice(0, 900)}\`` },
+    actions: diag.actions,
+  });
+}
+
 // Relances et chien de garde : voir ingame/superviseur.js.
 const superviseur = creerSuperviseur({
   connecter: () => connect(),
@@ -138,11 +163,18 @@ function connect() {
     // plutot que de laisser le process attendre en silence.
     onMsaCode: (res) => {
       console.warn('[mc] jeton expire, reconnexion Microsoft demandee');
-      // Le code Microsoft n est jamais poste sur Discord : qui l a prend le compte.
-      note('err', 'Jeton Microsoft expire',
-        'Le bot ne peut plus se connecter a DonutSMP. Sur la machine : `donut auth`.');
       console.warn(`[mc] ouvre ${res.verification_uri} et saisis le code ${res.user_code}`);
       console.warn('[mc] ou lance : node scripts/auth.js --force');
+      // Le code part dans un fichier prive, JAMAIS dans le journal : le bouton
+      // de l embed le montre a un admin, en ephemere.
+      deposerCodeMsa(res).then((expireA) => {
+        msaEnAttente = true;
+        note('err', 'Connexion Microsoft requise',
+          'Le jeton du bot a expiré : il ne peut plus entrer sur DonutSMP.'
+          + ' Un admin clique sur **Afficher le code**, l\'entre sur la page Microsoft avec le compte du bot,'
+          + ' et le bot repart tout seul. Sur la machine, `donut auth` marche aussi.',
+          { champs: { 'Code valable': `jusqu'à <t:${Math.floor(expireA / 1000)}:t>` }, actions: ['msa', 'relink'] });
+      }).catch((e) => console.error('[mc] code Microsoft non depose :', e.message));
     },
   });
   bot = ceBot;
@@ -167,15 +199,26 @@ function connect() {
 
   // Sonde : DEBUG_WINDOW=true vide le contenu de toute interface qui s ouvre.
   ceBot.on('windowOpen', (fenetre) => {
-    if (process.env.DEBUG_WINDOW !== 'true') return;
-    console.log(`[gui] titre=${JSON.stringify(fenetre.title)} slots=${fenetre.slots.length}`);
-    fenetre.slots.forEach((item, i) => {
-      if (!item) return;
-      const nom = item.customName ?? item.displayName ?? item.name;
-      const lore = item.customLore ?? item.lore ?? null;
-      console.log(`[gui] ${String(i).padStart(2)} ${item.name} | ${JSON.stringify(nom)}`);
-      if (lore) console.log(`[gui]    lore=${JSON.stringify(lore)}`);
-    });
+    if (process.env.DEBUG_WINDOW === 'true') {
+      console.log(`[gui] titre=${JSON.stringify(fenetre.title)} slots=${fenetre.slots.length}`);
+      fenetre.slots.forEach((item, i) => {
+        if (!item) return;
+        const nom = item.customName ?? item.displayName ?? item.name;
+        const lore = item.customLore ?? item.lore ?? null;
+        console.log(`[gui] ${String(i).padStart(2)} ${item.name} | ${JSON.stringify(nom)}`);
+        if (lore) console.log(`[gui]    lore=${JSON.stringify(lore)}`);
+      });
+    }
+    // VECU LE 2026-09-23 : tant qu une fenetre reste ouverte, DonutSMP ignore
+    // TOUTES les commandes du bot, en silence. Treize /balance de suite sans
+    // une seule reponse, et ca vaut aussi pour les /pay de remboursement : le
+    // bot parait en ligne et ne fait plus rien. On referme donc tout de suite
+    // ce qu on n a pas demande.
+    try { ceBot.closeWindow(fenetre); } catch { /* deja fermee */ }
+    console.warn('[gui] fenetre fermee (une fenetre ouverte bloque les commandes)');
+    note('warn', 'Fenetre ouverte en jeu',
+      'Un menu s est ouvert sur le bot et a ete referme aussitot : une fenetre ouverte'
+      + ' bloque toutes ses commandes.');
   });
 
   ceBot._client.on('show_dialog', traiterDialogue);
@@ -183,13 +226,29 @@ function connect() {
   ceBot.once('spawn', async () => {
     superviseur.connecte();
     console.log(`[mc] connecte en tant que ${ceBot.username}`);
-    note('ok', 'Bot en jeu connecte', `Connecte a ${cfg.host} en tant que **${ceBot.username}**.`);
+    if (msaEnAttente) {
+      msaEnAttente = false;
+      effacerCodeMsa().catch(() => {});
+      note('ok', 'Compte Microsoft reconnecté', 'Le code a été validé, le jeton est de nouveau en cache.',
+        { champs: { Compte: ceBot.username }, joueur: ceBot.username });
+    }
+    if (panne) {
+      note('ok', 'Bot en jeu reconnecté', 'Les paiements de vérification sont de nouveau vus.', {
+        champs: { Coupure: duree(Date.now() - panne.depuis), Tentatives: panne.tentatives, Cause: panne.raison },
+        joueur: ceBot.username,
+      });
+      panne = null;
+    } else {
+      note('ok', 'Bot en jeu connecté', `Connecté à **${cfg.host}**, les paiements de vérification sont vus.`,
+        { champs: { Compte: ceBot.username }, joueur: ceBot.username });
+    }
     if (cfg.expectedName && ceBot.username.toLowerCase() !== cfg.expectedName.toLowerCase()) {
       console.warn(`[mc] ATTENTION : connecte en ${ceBot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
       console.warn('[mc] les joueurs paieront le mauvais compte, corrige le .env.');
       note('err', 'Mauvais compte en jeu',
-        `Connecte en **${ceBot.username}** alors que les joueurs paient **${cfg.expectedName}**.`
-        + ' Les paiements de verification ne seront jamais vus.');
+        'Les joueurs paient un autre compte : aucun paiement de vérification ne sera vu.'
+        + ' Corrige `MC_LINK_ACCOUNT` ou reconnecte le bon compte (`donut auth`).',
+        { champs: { Connecté: ceBot.username, Attendu: cfg.expectedName }, joueur: ceBot.username, actions: ['relink'] });
     }
     await saveStatus();
   });
@@ -238,9 +297,11 @@ function connect() {
   ceBot.on('kicked', (reason) => {
     console.warn(`[mc] kick : ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
     saveStatus({ online: false }).catch(() => {});
+    signaler(diagnostiquerKick(reason));
   });
   ceBot.on('error', (err) => {
     console.error(`[mc] erreur : ${err.message}`);
+    signaler(diagnostiquerErreur(err.message));
     // Une erreur AVANT d etre en jeu (ping de detection de version, DNS, TCP)
     // n est jamais suivie d un `end` : sans cette relance le bot ne repart
     // plus du tout. Vecu le 15/09, sept jours hors ligne.
@@ -259,18 +320,38 @@ function rendreLaMain(raison, generation) {
   bot = null;
   saveStatus({ online: false }).catch(() => {});
   const dans = superviseur.relancer(raison, generation);
-  if (dans !== null) {
-    note('warn', 'Bot en jeu deconnecte',
-      `${raison}. Nouvelle tentative dans ${Math.round(dans / 1000)} s.`
-      + ' Les paiements de verification ne sont plus vus pendant ce temps.');
+  if (dans === null) return;
+  if (panne) {
+    panne.tentatives += 1;
+    return;
   }
+  panne = { depuis: Date.now(), tentatives: 1, raison, alerte: 0 };
+  note('warn', 'Bot en jeu déconnecté',
+    'Les paiements de vérification ne sont plus vus jusqu\'à la reconnexion.'
+    + ' Un seul message par coupure : le retour sera annoncé ici.',
+    { champs: { Raison: `\`${raison}\``, Relance: `dans ${Math.round(dans / 1000)} s` } });
 }
+
+// Coupure qui s eternise : relance a 10 min, 1 h, 6 h.
+setInterval(() => {
+  if (!panne || panne.alerte >= PANNE_ALERTES_MIN.length) return;
+  const seuil = PANNE_ALERTES_MIN[panne.alerte];
+  if (Date.now() - panne.depuis < seuil * 60_000) return;
+  panne.alerte += 1;
+  note('err', `Bot hors ligne depuis ${duree(seuil * 60_000)}`,
+    'Les reconnexions automatiques échouent. Les `/link` sont refusés en attendant.'
+    + (msaEnAttente ? ' Un code Microsoft attend d\'être validé (message plus haut).' : ''),
+    { champs: { Tentatives: panne.tentatives, 'Dernière cause': panne.raison, Depuis: `<t:${Math.floor(panne.depuis / 1000)}:R>` } });
+}, 30_000).unref();
 
 // Le chien de garde : la ceinture quand aucun evenement n arrive.
 setInterval(() => {
   if (superviseur.chienDeGarde(Boolean(bot?.player))) {
-    note('err', 'Chien de garde declenche',
-      'Aucun evenement depuis trop longtemps et toujours pas en jeu : connexion relancee de force.');
+    if (!panne) panne = { depuis: Date.now(), tentatives: 0, raison: 'chien de garde', alerte: 0 };
+    panne.tentatives += 1;
+    note('err', 'Chien de garde déclenché',
+      'Aucun événement depuis trop longtemps et toujours pas en jeu : connexion relancée de force.'
+      + ' Souvent un serveur qui accepte la connexion sans jamais faire entrer le bot.');
     try { bot?.end?.('watchdog'); } catch { /* deja mort */ }
     bot = null;
   }
@@ -290,6 +371,12 @@ let prioritaires = [];
 let curseur = 0;
 let demande = null;
 let dernierEnvoi = 0;
+// Joueur -> demandes sans reponse d affilee. Au troisieme silence, le staff est
+// prevenu une fois (pseudo change, compte supprime...) : vecu Accoutrement_,
+// neuf jours de /balance dans le vide sans que personne ne le voie.
+const silences = new Map();
+const SILENCES_ALERTE = 3;
+const inconnusSignales = new Set();
 
 async function chargerSuivis() {
   try {
@@ -361,6 +448,13 @@ function traiterReponseSolde(line) {
       return true;
     }
     console.warn(`[solde] ${demande.nom} : compte inconnu sur DonutSMP`);
+    if (!inconnusSignales.has(demande.nom)) {
+      inconnusSignales.add(demande.nom);
+      note('warn', 'Compte inconnu sur DonutSMP',
+        `DonutSMP ne connaît pas **${demande.nom}** : pseudo changé ou compte supprimé.`
+        + ' Son solde n\'apparaîtra plus au classement tant que le lien n\'est pas refait.',
+        { champs: { Joueur: demande.nom }, joueur: demande.nom });
+    }
     ecrireLigneSolde({ name: demande.nom, inconnu: true })
       .catch((e) => console.error('[solde] ecriture :', e.message));
     demande = null;
@@ -374,6 +468,7 @@ function traiterReponseSolde(line) {
   // et plus une seule n etait acceptee (vecu le 2026-09-12).
   ecrireSolde(lu.name, lu.amount).catch((e) => console.error('[solde] ecriture :', e.message));
   if (demande && memeJoueur(lu.name, demande.nom)) demande = null;
+  for (const nom of silences.keys()) if (memeJoueur(nom, lu.name)) silences.delete(nom);
   return true;
 }
 
@@ -384,6 +479,14 @@ setInterval(() => {
   if (demande) {
     if (Date.now() - demande.a > cfg.soldes.attenteMs) {
       console.warn(`[jeu] pas de reponse pour ${demande.type} ${demande.nom}`);
+      const n = (silences.get(demande.nom) ?? 0) + 1;
+      silences.set(demande.nom, n);
+      if (n === SILENCES_ALERTE) {
+        note('warn', 'Solde illisible',
+          `DonutSMP ne répond plus à \`/${demande.type === 'stats' ? 'stats' : 'balance'} ${demande.nom}\`.`
+          + ' Souvent un pseudo changé : le classement garde son ancien solde. Refais le lien ou retire le compte.',
+          { champs: { Joueur: demande.nom, 'Sans réponse': `${n} fois de suite` }, joueur: demande.nom });
+      }
       demande = null;
     }
     return;
@@ -460,6 +563,48 @@ setInterval(async () => {
 }, 2_000).unref();
 
 // ---------------------------------------------------------------------------
+// Relink demande depuis Discord (bouton du journal, admin, confirme). Le bot
+// Discord depose data/ingame-control.json ; on le lit MEME hors ligne, c est
+// justement quand le compte est casse qu on en a besoin. Le cache Microsoft
+// n est pas supprime : il est mis de cote, date, et la connexion suivante
+// n a plus de jeton, donc demande un code (embed « Connexion Microsoft requise »).
+// ---------------------------------------------------------------------------
+
+const CONTROLE = process.env.INGAME_CONTROL_FILE ?? './data/ingame-control.json';
+
+setInterval(async () => {
+  let ordre;
+  try { ordre = JSON.parse(await readFile(CONTROLE, 'utf8')); } catch { return; }
+  await rm(CONTROLE, { force: true });
+  if (ordre?.action !== 'relink') return;
+  // Un ordre oublie (bot arrete plusieurs heures) ne doit pas deconnecter au demarrage.
+  if (!(Date.now() - Number(ordre.at) < 5 * 60_000)) {
+    console.warn('[mc] ordre de relink perime ignore');
+    return;
+  }
+
+  const sauvegarde = `${cfg.profilesFolder}.avant-relink-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  try {
+    await rename(cfg.profilesFolder, sauvegarde);
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      console.error('[mc] relink : cache non deplace :', e.message);
+      note('err', 'Relink impossible', 'Le cache Microsoft du bot n\'a pas pu être mis de côté.',
+        { champs: { Erreur: `\`${e.message}\`` } });
+      return;
+    }
+  }
+  console.warn(`[mc] relink demande par ${ordre.par}, cache mis de cote dans ${sauvegarde}`);
+  note('info', 'Relink en cours',
+    'Ancien jeton mis de côté, reconnexion Microsoft lancée. Le code arrive dans un nouveau message.',
+    { champs: { Par: ordre.par ?? 'inconnu' } });
+  if (bot) {
+    try { bot.end('relink'); } catch { /* deja morte */ }
+  }
+  // Sans connexion ouverte, la relance deja programmee repartira sans jeton.
+}, 2_000).unref();
+
+// ---------------------------------------------------------------------------
 // Remboursement : le micro-paiement n est qu une preuve, on le rend au joueur
 // une a deux minutes plus tard. Seul endroit du bot ou de l argent sort.
 // ---------------------------------------------------------------------------
@@ -471,8 +616,9 @@ function planifierRemboursement(payment) {
   const { entry, skipped } = ledger.queue({ ...payment, receivedAt: Date.now() });
   if (skipped) {
     console.warn(`[refund] pas rendu a ${payment.from} (${payment.amount}) : ${skipped}`);
-    note('warn', 'Remboursement refuse',
-      `**${payment.from}** ne sera pas rembourse de ses $${payment.amount} : ${skipped}.`);
+    note('warn', 'Remboursement refusé',
+      `**${payment.from}** ne sera pas remboursé automatiquement. À décider à la main.`,
+      { champs: { Joueur: payment.from, Montant: shortMoney(payment.amount), Raison: skipped }, joueur: payment.from });
     return;
   }
   const dans = Math.round((entry.dueAt - Date.now()) / 1000);
@@ -512,9 +658,9 @@ setInterval(() => {
       const e = ledger.retryOrFail(enVol.id);
       if (e.status === 'failed') {
         console.error(`[refund] ABANDON : ${e.amount} a rendre a ${e.to} a la main`);
-        note('err', 'Remboursement abandonne',
-          `**${e.to}** attend toujours ses $${e.amount} apres ${e.attempts} essais.`
-          + ' A rendre a la main.', { Joueur: e.to, Montant: `$${e.amount}` });
+        note('err', 'Remboursement abandonné',
+          `**${e.to}** attend toujours son argent. À rendre à la main.`,
+          { champs: { Joueur: e.to, Montant: shortMoney(e.amount), Essais: e.attempts }, joueur: e.to });
       }
       ledger.save().catch(() => {});
     }
@@ -542,10 +688,35 @@ setInterval(() => {
 // vieux : s il ralentissait, il bloquerait les liaisons pour rien.
 setInterval(() => { saveStatus().catch(() => {}); }, 20_000).unref();
 
+// Alerte memoire : pm2 tue le process a 700 Mo, on previent bien avant.
+const MEMOIRE_ALERTE_MO = 450;
+let memoireSignalee = false;
 setInterval(() => {
   const { rss, heapUsed } = process.memoryUsage();
-  console.log(`[mem] rss ${Math.round(rss / 1048576)}M heap ${Math.round(heapUsed / 1048576)}M`);
+  const rssMo = Math.round(rss / 1048576);
+  console.log(`[mem] rss ${rssMo}M heap ${Math.round(heapUsed / 1048576)}M`);
+  if (rssMo >= MEMOIRE_ALERTE_MO && !memoireSignalee) {
+    memoireSignalee = true;
+    note('warn', 'Mémoire du bot en jeu élevée',
+      'Un bot sain tient sous 150 Mo. À 700 Mo, pm2 le redémarre (coupure de quelques secondes).'
+      + ' Si ça revient souvent, c\'est une fuite à chercher.',
+      { champs: { RSS: `${rssMo} Mo`, Tas: `${Math.round(heapUsed / 1048576)} Mo`, Plafond: '700 Mo' } });
+  } else if (rssMo < MEMOIRE_ALERTE_MO - 100) {
+    memoireSignalee = false;
+  }
 }, 120_000).unref();
+
+// Derniers mots : ecrits en synchrone, le bot Discord les poste meme si ce
+// process est deja mort. pm2 le relance, comme sans ces handlers.
+for (const evt of ['uncaughtException', 'unhandledRejection']) {
+  process.on(evt, (err) => {
+    console.error(`[crash] ${evt} :`, err);
+    noteSync('err', 'Bot en jeu planté',
+      'Le process s\'est arrêté sur une erreur non gérée. pm2 le relance, la pile est ci-dessous.',
+      { champs: { Erreur: `\`\`\`\n${String(err?.stack ?? err).slice(0, 900)}\n\`\`\`` } });
+    process.exit(1);
+  });
+}
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {

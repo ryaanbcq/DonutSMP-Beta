@@ -8,7 +8,9 @@ import {
 } from 'discord.js';
 import { config } from './config.js';
 import { store } from './db.js';
-import { demarrerJournal, journal } from './ops/journal.js';
+import { demarrerJournal, journal, noterSync } from './ops/journal.js';
+import { onOpsBouton } from './ops/actions.js';
+import { duree } from '../ingame/diagnostic.js';
 import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
@@ -55,8 +57,9 @@ client.once('clientReady', async (c) => {
   await demarrerJournal(c);
   journal({
     niveau: 'ok',
-    titre: 'Bot Discord demarre',
-    texte: `${client.commands.size} commandes, ${store.countLinks()} comptes lies.`,
+    titre: 'Bot Discord démarré',
+    texte: 'Journal branché, les événements du bot en jeu arrivent ici.',
+    champs: { Commandes: client.commands.size, 'Comptes liés': store.countLinks() },
   });
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
@@ -101,6 +104,45 @@ client.once('clientReady', async (c) => {
   if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
 });
 
+// Coupures de la passerelle Discord : discord.js reprend seul, on annonce la
+// reprise avec la duree (pendant la coupure, rien ne peut etre poste).
+let passerelleCoupeeA = null;
+client.on('shardReconnecting', () => { passerelleCoupeeA ??= Date.now(); });
+client.on('shardDisconnect', (evt) => {
+  passerelleCoupeeA ??= Date.now();
+  console.warn(`[bot] passerelle Discord fermee (code ${evt?.code})`);
+});
+client.on('shardResume', () => {
+  if (passerelleCoupeeA === null) return;
+  const coupure = Date.now() - passerelleCoupeeA;
+  passerelleCoupeeA = null;
+  if (coupure < 30_000) return; // micro-coupure, reprise transparente
+  journal({
+    niveau: 'warn',
+    titre: 'Connexion Discord rétablie',
+    texte: 'Le bot Discord a perdu la passerelle puis l\'a retrouvée. Les boutons cliqués pendant la coupure n\'ont pas répondu.',
+    champs: { Coupure: duree(coupure) },
+  });
+});
+client.on('error', (err) => {
+  console.error('[bot] erreur client :', err);
+  journal({ niveau: 'err', titre: 'Erreur du client Discord', texte: `\`\`\`\n${err.message}\n\`\`\`` });
+});
+
+// Crash : ecrit dans le flux, poste au redemarrage par pm2.
+for (const evt of ['uncaughtException', 'unhandledRejection']) {
+  process.on(evt, (err) => {
+    console.error(`[crash] ${evt} :`, err);
+    noterSync({
+      niveau: 'err',
+      titre: 'Bot Discord planté',
+      texte: 'Le process s\'est arrêté sur une erreur non gérée et a été relancé par pm2.',
+      champs: { Erreur: `\`\`\`\n${String(err?.stack ?? err).slice(0, 900)}\n\`\`\`` },
+    });
+    process.exit(1);
+  });
+}
+
 client.on('interactionCreate', async (interaction) => {
   const qui = interaction.user?.tag ?? interaction.user?.id;
   try {
@@ -128,8 +170,8 @@ client.on('interactionCreate', async (interaction) => {
     console.error(`[ui] echec pour ${qui} :`, err);
     journal({
       niveau: 'err',
-      titre: 'Commande en echec',
-      texte: `\`${err.message}\``,
+      titre: 'Commande en échec',
+      texte: `\`\`\`\n${err.message}\n\`\`\``,
       champs: { Membre: qui, Action: interaction.commandName ?? interaction.customId ?? 'inconnue' },
     });
     const payload = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
@@ -162,6 +204,7 @@ async function onCommande(interaction) {
 }
 
 async function onBouton(interaction) {
+  if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchBouton(interaction);
@@ -293,9 +336,10 @@ async function startWatcher(c) {
 
     journal({
       niveau: 'ok',
-      titre: 'Compte verifie',
-      texte: `<@${discordId}> est lie a **${challenge.mc_name}**.`,
-      champs: { Paye: shortMoney(payment.amount) },
+      titre: 'Compte vérifié',
+      texte: `<@${discordId}> est lié à **${challenge.mc_name}**.`,
+      champs: { Joueur: challenge.mc_name, Payé: shortMoney(payment.amount) },
+      joueur: challenge.mc_name,
     });
   });
 
@@ -304,8 +348,11 @@ async function startWatcher(c) {
     // Souvent un joueur qui s est trompe de montant : il attend son lien.
     journal({
       niveau: 'warn',
-      titre: 'Paiement sans verification',
-      texte: `**${payment.from}** a paye ${shortMoney(payment.amount)} sans montant correspondant.`,
+      titre: 'Paiement sans vérification',
+      texte: `**${payment.from}** a payé sans montant de vérification correspondant.`
+        + ' Souvent un joueur qui s\'est trompé de montant.',
+      champs: { Joueur: payment.from, Montant: shortMoney(payment.amount) },
+      joueur: payment.from,
     });
   });
 
@@ -319,15 +366,16 @@ async function startWatcher(c) {
 
     journal({
       niveau: 'err',
-      titre: 'Verification en conflit',
-      texte: `**${challenge.mc_name}** a paye ${shortMoney(payment.amount)} mais le compte etait deja lie.`
-        + ' A traiter a la main.',
+      titre: 'Vérification en conflit',
+      texte: `**${challenge.mc_name}** a payé mais le compte était déjà lié. À traiter à la main.`,
+      champs: { Joueur: challenge.mc_name, Montant: shortMoney(payment.amount) },
+      joueur: challenge.mc_name,
     });
   });
 
   watcher.on('error', (err) => {
     console.error('[link] watcher :', err.message);
-    journal({ niveau: 'err', titre: 'Lecture des paiements en echec', texte: `\`${err.message}\`` });
+    journal({ niveau: 'err', titre: 'Lecture des paiements en échec', texte: `\`\`\`\n${err.message}\n\`\`\`` });
   });
 
   await watcher.start();

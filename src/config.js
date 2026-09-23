@@ -57,6 +57,10 @@ export const config = {
     statsRequestFile: process.env.STATS_PRIORITY_FILE ?? './data/stats-priority.txt',
     statsFile: process.env.STATS_FILE ?? './data/stats.jsonl',
     eventsFile: process.env.EVENTS_FILE ?? './data/events.jsonl',
+    // Code Microsoft en attente, depose par le bot en jeu (jamais dans le flux).
+    msaCodeFile: process.env.MSA_CODE_FILE ?? './data/msa-code.json',
+    // Ordres du journal staff vers le bot en jeu (relink).
+    controlFile: process.env.INGAME_CONTROL_FILE ?? './data/ingame-control.json',
   },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),
