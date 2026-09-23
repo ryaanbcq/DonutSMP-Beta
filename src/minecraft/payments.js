@@ -28,25 +28,28 @@ export function looksLikeChat(clean) {
 
 // DonutSMP ecrit « paid you $ 24 » avec une espace apres le dollar, et
 // « $1,000 » ou « $2K » selon les montants. On tolere les trois.
-const AMOUNT = String.raw`\$?\s*([\d,]+(?:\.\d+)?)\s*([KMBkmb])?`;
+const AMOUNT = String.raw`\$?\s*([\d,]+(?:\.\d+)?)\s*([KMBTkmbt])?`;
 const NAME = String.raw`(\.?[A-Za-z0-9_]{1,24})`;
 
 // Formes acceptees, toutes ancrees. `order` dit ou lire le pseudo et le montant.
+// Seule la forme VUE en production est acceptee. « You received $N from X »
+// et « [+] $N from X » etaient supposees : si DonutSMP ecrit ce genre de ligne
+// pour une vente ou une recompense (« You received $5 from selling »), le bot
+// aurait rembourse de l argent qu aucun joueur ne lui a envoye.
 export const PATTERNS = [
   { re: new RegExp(`^${NAME} paid you ${AMOUNT}$`), name: 1, amount: 2, suffix: 3 },
-  { re: new RegExp(`^You received ${AMOUNT} from ${NAME}$`, 'i'), name: 3, amount: 1, suffix: 2 },
-  { re: new RegExp(`^\\[\\+\\] ${AMOUNT} from ${NAME}$`), name: 3, amount: 1, suffix: 2 },
 ];
 
-const SUFFIX = { k: 1e3, m: 1e6, b: 1e9 };
+const SUFFIX = { k: 1e3, m: 1e6, b: 1e9, t: 1e12 };
 
-export function parseAmount(raw, suffix) {
+export function parseAmount(raw, suffix, { zeroOk = false } = {}) {
   const base = Number(String(raw).replace(/,/g, ''));
   if (!Number.isFinite(base)) return null;
   const mult = suffix ? SUFFIX[String(suffix).toLowerCase()] : 1;
   if (!mult) return null;
   const value = base * mult;
-  return Number.isFinite(value) && value > 0 ? value : null;
+  if (!Number.isFinite(value)) return null;
+  return value > 0 || (zeroOk && value === 0) ? value : null;
 }
 
 /**
@@ -106,12 +109,14 @@ export function parseBalance(line) {
 
   const soi = clean.match(BALANCE_SOI);
   if (soi) {
-    const amount = parseAmount(soi[1], soi[2]);
+    const amount = parseAmount(soi[1], soi[2], { zeroOk: true });
     return amount === null ? null : { soi: true, amount, raw: clean };
   }
 
   const m = clean.match(BALANCE);
   if (!m) return null;
-  const amount = parseAmount(m[2], m[3]);
+  // Un solde a 0 est une vraie reponse : la refuser laissait l ancien solde au
+  // classement pour toujours (vecu Accoutrement_, 4e avec une valeur de 12 jours).
+  const amount = parseAmount(m[2], m[3], { zeroOk: true });
   return amount === null ? null : { name: m[1], amount, raw: clean };
 }

@@ -83,3 +83,28 @@ test('allocateAmount reste dans les bornes', () => {
     assert.ok(n >= 1 && n <= 1000, `montant hors bornes : ${n}`);
   }
 });
+
+test('un Bedrock ne peut pas lier le compte Java du meme nom (et inversement)', () => {
+  const ch = startLink('u-java', 'Farex_Z');
+  // Le message dit « Farex_Z paid you » mais la liste des joueurs dit .Farex_Z
+  const r = resolvePayment({ from: 'Farex_Z', amount: ch.amount, reel: '.Farex_Z' });
+  assert.equal(r.outcome, 'unmatched');
+  assert.equal(r.raison, 'mauvais_compte');
+  assert.equal(store.getLink('u-java'), null, 'rien n est lie');
+  assert.ok(store.getPending('u-java'), 'le challenge reste ouvert pour le bon compte');
+
+  const ch2 = startLink('u-bed', '.Rok');
+  assert.equal(resolvePayment({ from: 'Rok', amount: ch2.amount, reel: 'Rok' }).raison, 'mauvais_compte');
+});
+
+test('un Bedrock qui paie son propre challenge est lie avec son point', () => {
+  const ch = startLink('u-bed2', '.Zed');
+  const r = resolvePayment({ from: 'Zed', amount: ch.amount, reel: '.Zed' });
+  assert.equal(r.outcome, 'linked');
+  assert.equal(store.getLink('u-bed2').mc_name, '.Zed');
+});
+
+test('sans pseudo reel connu, le comportement ne change pas', () => {
+  const ch = startLink('u-old', 'Classic');
+  assert.equal(resolvePayment({ from: 'Classic', amount: ch.amount }).outcome, 'linked');
+});

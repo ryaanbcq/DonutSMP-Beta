@@ -5,8 +5,10 @@ import { parsePayment, parseAmount, looksLikeChat } from '../src/minecraft/payme
 test('accepte les formes systeme connues', () => {
   assert.deepEqual(parsePayment('Sp4cz paid you $743'),
     { from: 'Sp4cz', amount: 743, raw: 'Sp4cz paid you $743' });
-  assert.equal(parsePayment('You received $1,000 from Sp4cz').amount, 1000);
-  assert.equal(parsePayment('[+] $12 from Sp4cz').from, 'Sp4cz');
+  // Formes jamais vues en prod : refusees (voir PATTERNS).
+  assert.equal(parsePayment('You received $1,000 from Sp4cz'), null);
+  assert.equal(parsePayment('[+] $12 from Sp4cz'), null);
+  assert.equal(parsePayment('You received $ 5 from selling'), null);
 });
 
 test('retire les codes couleur', () => {
@@ -51,7 +53,6 @@ test('tolere l espace apres le dollar, comme DonutSMP l ecrit vraiment', () => {
   assert.deepEqual(parsePayment('SentiaZz paid you $ 24'),
     { from: 'SentiaZz', amount: 24, raw: 'SentiaZz paid you $ 24' });
   assert.equal(parsePayment('SentiaZz paid you $ 1,000').amount, 1000);
-  assert.equal(parsePayment('You received $ 50 from SentiaZz').amount, 50);
   // L ancrage tient toujours malgre la souplesse ajoutee
   assert.equal(parsePayment('[VIP] Troll: SentiaZz paid you $ 24'), null);
 });
@@ -78,4 +79,13 @@ test('une reponse de /balance porte son pseudo et se suffit a elle meme', async 
   // A l inverse « That player does not exist » ne porte aucun nom : elle ne
   // vaut que rattachee a la demande en cours.
   assert.deepEqual(parseBalance('That player does not exist'), { inconnu: true });
+});
+
+test('un solde a zero se lit, un paiement a zero non', async () => {
+  const { parseBalance } = await import('../src/minecraft/payments.js');
+  assert.equal(parseBalance('Accoutrement_ has $0').amount, 0);
+  assert.equal(parseBalance('Accoutrement_ has $ 0').amount, 0);
+  assert.equal(parseBalance('You have $0').amount, 0);
+  assert.equal(parseBalance('Whale has $1.5T').amount, 1.5e12);
+  assert.equal(parsePayment('Sp4cz paid you $0'), null);
 });

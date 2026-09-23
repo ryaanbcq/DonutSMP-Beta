@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { RefundLedger, PENDING, SENT, PAID, FAILED, idOf } from '../ingame/refunds.js';
+import { RefundLedger, PENDING, SENT, PAID, FAILED, DOUTE, RETENU, idOf } from '../ingame/refunds.js';
 
 const FILE = './data/test-refunds.json';
 const fresh = (opts = {}) => new RefundLedger({
@@ -104,12 +104,51 @@ test('un redemarrage ne renvoie pas un /pay deja parti, il attend sa confirmatio
 
   const reloaded = await fresh().load();
   const back = reloaded.entries.get(e.id);
-  assert.equal(back.status, PENDING, 'reprise en attente, pas en vol');
-  assert.equal(back.attempts, 1, 'l essai deja consomme est conserve');
+  // Avant : repasse en PENDING avec une echeance passee, donc renvoye aussitot.
+  assert.equal(back.status, DOUTE, 'mis en doute, jamais renvoye tout seul');
+  assert.equal(reloaded.due(), null, 'rien a envoyer');
+  assert.equal(reloaded.doutesAuChargement.length, 1, 'signale au demarrage');
   rmSync(FILE, { force: true });
 });
 
 test('idOf est stable', () => {
   assert.equal(idOf('A', 10, 5), idOf('A', 10, 5));
   assert.notEqual(idOf('A', 10, 5), idOf('A', 11, 5));
+});
+
+test('le plafond du jour compte aussi ce qui est en attente', () => {
+  rmSync(FILE, { force: true });
+  const l = new RefundLedger({ file: FILE, dailyMax: 2000 });
+  const acceptes = [];
+  for (let i = 0; i < 10; i += 1) {
+    const r = l.queue({ from: `J${i}`, amount: 1000, receivedAt: 1000 + i });
+    if (r.entry) acceptes.push(r.entry);
+  }
+  assert.equal(acceptes.length, 2, 'avant : les 10 passaient');
+});
+
+test('un /pay refuse par le delai entre commandes ne coute pas un essai', () => {
+  const l = new RefundLedger({ file: FILE });
+  const e = l.queue({ from: 'A', amount: 10, receivedAt: 1 }).entry;
+  l.markSent(e.id);
+  l.annulerEnvoi(e.id, 5_000);
+  assert.equal(e.status, PENDING);
+  assert.equal(e.attempts, 0);
+  assert.equal(e.dueAt, 7_000);
+});
+
+test('un paiement retenu ne part jamais et ne pese pas dans le plafond', () => {
+  const l = new RefundLedger({ file: FILE, dailyMax: 1000 });
+  const e = l.queue({ from: 'Inconnu', amount: 1000, receivedAt: 1 }).entry;
+  l.retenir(e.id, 'aucune verification');
+  assert.equal(e.status, RETENU);
+  assert.equal(l.due(Date.now() + 1e9), null);
+  assert.ok(l.queue({ from: 'B', amount: 1000, receivedAt: 2 }).entry, 'le plafond est libre');
+});
+
+test('compteDuJour ignore la casse et le point Bedrock', () => {
+  const l = new RefundLedger({ file: FILE });
+  l.queue({ from: '.Steve', amount: 5, receivedAt: 1 });
+  l.queue({ from: 'steve', amount: 6, receivedAt: 2 });
+  assert.equal(l.compteDuJour('Steve'), 2);
 });

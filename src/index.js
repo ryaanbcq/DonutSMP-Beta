@@ -343,7 +343,20 @@ async function startWatcher(c) {
     });
   });
 
-  watcher.on('unmatched', ({ payment }) => {
+  watcher.on('unmatched', ({ payment, raison, challenge }) => {
+    if (raison === 'mauvais_compte') {
+      console.warn(`[link] ${payment.reel} a paye pour le challenge ${challenge.mc_name} : autre compte, refuse`);
+      journal({
+        niveau: 'err',
+        titre: 'Vérification refusée : autre compte',
+        texte: `<@${challenge.discord_id}> a demandé **${challenge.mc_name}**, mais le paiement vient de **${payment.reel}**`
+          + ' (Java et Bedrock s\'écrivent pareil dans le message de paiement). Rien n\'est lié.'
+          + ' Tentative d\'usurpation, ou joueur qui a oublié le point Bedrock.',
+        champs: { Demandé: challenge.mc_name, Payeur: payment.reel, Montant: shortMoney(payment.amount) },
+        joueur: payment.reel,
+      });
+      return;
+    }
     console.log(`[link] paiement sans challenge : ${payment.from} ${shortMoney(payment.amount)}`);
     // Souvent un joueur qui s est trompe de montant : il attend son lien.
     journal({

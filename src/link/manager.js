@@ -82,8 +82,19 @@ export function resolvePayment(payment) {
     return { outcome: 'unmatched', payment };
   }
 
+  // DonutSMP ecrit « Steve paid you » pour Steve (Java) comme pour .Steve
+  // (Bedrock). Quand le bot en jeu a pu lire le vrai pseudo, on exige que ce
+  // soit le compte demande : sinon un joueur Bedrock liait le compte Java du
+  // meme nom (et inversement). Le challenge reste ouvert pour le bon compte.
+  const estBedrock = (n) => String(n).trim().startsWith('.');
+  if (payment.reel && estBedrock(payment.reel) !== estBedrock(challenge.mc_name)) {
+    store.recordPayment(payment, 'mauvais_compte', challenge.id);
+    return { outcome: 'unmatched', payment, raison: 'mauvais_compte', challenge };
+  }
+  const nomReel = payment.reel ?? payment.from;
+
   // Le pseudo a pu etre lie entre l'ouverture du challenge et le paiement.
-  if (store.getLinkByName(payment.from) || store.getLink(challenge.discord_id)) {
+  if (store.getLinkByName(nomReel) || store.getLink(challenge.discord_id)) {
     store.closeChallenge(challenge.id, 'conflict');
     store.recordPayment(payment, 'conflict', challenge.id);
     return { outcome: 'conflict', payment, challenge };
@@ -91,13 +102,13 @@ export function resolvePayment(payment) {
 
   // Le message systeme de DonutSMP porte la casse officielle du pseudo :
   // elle bat celle tapee par le membre, qui peut etre en minuscules.
-  store.createLink(challenge.discord_id, payment.from, payment.amount);
+  store.createLink(challenge.discord_id, nomReel, payment.amount);
   store.closeChallenge(challenge.id, 'confirmed');
   store.recordPayment(payment, 'linked', challenge.id);
   return {
     outcome: 'linked',
     payment,
-    challenge: { ...challenge, mc_name: payment.from },
+    challenge: { ...challenge, mc_name: nomReel },
     discordId: challenge.discord_id,
   };
 }

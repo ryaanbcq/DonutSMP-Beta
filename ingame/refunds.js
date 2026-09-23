@@ -18,6 +18,17 @@ export const SENT = 'sent';
 export const PAID = 'paid';
 export const FAILED = 'failed';
 export const SKIPPED = 'skipped';
+// Un /pay est peut-etre parti mais sa confirmation n a jamais ete vue (arret
+// ou deconnexion entre les deux) : on ne sait pas, donc on ne renvoie JAMAIS
+// tout seul. Le staff tranche (journal « Remboursement incertain »).
+export const DOUTE = 'doute';
+// Paiement qui ne vient d aucune verification : rien ne part.
+export const RETENU = 'retenu';
+
+// Statuts dont l argent est peut-etre deja sorti ou va sortir : comptes dans
+// le plafond du jour. Avant, seuls PAID et SENT comptaient, et dix paiements
+// recus avant le premier envoi passaient tous sous le plafond.
+const COMPTE_DANS_LE_PLAFOND = new Set([PENDING, SENT, PAID, DOUTE]);
 
 export function idOf(to, amount, receivedAt) {
   return createHash('sha1').update(`${to}|${amount}|${receivedAt}`).digest('hex').slice(0, 16);
@@ -45,9 +56,17 @@ export class RefundLedger {
       const raw = JSON.parse(await readFile(this.file, 'utf8'));
       for (const [id, e] of Object.entries(raw.entries ?? {})) this.entries.set(id, e);
     } catch { /* premier demarrage */ }
-    // Un /pay parti sans confirmation avant l arret est repris, pas reenvoye
-    // a l aveugle : il repasse en attente de confirmation.
-    for (const e of this.entries.values()) if (e.status === SENT) e.status = PENDING;
+    // Un /pay parti sans confirmation avant l arret : le repasser en attente
+    // le RENVOYAIT aussitot (echeance deja passee), d ou un double
+    // remboursement a chaque redemarrage dans la fenetre. Il passe en doute.
+    this.doutesAuChargement = [];
+    for (const e of this.entries.values()) {
+      if (e.status === SENT) {
+        e.status = DOUTE;
+        e.douteAt = Date.now();
+        this.doutesAuChargement.push(e);
+      }
+    }
     return this;
   }
 
@@ -60,7 +79,7 @@ export class RefundLedger {
   totalForDay(day = dayKey()) {
     let total = 0;
     for (const e of this.entries.values()) {
-      if (e.day === day && (e.status === PAID || e.status === SENT)) total += e.amount;
+      if (e.day === day && COMPTE_DANS_LE_PLAFOND.has(e.status)) total += e.amount;
     }
     return total;
   }
@@ -126,6 +145,46 @@ export class RefundLedger {
     return e;
   }
 
+  /** Le /pay a ete refuse par le delai entre commandes : pas un vrai essai. */
+  annulerEnvoi(id, now = Date.now()) {
+    const e = this.entries.get(id);
+    if (!e || e.status !== SENT) return null;
+    e.status = PENDING;
+    e.attempts = Math.max(0, e.attempts - 1);
+    e.dueAt = now + 2_000;
+    return e;
+  }
+
+  /** On ne sait pas si le /pay est parti : plus aucun envoi automatique. */
+  mettreEnDoute(id, now = Date.now()) {
+    const e = this.entries.get(id);
+    if (!e) return null;
+    e.status = DOUTE;
+    e.douteAt = now;
+    return e;
+  }
+
+  /** Paiement qui ne sera pas rendu automatiquement (hors verification). */
+  retenir(id, raison, now = Date.now()) {
+    const e = this.entries.get(id);
+    if (!e) return null;
+    e.status = RETENU;
+    e.raison = raison;
+    e.retenuAt = now;
+    return e;
+  }
+
+  /** Remboursements deja accordes a ce joueur aujourd hui (tous statuts sortants). */
+  compteDuJour(to, day = dayKey()) {
+    const norm = String(to).toLowerCase().replace(/^\./, '');
+    let n = 0;
+    for (const e of this.entries.values()) {
+      if (e.day !== day || !COMPTE_DANS_LE_PLAFOND.has(e.status)) continue;
+      if (e.to.toLowerCase().replace(/^\./, '') === norm) n += 1;
+    }
+    return n;
+  }
+
   /** Renvoie en attente, ou abandonne definitivement apres `maxAttempts`. */
   retryOrFail(id, maxAttempts = 3, now = Date.now()) {
     const e = this.entries.get(id);
@@ -153,13 +212,15 @@ export class RefundLedger {
   }
 
   stats() {
-    let pending = 0, sent = 0, paid = 0, failed = 0;
+    let pending = 0, sent = 0, paid = 0, failed = 0, doute = 0, retenu = 0;
     for (const e of this.entries.values()) {
       if (e.status === PENDING) pending++;
       else if (e.status === SENT) sent++;
       else if (e.status === PAID) paid++;
       else if (e.status === FAILED) failed++;
+      else if (e.status === DOUTE) doute++;
+      else if (e.status === RETENU) retenu++;
     }
-    return { pending, sent, paid, failed, today: this.totalForDay() };
+    return { pending, sent, paid, failed, doute, retenu, today: this.totalForDay() };
   }
 }

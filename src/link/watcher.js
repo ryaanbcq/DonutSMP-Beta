@@ -19,6 +19,14 @@ export function normalizeEntry(entry) {
   const raw = entry.raw ?? entry.line ?? entry.message;
   if (typeof raw === 'string') {
     const parsed = parsePayment(raw);
+    // `reel` : pseudo exact lu par le bot en jeu dans la liste des joueurs
+    // (garde le point Bedrock que le message de paiement a mange). Il ne vaut
+    // que s il designe bien le meme nom que la ligne brute.
+    const reel = typeof entry.reel === 'string' ? entry.reel.trim() : null;
+    if (parsed && reel && /^\.?[A-Za-z0-9_]{1,24}$/.test(reel)
+        && reel.toLowerCase().replace(/^\./, '') === parsed.from.toLowerCase().replace(/^\./, '')) {
+      return { ...parsed, reel };
+    }
     if (parsed) return parsed;
   }
 

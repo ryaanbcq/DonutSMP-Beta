@@ -15,6 +15,7 @@ import { dirname } from 'node:path';
 import 'dotenv/config';
 import { parsePayment, parsePaymentSent, parseBalance } from '../src/minecraft/payments.js';
 import { RefundLedger } from './refunds.js';
+import { creerVerificateur } from './verifications.js';
 import nbt from 'prismarine-nbt';
 import { lireDialogueStats } from '../src/minecraft/dialog.js';
 
@@ -108,9 +109,35 @@ const superviseur = creerSuperviseur({
 });
 
 
-async function feed(line) {
+async function feed(line, at, reel) {
   await mkdir(dirname(cfg.feed), { recursive: true });
-  await appendFile(cfg.feed, JSON.stringify({ raw: line, at: Date.now() }) + '\n');
+  await appendFile(cfg.feed, JSON.stringify({ raw: line, at, ...(reel ? { reel } : {}) }) + '\n');
+}
+
+// Un seul canal de commandes : DonutSMP impose un delai entre deux commandes
+// (« You need to wait another 0.25 seconds »), et le releve des soldes, les
+// remboursements et la file admin se marchaient dessus. Un /pay avale par ce
+// delai coutait un essai sur trois.
+const ECART_COMMANDES_MS = 1_200;
+let derniereCommandeA = 0;
+const peutCommander = () => Date.now() - derniereCommandeA >= ECART_COMMANDES_MS;
+function commander(texte) {
+  derniereCommandeA = Date.now();
+  bot.chat(texte);
+}
+
+let derniereConnexionA = 0;
+
+/**
+ * DonutSMP mange le point des pseudos Bedrock dans « X paid you » : .Steve et
+ * Steve s y ecrivent pareil. La liste des joueurs, elle, porte le vrai pseudo.
+ * Rend le pseudo exact s il n y a qu un candidat, sinon null (on ne sait pas).
+ */
+function pseudoReel(nom) {
+  const cle = String(nom).toLowerCase().replace(/^\./, '');
+  const candidats = Object.keys(bot?.players ?? {})
+    .filter((n) => n.toLowerCase().replace(/^\./, '') === cle);
+  return candidats.length === 1 ? candidats[0] : null;
 }
 
 async function saveStatus(extra = {}) {
@@ -225,6 +252,7 @@ function connect() {
 
   ceBot.once('spawn', async () => {
     superviseur.connecte();
+    derniereConnexionA = Date.now();
     console.log(`[mc] connecte en tant que ${ceBot.username}`);
     if (msaEnAttente) {
       msaEnAttente = false;
@@ -268,10 +296,28 @@ function connect() {
     // lecture qui decide de rendre de l argent.
     const recu = parsePayment(line);
     if (recu) {
-      lastPayment = { line: recu.raw, at: Date.now() };
-      console.log(`[pay] recu ${recu.amount} de ${recu.from}`);
-      feed(line).catch((e) => console.error('[pay] ecriture impossible :', e.message));
-      planifierRemboursement(recu);
+      const at = Date.now();
+      const reel = pseudoReel(recu.from);
+      lastPayment = { line: recu.raw, at };
+      console.log(`[pay] recu ${recu.amount} de ${recu.from}${reel && reel !== recu.from ? ` (${reel})` : ''}`);
+      feed(line, at, reel).catch((e) => console.error('[pay] ecriture impossible :', e.message));
+      // Le remboursement part au vrai pseudo : « /pay Steve » ne paie pas .Steve.
+      planifierRemboursement({ ...recu, from: reel ?? recu.from, receivedAt: at });
+      return;
+    }
+
+    // Delai entre commandes : la derniere commande n est pas partie.
+    if (/^You need to wait another [\d.]+ seconds? to execute a command/i.test(line.trim())) {
+      const enVol = ledger?.inFlight();
+      if (enVol && Date.now() - enVol.sentAt < 3_000) {
+        ledger.annulerEnvoi(enVol.id);
+        ledger.save().catch(() => {});
+        console.warn(`[refund] /pay ${enVol.to} avale par le delai entre commandes, renvoi dans 2 s`);
+      } else if (demande && Date.now() - demande.a < 3_000) {
+        prioritaires.unshift({ type: demande.type, nom: demande.nom });
+        demande = null;
+      }
+      derniereCommandeA = Date.now();
       return;
     }
 
@@ -287,7 +333,10 @@ function connect() {
         console.log(`[refund] rendu ${entry.amount} a ${entry.to}`);
         // Le solde du joueur vient de remonter : le classement le connait
         // encore d avant le remboursement. On le relit tout de suite.
-        if (!prioritaires.includes(entry.to)) prioritaires.push(entry.to);
+        // (Avant : on poussait la chaine seule, et le bot tapait /balance undefined.)
+        if (!prioritaires.some((d) => d.type === 'solde' && memeJoueur(d.nom, entry.to))) {
+          prioritaires.push({ type: 'solde', nom: entry.to });
+        }
       } else {
         console.warn(`[refund] confirmation sans entree en vol : ${envoye.raw}`);
       }
@@ -500,6 +549,8 @@ setInterval(() => {
     ? cfg.soldes.intervalMs
     : Math.max(cfg.soldes.intervalMs, Math.floor(cfg.soldes.cycleMs / suivis.length));
   if (Date.now() - dernierEnvoi < espacement) return;
+  // Les remboursements passent avant les soldes : ils ont un vrai joueur qui attend.
+  if (!peutCommander() || ledger?.due()) return;
 
   let entree;
   if (urgent) {
@@ -511,7 +562,7 @@ setInterval(() => {
 
   demande = { ...entree, a: Date.now() };
   dernierEnvoi = Date.now();
-  bot.chat(entree.type === 'stats' ? `/stats ${entree.nom}` : `/balance ${entree.nom}`);
+  commander(entree.type === 'stats' ? `/stats ${entree.nom}` : `/balance ${entree.nom}`);
 }, 1000).unref();
 
 setInterval(() => { chargerSuivis().catch(() => {}); }, 30_000).unref();
@@ -556,9 +607,9 @@ setInterval(async () => {
   if (!contenu.trim()) return;
   await writeFile(QUEUE, '');
   for (const ligne of contenu.split('\n').map((l) => l.trim()).filter(Boolean)) {
+    while (!peutCommander()) await new Promise((r) => setTimeout(r, 200));
     console.log(`[admin] ${ligne}`);
-    sendSafe(ligne);
-    await new Promise((r) => setTimeout(r, 600));
+    if (sendSafe(ligne)) derniereCommandeA = Date.now();
   }
 }, 2_000).unref();
 
@@ -610,6 +661,7 @@ setInterval(async () => {
 // ---------------------------------------------------------------------------
 
 let ledger = null;
+const verificateur = creerVerificateur(process.env.DB_PATH ?? './data/bot.db');
 
 function planifierRemboursement(payment) {
   if (!cfg.refunds.enabled || !ledger) return;
@@ -640,7 +692,7 @@ function envoyerRemboursement(entry) {
     ledger.retryOrFail(entry.id, 0);
     return false;
   }
-  bot.chat(`/pay ${entry.to} ${entry.amount}`);
+  commander(`/pay ${entry.to} ${entry.amount}`);
   ledger.markSent(entry.id);
   ledger.save().catch(() => {});
   console.log(`[refund] /pay ${entry.to} ${entry.amount} envoye`);
@@ -655,6 +707,14 @@ setInterval(() => {
   if (enVol) {
     if (Date.now() - enVol.sentAt > cfg.refunds.confirmMs) {
       console.warn(`[refund] pas de confirmation pour ${enVol.to} (${enVol.amount}), essai ${enVol.attempts}`);
+      // Deconnecte depuis l envoi : la confirmation a pu se perdre avec la
+      // connexion alors que le /pay est passe. Renvoyer = payer deux fois.
+      if (enVol.sentAt < derniereConnexionA) {
+        ledger.mettreEnDoute(enVol.id);
+        ledger.save().catch(() => {});
+        signalerDoute(enVol, 'le bot a été déconnecté entre le /pay et sa confirmation');
+        return;
+      }
       const e = ledger.retryOrFail(enVol.id);
       if (e.status === 'failed') {
         console.error(`[refund] ABANDON : ${e.amount} a rendre a ${e.to} a la main`);
@@ -668,8 +728,30 @@ setInterval(() => {
   }
 
   const suivant = ledger.due();
-  if (suivant) envoyerRemboursement(suivant);
-}, 5_000).unref();
+  if (!suivant || !peutCommander()) return;
+
+  // Seuls les paiements de verification se rendent (voir verifications.js).
+  const verdict = verificateur.rembourser(suivant, ledger.compteDuJour(suivant.to, suivant.day));
+  if (!verdict.ok) {
+    ledger.retenir(suivant.id, verdict.raison);
+    ledger.save().catch(() => {});
+    console.warn(`[refund] retenu : ${suivant.amount} de ${suivant.to} (${verdict.raison})`);
+    note('warn', 'Remboursement retenu',
+      `**${suivant.to}** a payé le bot sans vérification en cours : rien n'est rendu automatiquement.`
+      + ' À rendre à la main si c\'est une erreur.',
+      { champs: { Joueur: suivant.to, Montant: shortMoney(suivant.amount), Raison: verdict.raison }, joueur: suivant.to });
+    return;
+  }
+  envoyerRemboursement(suivant);
+}, 2_000).unref();
+
+function signalerDoute(e, cause) {
+  console.error(`[refund] EN DOUTE : ${e.amount} a ${e.to} (${cause})`);
+  note('err', 'Remboursement incertain',
+    `Le \`/pay\` à **${e.to}** est peut-être parti, sans confirmation vue. Il n'est **pas** renvoyé automatiquement`
+    + ' pour éviter de payer deux fois : vérifie avec le joueur, puis rembourse à la main si besoin.',
+    { champs: { Joueur: e.to, Montant: shortMoney(e.amount), Cause: cause }, joueur: e.to });
+}
 
 // Purge des entites hors de portee : sans ca le RSS grimpe en quelques heures
 // sur un spawn charge (lecon du bot du casino).
@@ -729,6 +811,8 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 
 if (cfg.refunds.enabled) {
   ledger = await new RefundLedger(cfg.refunds).load();
+  for (const e of ledger.doutesAuChargement) signalerDoute(e, 'arrêt du bot entre le /pay et sa confirmation');
+  if (ledger.doutesAuChargement.length) await ledger.save();
   const s = ledger.stats();
   console.log(`[refund] registre charge : ${s.pending} en attente, ${s.paid} rendus, ${s.failed} en echec, ${s.today} rendus aujourd hui`);
   console.log(`[refund] fourchette ${cfg.refunds.min}-${cfg.refunds.max}, plafond journalier ${cfg.refunds.dailyMax}`);
