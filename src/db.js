@@ -239,4 +239,56 @@ export const store = {
 
   kvGet: (k) => q.kvGet.get(k)?.v ?? null,
   kvSet: (k, v) => q.kvSet.run(k, String(v)),
+
+  transfererReputation,
+  orphelinsDuPseudo,
 };
+
+/** Cle de la reputation d un compte Minecraft que plus personne n a lie. */
+export const cleOrpheline = (mcName) => `mc:${normName(mcName)}`;
+
+/**
+ * Deplace la reputation RECUE (avis + post du forum) d une cle a une autre.
+ * La reputation suit le compte Minecraft, pas le compte Discord : avant, un
+ * joueur signale se deliait, reliait le meme pseudo depuis un autre Discord et
+ * repartait a zero. Les avis DONNES par le membre restent a lui.
+ */
+function transfererReputation(de, vers) {
+  de = String(de); vers = String(vers);
+  if (de === vers) return 0;
+  db.exec('BEGIN');
+  try {
+    // Un meme auteur ne garde qu un avis par cible : le plus recent gagne.
+    const doublons = db.prepare(`SELECT a.from_id, a.created_at AS ancien, b.created_at AS actuel
+      FROM vouches a JOIN vouches b ON a.from_id = b.from_id WHERE a.to_id = ? AND b.to_id = ?`).all(de, vers);
+    const retirer = db.prepare('DELETE FROM vouches WHERE from_id = ? AND to_id = ?');
+    for (const d of doublons) retirer.run(d.from_id, d.ancien > d.actuel ? vers : de);
+    const n = db.prepare('UPDATE vouches SET to_id = ? WHERE to_id = ?').run(vers, de).changes;
+    // On ne s auto-note pas, meme par heritage.
+    db.prepare('DELETE FROM vouches WHERE to_id = ? AND from_id = ?').run(vers, vers);
+    if (db.prepare('SELECT 1 FROM vouch_threads WHERE discord_id = ?').get(de)) {
+      db.prepare('DELETE FROM vouch_threads WHERE discord_id = ?').run(vers);
+      db.prepare('UPDATE vouch_threads SET discord_id = ? WHERE discord_id = ?').run(vers, de);
+    }
+    db.exec('COMMIT');
+    return n;
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+/**
+ * Cles qui portent encore la reputation de ce pseudo sans lien actif : la cle
+ * orpheline, et les anciens comptes Discord delies avant ce mecanisme (leur
+ * post du forum garde le pseudo).
+ */
+function orphelinsDuPseudo(mcName, sauf) {
+  const norm = normName(mcName);
+  const cles = new Set([cleOrpheline(mcName)]);
+  for (const r of db.prepare('SELECT discord_id, mc_name FROM vouch_threads').all()) {
+    if (normName(r.mc_name) !== norm || r.discord_id === String(sauf)) continue;
+    if (!store.getLink(r.discord_id)) cles.add(r.discord_id);
+  }
+  return [...cles];
+}

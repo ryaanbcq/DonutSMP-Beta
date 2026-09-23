@@ -28,8 +28,9 @@ import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
+import { estAdmin } from './lib/admin.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
-import { filDe, assurerFils } from './vouch/fils.js';
+import { assurerFils, rafraichir } from './vouch/fils.js';
 import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -157,6 +158,7 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isAnySelectMenu()) {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
+      if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return await refusSetup(interaction);
       if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
       if (interaction.customId.startsWith('vouch:')) return await onVouchSelect(interaction);
       if (interaction.customId.startsWith('vsetup:')) return await onVsetupSelect(interaction);
@@ -203,8 +205,17 @@ async function onCommande(interaction) {
   await command.execute(interaction);
 }
 
+// Les panneaux de reglage etaient proteges par la seule permission de la
+// commande /setup : un role a qui on l ouvrait, ou un membre qui avait perdu
+// ses droits mais gardait le panneau ouvert, pouvait tout changer (y compris
+// deplacer le forum des vouches). Le serveur verifie maintenant a chaque clic.
+function refusSetup(interaction) {
+  return interaction.reply({ content: '🔒 Réservé aux admins du bot.', flags: MessageFlags.Ephemeral });
+}
+
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
+  if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchBouton(interaction);
@@ -273,6 +284,7 @@ async function onDelier(interaction) {
 
 async function onModal(interaction) {
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
+  if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
   if (interaction.customId !== 'link:modal') return;
@@ -291,7 +303,9 @@ async function startWatcher(c) {
     console.log(`[link] ${challenge.mc_name} verifie pour ${discordId} (${shortMoney(payment.amount)})`);
     balances.suivre({ mc_name: challenge.mc_name, discord_id: discordId });
     publierSuivis().catch((e) => console.error('[baltop] liste des suivis :', e.message));
-    filDe(c, store.getLink(discordId)).catch((e) => console.error('[vouch] fil :', e.message));
+    // rafraichir et pas seulement filDe : le pseudo a pu apporter sa reputation
+    // (relie depuis un autre Discord), la carte, les tags et le role Trusted suivent.
+    rafraichir(c, discordId).catch((e) => console.error('[vouch] fil :', e.message));
 
     // Solde releve tout de suite : sans ca le nouveau membre attendrait le
     // prochain tour de cycle, jusqu a un quart d heure, pour apparaitre au

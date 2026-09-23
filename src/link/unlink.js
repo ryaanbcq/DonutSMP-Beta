@@ -1,4 +1,4 @@
-import { store } from '../db.js';
+import { store, cleOrpheline } from '../db.js';
 import { cancelLink } from './manager.js';
 import { forget } from './interactions.js';
 import { balances } from '../donut/balances.js';
@@ -19,6 +19,8 @@ export async function delier(userId, member) {
   if (!lien) return { etat: annule ? 'verification_annulee' : 'rien' };
 
   store.removeLink(userId);
+  // La reputation reste au pseudo : elle reviendra a qui le reliera.
+  store.transfererReputation(userId, cleOrpheline(lien.mc_name));
   balances.oublier(lien.mc_name);
   publierSuivis().catch(() => {});
 

@@ -67,11 +67,14 @@ export async function filDe(client, link) {
   const connu = store.getThread(link.discord_id);
   if (connu) {
     let fil = await fetchFil(client, connu.thread_id);
-    // Un fil ouvert ailleurs (ancien salon, forum change) ne compte pas :
-    // on le retire et on repart dans le forum courant. Les cartes d avis
-    // qu il portait sont republiees au prochain rafraichissement.
+    // Un fil ouvert ailleurs (ancien salon, forum change) ne compte plus : on
+    // repart dans le forum courant. L ancien est ARCHIVE et verrouille, jamais
+    // supprime : il porte les captures des signalements, que rien ne
+    // permettait de republier (un changement de forum par erreur les effacait
+    // toutes).
     if (fil && fil.parentId !== salon.id) {
-      await fil.delete('Forum des vouches déplacé').catch(() => {});
+      await fil.setLocked(true, 'Forum des vouches déplacé').catch(() => {});
+      await fil.setArchived(true, 'Forum des vouches déplacé').catch(() => {});
       for (const v of store.vouchAll(link.discord_id)) store.setVouchMessage(v.from_id, v.to_id, null);
       fil = null;
     }

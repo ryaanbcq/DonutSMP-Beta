@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { store } from '../db.js';
+import { store, cleOrpheline } from '../db.js';
 import { config } from '../config.js';
 import { normName, isValidName } from '../lib/names.js';
 
@@ -102,6 +102,16 @@ export function resolvePayment(payment) {
 
   // Le message systeme de DonutSMP porte la casse officielle du pseudo :
   // elle bat celle tapee par le membre, qui peut etre en minuscules.
+  // Reputation : elle suit le compte Minecraft. Ce que ce Discord portait pour
+  // un ancien pseudo (delie avant ce mecanisme) retourne a cet ancien pseudo,
+  // et le pseudo lie recupere la sienne, meme depuis un autre Discord.
+  const ancien = store.getThread(challenge.discord_id);
+  if (ancien && normName(ancien.mc_name) !== normName(nomReel)) {
+    store.transfererReputation(challenge.discord_id, cleOrpheline(ancien.mc_name));
+  }
+  for (const cle of store.orphelinsDuPseudo(nomReel, challenge.discord_id)) {
+    store.transfererReputation(cle, challenge.discord_id);
+  }
   store.createLink(challenge.discord_id, nomReel, payment.amount);
   store.closeChallenge(challenge.id, 'confirmed');
   store.recordPayment(payment, 'linked', challenge.id);

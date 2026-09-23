@@ -102,6 +102,19 @@ export async function onFormulaireOuverture(interaction) {
   const sujet = interaction.fields.getTextInputValue('sujet').trim();
   await interaction.deferReply(EPH);
 
+  // Revalide ici : le menu ne verifiait qu a l ouverture du formulaire, et deux
+  // formulaires ouverts (PC + mobile, ou deux categories) donnaient deux salons.
+  const existant = store.ticketEnCours(interaction.user.id);
+  // Un ticket en cours de creation (identifiant provisoire de moins de 2 min)
+  // compte aussi : deux envois a la meme seconde passaient tous les deux.
+  const enCreation = existant?.channel_id?.startsWith('en-creation-')
+    && Date.now() - existant.created_at < 120_000;
+  if (existant && (enCreation || interaction.guild.channels.cache.has(existant.channel_id))) {
+    return interaction.editReply(enCreation
+      ? '📩 Votre ticket est déjà en cours de création.'
+      : `📩 Vous avez déjà un ticket : <#${existant.channel_id}>.`);
+  }
+
   const guild = interaction.guild;
   const moi = guild.members.me;
   const roles = reglagesTickets.roles().filter((id) => guild.roles.cache.has(id));

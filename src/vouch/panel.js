@@ -24,7 +24,19 @@ const MAX_OCTETS = 8 * 1024 * 1024;
 
 const brouillons = new Map();
 const brouillon = (id) => brouillons.get(String(id)) ?? { cible: null, verdict: null, etoiles: null, message: '', preuves: [] };
-const poser = (id, patch) => { brouillons.set(String(id), { ...brouillon(id), ...patch }); return brouillon(id); };
+const poser = (id, patch) => { brouillons.set(String(id), { ...brouillon(id), ...patch, a: Date.now() }); return brouillon(id); };
+
+// Un brouillon abandonne gardait ses preuves (jusqu a 5 x 8 Mo) en memoire
+// jusqu au redemarrage. Au bout de 30 min sans geste, il part.
+const BROUILLON_MAX_MS = 30 * 60_000;
+setInterval(() => {
+  const limite = Date.now() - BROUILLON_MAX_MS;
+  for (const [id, b] of brouillons) if ((b.a ?? 0) < limite) brouillons.delete(id);
+}, 5 * 60_000).unref();
+
+// Une preuve est une capture ou une video du trade : pas un fichier quelconque.
+const estPreuve = (a) => /^(image|video)\//.test(a.contentType ?? '')
+  || /\.(png|jpe?g|gif|webp|mp4|mov|webm)$/i.test(a.name ?? '');
 
 // ---------------------------------------------------------------------------
 // Rendu
@@ -34,7 +46,10 @@ export function rendre(b, note = '') {
   const cible = b.cible ? store.getLink(b.cible) : null;
   const t = cible ? trustDe(cible.discord_id) : null;
   const scam = b.verdict === 'neg';
-  const complet = cible && b.verdict && (scam ? b.message.length >= MIN_SCAM : b.etoiles);
+  // Un signalement sans preuve suffisait a faire passer n importe qui en ☠️
+  // (deux alts, vingt caracteres chacun) : la capture est obligatoire.
+  const complet = cible && b.verdict
+    && (scam ? b.message.length >= MIN_SCAM && (b.preuves?.length ?? 0) > 0 : b.etoiles);
 
   let description = '**Notez un membre avec qui vous avez tradé.**\n';
   if (!cible) description += '\n1️⃣ Choisissez le membre ci-dessous.';
@@ -44,7 +59,7 @@ export function rendre(b, note = '') {
       + `2️⃣ Verdict : ${b.verdict ? (scam ? '⚠️ **Signalement**' : '✅ **Vouch**') : '*à choisir*'}\n`
       + `3️⃣ Note : ${scam ? '*sans objet pour un signalement*' : b.etoiles ? `**${etoiles(b.etoiles)}**` : '*à choisir*'}\n`
       + `4️⃣ Message : ${b.message ? `\n> ${b.message.replace(/\n/g, '\n> ')}` : scam ? `*obligatoire, ${MIN_SCAM} caractères minimum*` : '*facultatif*'}`
-      + `\n📎 Preuves : ${b.preuves?.length ? b.preuves.map((f) => `\`${f.name}\``).join(', ') : scam ? '*aucune, fortement conseillées (captures du trade)*' : '*aucune*'}`;
+      + `\n📎 Preuves : ${b.preuves?.length ? b.preuves.map((f) => `\`${f.name}\``).join(', ') : scam ? '*obligatoire : au moins une capture ou vidéo du trade*' : '*aucune*'}`;
   }
   if (note) description += `\n\n${note}`;
 
@@ -74,7 +89,9 @@ export function rendre(b, note = '') {
   const actions = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('vouch:message').setLabel(b.message ? 'Modifier le message' : 'Écrire un message')
       .setEmoji('✏️').setStyle(ButtonStyle.Secondary).setDisabled(!b.verdict),
-    new ButtonBuilder().setCustomId('vouch:publier').setLabel('Publier').setEmoji('📣')
+    // La cible voyage dans le bouton : un vieux panneau ouvert sur un autre
+    // membre ne peut plus publier le brouillon courant a sa place.
+    new ButtonBuilder().setCustomId(`vouch:publier:${b.cible}`).setLabel('Publier').setEmoji('📣')
       .setStyle(ButtonStyle.Success).setDisabled(!complet),
     new ButtonBuilder().setCustomId('vouch:annuler').setLabel('Annuler').setStyle(ButtonStyle.Secondary),
   );
@@ -94,7 +111,7 @@ export function panneauVouch(forumId) {
       + '**Chercher un membre** : choisissez-le dans le menu ci-dessous, ou tapez son pseudo Minecraft '
       + 'avec le bouton 🔍. Sa carte de réputation vous est montrée en privé.\n\n'
       + "Pour noter quelqu'un, cliquez sur **Donner un avis** ou tapez `/vouch`. "
-      + 'Un signalement demande une explication, et le staff peut retirer un avis abusif.\n\n'
+      + 'Un signalement demande une explication **et une capture du trade**, et le staff peut retirer un avis abusif.\n\n'
       + '💎 Légende · 🥇 Trusted · 🥈 De confiance · 🥉 Fiable · 🌱 Nouveau · ☠️ Signalé',
   });
   const recherche = new ActionRowBuilder().addComponents(
@@ -121,7 +138,10 @@ async function chercherParMembre(interaction) {
   const id = interaction.values[0];
   const link = store.getLink(id);
   if (!link) return interaction.reply({ content: `<@${id}> n'a pas de compte vérifié : pas de réputation à afficher.`, ...EPH });
-  return montrerCarte(interaction, link);
+  // Creer le post peut enchainer plusieurs appels API : on prend le delai de
+  // 15 min de Discord au lieu des 3 s d une reponse directe.
+  await interaction.deferReply(EPH);
+  return montrerCarte(interaction, link, { differe: true });
 }
 
 function modalRecherche() {
@@ -290,13 +310,19 @@ export async function onBouton(interaction) {
     const modal = new ModalBuilder().setCustomId('vouch:modal').setTitle(scam ? 'Que s\'est-il passé ?' : 'Votre message')
       .addLabelComponents(
         new LabelBuilder().setLabel(scam ? 'Décrivez le scam, avec des faits' : 'Un mot sur le trade').setTextInputComponent(champ),
-        new LabelBuilder().setLabel('Preuves (captures, vidéos)')
-          .setDescription(`Jusqu'à ${MAX_PREUVES} fichiers de 8 Mo. ${b.preuves?.length ? 'Un nouvel envoi remplace les précédentes.' : ''}`.trim())
+        new LabelBuilder().setLabel(scam ? 'Preuves (obligatoires : captures, vidéos)' : 'Preuves (captures, vidéos)')
+          .setDescription(`Images ou vidéos, jusqu'à ${MAX_PREUVES} fichiers de 8 Mo. ${b.preuves?.length ? 'Un nouvel envoi remplace les précédentes.' : ''}`.trim())
           .setFileUploadComponent(new FileUploadBuilder().setCustomId('preuves').setMinValues(0).setMaxValues(MAX_PREUVES).setRequired(false)),
       );
     return interaction.showModal(modal);
   }
-  if (id === 'vouch:publier') return publier(interaction, b);
+  if (id.startsWith('vouch:publier')) {
+    const vise = id.slice('vouch:publier:'.length);
+    if (vise && vise !== String(b.cible)) {
+      return interaction.update(rendre(b, '⚠️ Ce panneau était ouvert sur un autre membre : voici votre avis en cours. Vérifiez-le avant de publier.'));
+    }
+    return publier(interaction, b);
+  }
 }
 
 export async function onModal(interaction) {
@@ -314,6 +340,7 @@ export async function onModal(interaction) {
     preuves = [];
     for (const a of envoyes.slice(0, MAX_PREUVES)) {
       if ((a.size ?? 0) > MAX_OCTETS) { note += `\n⚠️ \`${a.name}\` dépasse 8 Mo, ignoré.`; continue; }
+      if (!estPreuve(a)) { note += `\n⚠️ \`${a.name}\` n'est ni une image ni une vidéo, ignoré.`; continue; }
       const res = await fetch(a.url).catch(() => null);
       if (!res?.ok) { note += `\n⚠️ \`${a.name}\` n'a pas pu être récupéré.`; continue; }
       preuves.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
@@ -331,6 +358,7 @@ async function publier(interaction, b) {
   if (!cible) return interaction.update(rendre(b, '❌ Le membre visé n\'est plus vérifié.'));
   const scam = b.verdict === 'neg';
   if (scam && b.message.length < MIN_SCAM) return interaction.update(rendre(b, `❌ Un signalement demande ${MIN_SCAM} caractères d'explication.`));
+  if (scam && !(b.preuves?.length)) return interaction.update(rendre(b, '❌ Un signalement demande au moins une capture ou vidéo du trade.'));
   if (!scam && !b.etoiles) return interaction.update(rendre(b, '❌ Choisissez une note.'));
 
   await interaction.deferUpdate();
