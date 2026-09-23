@@ -10,6 +10,7 @@ import { config } from './config.js';
 import { store } from './db.js';
 import { demarrerJournal, journal, noterSync } from './ops/journal.js';
 import { onOpsBouton } from './ops/actions.js';
+import { onReclamationBouton, onReclamationSelect } from './vouch/reclamation.js';
 import { duree } from '../ingame/diagnostic.js';
 import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
@@ -157,6 +158,7 @@ client.on('interactionCreate', async (interaction) => {
     }
     if (interaction.isAnySelectMenu()) {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
+      if (interaction.customId.startsWith('recl:')) return await onReclamationSelect(interaction);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
       if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return await refusSetup(interaction);
       if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
@@ -215,6 +217,7 @@ function refusSetup(interaction) {
 
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
+  if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
   if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
