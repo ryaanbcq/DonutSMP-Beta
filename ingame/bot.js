@@ -78,10 +78,18 @@ const FORBIDDEN = /^\/(pay|eco|give|trade|ah|sell|shop|drop)\b/i;
 let bot = null;
 let lastPayment = null;
 
-// Une coupure = UN message au debut, une relance si elle s eternise, un
-// message au retour avec sa duree. Avant, chaque tentative postait le sien.
-let panne = null; // { depuis, tentatives, raison, alerte }
+// Une coupure = UN message si elle dure, une relance si elle s eternise, un
+// message au retour avec sa duree. Une micro-coupure (retour en quelques
+// secondes, vecu ~40 par jour le 23/09 : keepAlive perdu, retour en 8 s) ne
+// dit rien : elle faisait trois messages a chaque fois. Seule leur repetition
+// est signalee (« Connexion instable »).
+let panne = null; // { depuis, tentatives, raison, alerte, annoncee, diag }
 const PANNE_ALERTES_MIN = [10, 60, 360];
+const ANNONCE_APRES_MS = 90_000;
+const INSTABLE_PAR_HEURE = 6;
+const INSTABLE_SILENCE_MS = 6 * 3_600_000;
+const microCoupures = []; // { a, duree }
+let instabiliteSignaleeA = 0;
 let msaEnAttente = false;
 
 // Un meme diagnostic (ban, maintenance...) revient a chaque tentative : on ne
@@ -260,11 +268,14 @@ function connect() {
       note('ok', 'Compte Microsoft reconnecté', 'Le code a été validé, le jeton est de nouveau en cache.',
         { champs: { Compte: ceBot.username }, joueur: ceBot.username });
     }
-    if (panne) {
+    if (panne?.annoncee) {
       note('ok', 'Bot en jeu reconnecté', 'Les paiements de vérification sont de nouveau vus.', {
         champs: { Coupure: duree(Date.now() - panne.depuis), Tentatives: panne.tentatives, Cause: panne.raison },
         joueur: ceBot.username,
       });
+      panne = null;
+    } else if (panne) {
+      noterMicroCoupure(Date.now() - panne.depuis);
       panne = null;
     } else {
       note('ok', 'Bot en jeu connecté', `Connecté à **${cfg.host}**, les paiements de vérification sont vus.`,
@@ -350,15 +361,23 @@ function connect() {
   });
   ceBot.on('error', (err) => {
     console.error(`[mc] erreur : ${err.message}`);
-    signaler(diagnostiquerErreur(err.message));
     // Une erreur AVANT d etre en jeu (ping de detection de version, DNS, TCP)
     // n est jamais suivie d un `end` : sans cette relance le bot ne repart
     // plus du tout. Vecu le 15/09, sept jours hors ligne.
+    // En jeu, l erreur (« client timed out ») n est que l autre face de la
+    // deconnexion qui suit : pas de diagnostic, le `end` s en charge.
     if (ceBot.player) return;
     // Couper pour de bon : une connexion laissee en vol peut arriver en jeu
     // apres qu on a relance, et deux clients sur le meme compte se chassent.
     try { ceBot.end('erreur avant connexion'); } catch { /* deja morte */ }
     rendreLaMain(`erreur avant connexion (${err.message})`, generation);
+    // Le diagnostic attend que la coupure dure : un essai rate suivi d un
+    // retour 5 s plus tard ne merite pas un message.
+    const diag = diagnostiquerErreur(err.message);
+    if (panne && diag) {
+      panne.diag = diag;
+      if (panne.annoncee) signaler(diag);
+    }
   });
   ceBot.on('end', (reason) => rendreLaMain(`deconnecte (${reason})`, generation));
 }
@@ -374,16 +393,40 @@ function rendreLaMain(raison, generation) {
     panne.tentatives += 1;
     return;
   }
-  panne = { depuis: Date.now(), tentatives: 1, raison, alerte: 0 };
+  panne = { depuis: Date.now(), tentatives: 1, raison, alerte: 0, annoncee: false, diag: null };
+}
+
+function annoncerPanne() {
+  panne.annoncee = true;
   note('warn', 'Bot en jeu déconnecté',
     'Les paiements de vérification ne sont plus vus jusqu\'à la reconnexion.'
     + ' Un seul message par coupure : le retour sera annoncé ici.',
-    { champs: { Raison: `\`${raison}\``, Relance: `dans ${Math.round(dans / 1000)} s` } });
+    { champs: { Raison: `\`${panne.raison}\``, Depuis: `<t:${Math.floor(panne.depuis / 1000)}:R>`, Tentatives: panne.tentatives } });
+  if (panne.diag) signaler(panne.diag);
 }
 
-// Coupure qui s eternise : relance a 10 min, 1 h, 6 h.
+function noterMicroCoupure(ms) {
+  const maintenant = Date.now();
+  microCoupures.push({ a: maintenant, duree: ms });
+  while (microCoupures.length && maintenant - microCoupures[0].a > 3_600_000) microCoupures.shift();
+  if (microCoupures.length < INSTABLE_PAR_HEURE) return;
+  if (maintenant - instabiliteSignaleeA < INSTABLE_SILENCE_MS) return;
+  instabiliteSignaleeA = maintenant;
+  const moyenne = microCoupures.reduce((t, c) => t + c.duree, 0) / microCoupures.length;
+  note('warn', 'Connexion instable',
+    'Le bot perd sa connexion à répétition mais revient seul en quelques secondes : rien à faire pour l\'instant.'
+    + ' Si ça dure, regarde le réseau de la machine qui héberge le bot. Prochain rappel dans 6 h au plus tôt.',
+    { champs: { 'Coupures (1 h)': microCoupures.length, 'Retour moyen': duree(moyenne) } });
+}
+
+// Coupure qui dure : annoncee apres 90 s, puis relance a 10 min, 1 h, 6 h.
 setInterval(() => {
-  if (!panne || panne.alerte >= PANNE_ALERTES_MIN.length) return;
+  if (!panne) return;
+  if (!panne.annoncee) {
+    if (Date.now() - panne.depuis >= ANNONCE_APRES_MS) annoncerPanne();
+    return;
+  }
+  if (panne.alerte >= PANNE_ALERTES_MIN.length) return;
   const seuil = PANNE_ALERTES_MIN[panne.alerte];
   if (Date.now() - panne.depuis < seuil * 60_000) return;
   panne.alerte += 1;
@@ -391,13 +434,15 @@ setInterval(() => {
     'Les reconnexions automatiques échouent. Les `/link` sont refusés en attendant.'
     + (msaEnAttente ? ' Un code Microsoft attend d\'être validé (message plus haut).' : ''),
     { champs: { Tentatives: panne.tentatives, 'Dernière cause': panne.raison, Depuis: `<t:${Math.floor(panne.depuis / 1000)}:R>` } });
-}, 30_000).unref();
+}, 10_000).unref();
 
 // Le chien de garde : la ceinture quand aucun evenement n arrive.
 setInterval(() => {
   if (superviseur.chienDeGarde(Boolean(bot?.player))) {
-    if (!panne) panne = { depuis: Date.now(), tentatives: 0, raison: 'chien de garde', alerte: 0 };
+    if (!panne) panne = { depuis: Date.now(), tentatives: 0, raison: 'chien de garde', alerte: 0, annoncee: false, diag: null };
     panne.tentatives += 1;
+    // Plusieurs minutes sans etre en jeu : ce n est plus une micro-coupure.
+    if (!panne.annoncee) annoncerPanne();
     note('err', 'Chien de garde déclenché',
       'Aucun événement depuis trop longtemps et toujours pas en jeu : connexion relancée de force.'
       + ' Souvent un serveur qui accepte la connexion sans jamais faire entrer le bot.');

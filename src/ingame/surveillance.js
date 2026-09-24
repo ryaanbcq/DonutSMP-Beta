@@ -22,26 +22,34 @@ async function prevenir(client, embedMessage) {
   return cibles.length;
 }
 
-export function surveillerPresence(client, { intervalMs = 30_000 } = {}) {
-  let dernierEtat = null;
+// Le refus des /link reste immediat (presence() est lu a chaque demande). Ce
+// qui attend, c est le BRUIT : journal staff et MP aux joueurs en attente ne
+// partent que si la coupure dure. Le 23/09, ~40 micro-coupures de 8 s ont
+// fait 80 messages dans #logs et deux MP chacune aux joueurs en verification.
+export const ANNONCE_APRES_MS = 90_000;
+
+export function surveillerPresence(client, { intervalMs = 30_000, annonceApresMs = ANNONCE_APRES_MS } = {}) {
+  let horsLigneDepuis = null;
+  let raison = null;
+  let annonce = false;
 
   const verifier = async () => {
     const etat = await presence();
-    if (dernierEtat === null) {
-      dernierEtat = etat.enLigne;
-      return;
-    }
-    if (etat.enLigne === dernierEtat) return;
-    dernierEtat = etat.enLigne;
 
     if (!etat.enLigne) {
-      console.warn(`[presence] bot en jeu hors ligne (${etat.raison}), /link suspendu`);
+      if (horsLigneDepuis === null) {
+        horsLigneDepuis = Date.now();
+        raison = etat.raison;
+        console.warn(`[presence] bot en jeu hors ligne (${etat.raison}), /link suspendu`);
+      }
+      if (annonce || Date.now() - horsLigneDepuis < annonceApresMs) return;
+      annonce = true;
       journal({
         niveau: 'warn',
         titre: 'Vérifications suspendues',
         texte: 'Le bot en jeu ne répond plus : les nouveaux `/link` sont refusés'
           + ' et les paiements en cours ne seraient pas vus.',
-        champs: { Raison: etat.raison },
+        champs: { Raison: raison, Depuis: `<t:${Math.floor(horsLigneDepuis / 1000)}:R>` },
       });
       const n = await prevenir(client, (c) => embed('⚠️・PAIEMENT SUSPENDU', {
         couleur: FR.jaune,
@@ -56,7 +64,12 @@ export function surveillerPresence(client, { intervalMs = 30_000 } = {}) {
       return;
     }
 
+    if (horsLigneDepuis === null) return;
+    const etaitAnnonce = annonce;
+    horsLigneDepuis = null;
+    annonce = false;
     console.log('[presence] bot en jeu de retour, /link rouvert');
+    if (!etaitAnnonce) return; // micro-coupure : personne n a ete prevenu, rien a dire
     journal({ niveau: 'ok', titre: 'Vérifications rouvertes', texte: 'Le bot en jeu est revenu, `/link` est de nouveau ouvert.' });
     await prevenir(client, (c) => embed('✅・PAIEMENT POSSIBLE', {
       couleur: FR.vert,

@@ -41,6 +41,7 @@ test('les erreurs de connexion utiles sont reconnues, les banales ignorees', () 
   assert.equal(diagnostiquerErreur("Profile not found: doesn't own minecraft").titre, 'Compte sans Minecraft');
   assert.equal(diagnostiquerErreur('read ECONNRESET'), null);
   assert.equal(diagnostiquerErreur('keepAliveError'), null);
+  assert.equal(diagnostiquerErreur('client timed out after 30000 milliseconds'), null, 'keepAlive, pas un serveur tombe');
 });
 
 test('duree lisible', () => {

@@ -113,7 +113,9 @@ const ERREURS = [
     texte: 'Impossible de résoudre l\'adresse de DonutSMP : la machine a sans doute perdu internet.',
   },
   {
-    re: /ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|timed out/i,
+    // Pas « timed out » tout court : « client timed out after 30000 ms » est un
+    // keepAlive perdu par un bot deja en jeu, pas un serveur injoignable.
+    re: /ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|connect(ion)? timed out/i,
     niveau: 'warn',
     titre: 'DonutSMP injoignable',
     texte: 'La connexion au serveur échoue (serveur tombé ou réseau coupé). Le bot réessaie seul.',
