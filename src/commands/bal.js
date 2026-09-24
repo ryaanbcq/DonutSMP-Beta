@@ -14,30 +14,24 @@ const dernier = new Map();
 
 export function option(o) {
   return o.setName('joueur')
-    .setDescription('Le pseudo à consulter (le vôtre par défaut)')
+    .setDescription('Un pseudo ou un @membre (le vôtre par défaut)')
     .setMaxLength(40);
-}
-
-export function optionMembre(o) {
-  return o.setName('membre')
-    .setDescription('Ou un membre Discord : son compte lié est consulté');
 }
 
 export const data = new SlashCommandBuilder()
   .setName('bal')
   .setDescription("Consulte le solde DonutSMP d'un joueur")
-  .addStringOption(option)
-  .addUserOption(optionMembre);
+  .addStringOption(option);
 
 /**
- * Le pseudo vise : option membre, mention collee dans le champ pseudo
- * (<@123>), pseudo tape, ou le compte de l appelant. Rend { pseudo } ou
+ * Le pseudo vise : un @membre tape dans le champ (Discord envoie <@123>),
+ * un pseudo, ou le compte de l appelant. Rend { pseudo } ou
  * { erreur } quand le membre vise n a pas de compte lie.
  */
 export function cible(interaction) {
   const saisi = interaction.options.getString('joueur')?.trim() || null;
   const mention = saisi?.match(/^<@!?(\d{17,20})>$/)?.[1];
-  const membreId = interaction.options.getUser('membre')?.id ?? mention ?? null;
+  const membreId = mention ?? null;
   if (membreId) {
     const lien = store.getLink(membreId);
     return lien
