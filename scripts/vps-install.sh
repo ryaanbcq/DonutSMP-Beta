@@ -136,6 +136,7 @@ etape "Controle final"
 node scripts/doctor.js || true
 
 printf '\nInstalle dans %s\n' "$RACINE"
+printf 'Sur Discord : /setup general (roles, salons, panneaux, dons)\n'
 printf 'Reglages  : donut config\n'
 printf 'Logs      : donut logs\n'
 printf 'Mise a jour : donut update\n\n'

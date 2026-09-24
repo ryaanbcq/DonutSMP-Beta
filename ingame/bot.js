@@ -931,11 +931,21 @@ if (cfg.refunds.enabled) {
 }
 
 dons = await new Reversements(cfg.dons).load();
+// Le beneficiaire se regle sur Discord (/setup general), le .env n est que la
+// valeur par defaut. Relu chaque minute : pas besoin de relancer le bot en jeu.
+const lireBeneficiaire = () => {
+  const pose = verificateur.kv('dons.beneficiaire');
+  const b = (pose ?? cfg.dons.beneficiaire).trim();
+  if (b !== dons.beneficiaire) console.log(`[don] beneficiaire : ${b || 'aucun'}`);
+  dons.beneficiaire = b;
+};
+lireBeneficiaire();
+setInterval(lireBeneficiaire, 60_000).unref();
 for (const v of dons.doutesAuChargement) signalerDouteDon(v, 'arrêt du bot entre le /pay et sa confirmation');
 if (dons.doutesAuChargement.length) await dons.save();
-console.log(cfg.dons.beneficiaire
-  ? `[don] dons a partir de ${cfg.dons.min}, reverses chaque jour a ${cfg.dons.heure} h (Paris) a ${cfg.dons.beneficiaire}, cumul ${dons.etat.cumul}`
-  : `[don] dons a partir de ${cfg.dons.min}, AUCUN beneficiaire (DONATION_RECIPIENT) : cumul ${dons.etat.cumul} garde`);
+console.log(dons.beneficiaire
+  ? `[don] dons a partir de ${cfg.dons.min}, reverses chaque jour a ${cfg.dons.heure} h (Paris) a ${dons.beneficiaire}, cumul ${dons.etat.cumul}`
+  : `[don] dons a partir de ${cfg.dons.min}, AUCUN beneficiaire (/setup general) : cumul ${dons.etat.cumul} garde`);
 
 if (cfg.soldes.enabled) {
   await chargerSuivis();

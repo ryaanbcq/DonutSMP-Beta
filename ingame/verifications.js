@@ -48,6 +48,15 @@ export function creerVerificateur(chemin) {
       }
       return { ok: true };
     },
+    /** Reglage pose par /setup general (table kv), ou null s il n y en a pas. */
+    kv(cle) {
+      try {
+        return ouvrir().prepare('SELECT v FROM kv WHERE k = ?').get(cle)?.v ?? null;
+      } catch {
+        db = null;
+        return null;
+      }
+    },
     fermer() { try { db?.close(); } catch { /* deja fermee */ } db = null; },
   };
 }

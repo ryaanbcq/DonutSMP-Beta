@@ -12,11 +12,11 @@
 import { db, store } from '../db.js';
 import { donut } from './api.js';
 import { normName } from '../lib/names.js';
-import { config } from '../config.js';
+import { settings } from '../settings.js';
 
 // Le beneficiaire des dons recoit chaque nuit l argent de toute la communaute :
 // son solde n a pas sa place dans le classement des fortunes.
-const horsClassement = () => normName(config.dons.beneficiaire) || '\u0000';
+const horsClassement = () => normName(settings.beneficiaire()) || '\u0000';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS balances (

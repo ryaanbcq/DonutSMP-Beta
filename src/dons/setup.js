@@ -9,6 +9,7 @@ import {
   ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits,
 } from 'discord.js';
 import { config } from '../config.js';
+import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { shortMoney } from '../lib/format.js';
 import {
@@ -34,13 +35,13 @@ export function rendreSetupDons(guild, note = '') {
       'Tout `/pay` au bot à partir du minimum est un don. Le membre porte le rôle du plus haut palier atteint'
       + ' (total de ses dons).\n\n'
       + `**Don minimum** · ${shortMoney(config.dons.min)}\n`
-      + `**Reversé chaque jour à** · ${config.dons.beneficiaire || 'personne (le bot garde les dons)'}\n`
-      + `**Panneau public** · ${config.dons.salonPanneauId ? `<#${config.dons.salonPanneauId}>` : 'aucun salon (DONATION_CHANNEL_ID)'}\n`
-      + `**Historique** · ${config.dons.salonId ? `<#${config.dons.salonId}>` : 'dans le journal staff'}\n\n`
+      + `**Reversé chaque jour à** · ${settings.beneficiaire() || 'personne (le bot garde les dons)'}\n`
+      + `**Panneau public** · ${settings.salonDonations() ? `<#${settings.salonDonations()}>` : 'aucun salon (/setup general)'}\n`
+      + `**Historique** · ${settings.salonHistoriqueDons() ? `<#${settings.salonHistoriqueDons()}>` : 'dans le journal staff'}\n\n`
       + `**Paliers**\n${lignes.join('\n')}`
       + (moi && !moi.permissions.has(PermissionFlagsBits.ManageRoles) ? '\n\n⚠️ Il me manque **Gérer les rôles**.' : '')
       + (note ? `\n\n${note}` : ''),
-  }).setFooter({ text: 'Minimum et bénéficiaire : donut config sur la machine du bot.' });
+  }).setFooter({ text: 'Salons et bénéficiaire : /setup general. Don minimum : donut config.' });
 
   const menus = liste.map((p) => {
     const m = new RoleSelectMenuBuilder().setCustomId(`dsetup:role:${p}`)

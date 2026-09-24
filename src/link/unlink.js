@@ -3,7 +3,7 @@ import { cancelLink } from './manager.js';
 import { forget } from './interactions.js';
 import { balances } from '../donut/balances.js';
 import { publierSuivis } from '../donut/ingame-balances.js';
-import { config } from '../config.js';
+import { settings } from '../settings.js';
 import { rafraichirSiBesoin } from '../baltop/panel.js';
 import { rolesDonateur } from '../dons/dons.js';
 
@@ -28,8 +28,8 @@ export async function delier(userId, member) {
   // Sorti du classement tout de suite, sans attendre la limite d edition.
   if (member?.client) rafraichirSiBesoin(member.client, { force: true }).catch(() => {});
 
-  if (config.discord.verifiedRoleId) {
-    await member?.roles?.remove(config.discord.verifiedRoleId).catch(() => {});
+  if (settings.roleVerifie()) {
+    await member?.roles?.remove(settings.roleVerifie()).catch(() => {});
   }
   // Les dons restent au compte Minecraft : le rang repartira avec lui.
   for (const id of rolesDonateur()) {

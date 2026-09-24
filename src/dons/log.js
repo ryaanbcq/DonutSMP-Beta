@@ -2,7 +2,7 @@
 // journal technique ou ils se perdaient entre les pannes et les links.
 // Sans DONATION_LOG_CHANNEL_ID, rien ne part ici (le journal garde tout).
 
-import { config } from '../config.js';
+import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { surCanal } from '../ops/journal.js';
 
@@ -18,15 +18,20 @@ function poster(e) {
     .catch((err) => console.error('[don] salon des dons :', err.message));
 }
 
-export async function demarrerLogDons(client) {
-  if (!config.dons.salonId) return;
-  salon = await client.channels.fetch(config.dons.salonId).catch(() => null);
-  if (!salon?.isTextBased?.()) {
+/** Resout (ou re-resout apres /setup general) le salon de l historique. */
+export async function changerSalonHistorique(client) {
+  const id = settings.salonHistoriqueDons();
+  salon = id ? await client.channels.fetch(id).catch(() => null) : null;
+  if (id && !salon?.isTextBased?.()) {
     salon = null;
-    console.warn('[don] DONATION_LOG_CHANNEL_ID introuvable, pas de salon des dons');
-    return;
+    console.warn('[don] salon de l historique des dons introuvable');
   }
-  console.log(`[don] historique poste dans #${salon.name}`);
+  return salon;
+}
+
+export async function demarrerLogDons(client) {
+  await changerSalonHistorique(client);
+  if (salon) console.log(`[don] historique poste dans #${salon.name}`);
 
   // Reversements : ecrits par le bot en jeu dans le flux d evenements.
   surCanal('dons', (ev) => {

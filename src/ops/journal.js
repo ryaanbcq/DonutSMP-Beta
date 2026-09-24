@@ -126,12 +126,19 @@ async function envoyer(evenement) {
  * Branche le journal : resout le salon, puis lit le flux du bot en jeu.
  * Sans OPS_CHANNEL_ID, tout devient silencieux et rien ne casse.
  */
-export async function demarrerJournal(client) {
+/** Change le salon du journal a chaud (/setup general). Vide = silencieux. */
+export async function changerSalonJournal(client, salonId) {
+  salon = salonId ? await client.channels.fetch(salonId).catch(() => null) : null;
+  derniers.clear();
+  return salon;
+}
+
+export async function demarrerJournal(client, salonId = config.discord.opsChannelId) {
   // Le flux est lu meme sans journal : les salons thematiques (dons) en vivent aussi.
-  if (!config.discord.opsChannelId) {
-    console.log('[journal] OPS_CHANNEL_ID absent, journal Discord desactive');
+  if (!salonId) {
+    console.log('[journal] aucun salon de journal, journal Discord desactive');
   } else {
-    salon = await client.channels.fetch(config.discord.opsChannelId).catch((e) => {
+    salon = await client.channels.fetch(salonId).catch((e) => {
       console.error('[journal] salon introuvable :', e.message);
       return null;
     });

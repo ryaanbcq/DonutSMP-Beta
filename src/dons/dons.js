@@ -9,6 +9,7 @@
 
 import { db, store } from '../db.js';
 import { config } from '../config.js';
+import { settings } from '../settings.js';
 import { normName } from '../lib/names.js';
 import { shortMoney } from '../lib/format.js';
 
@@ -86,7 +87,7 @@ const qTop = db.prepare(`
 `);
 /** Plus gros donateurs, par compte Minecraft (lies ou non). */
 // Le beneficiaire n y figure pas : ce qu il envoie au bot, ce sont des renvois.
-export const classementDons = (limite = 10) => qTop.all(normName(config.dons.beneficiaire) || '\u0000', limite).map((r) => ({
+export const classementDons = (limite = 10) => qTop.all(normName(settings.beneficiaire()) || '\u0000', limite).map((r) => ({
   name: r.lie ?? r.mc_name, discordId: r.discord_id ?? null, total: r.total,
 }));
 

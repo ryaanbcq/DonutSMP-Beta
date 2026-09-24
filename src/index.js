@@ -28,6 +28,7 @@ import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
 import { assurerRoles, majRolesDonateur, palierPour, nomRole, paliers as paliersDons } from './dons/dons.js';
+import { onGsetupSelect, onGsetupBouton, onGsetupModal } from './setup/general.js';
 import { onDsetupSelect, onDsetupBouton, onDsetupModal } from './dons/setup.js';
 import { publierPanneauDons, surveillerPanneauDons, onBoutonDons, onModalDons } from './dons/panneau.js';
 import { demarrerLogDons, logDon, salonDonsActif } from './dons/log.js';
@@ -62,7 +63,7 @@ client.once('clientReady', async (c) => {
   setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
   // Le salon des dons d abord : le journal relit le flux des son demarrage.
   await demarrerLogDons(c);
-  await demarrerJournal(c);
+  await demarrerJournal(c, settings.salonJournal());
   journal({
     niveau: 'ok',
     titre: 'Bot Discord démarré',
@@ -174,11 +175,12 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId.startsWith('recl:')) return await onReclamationSelect(interaction);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
       if (interaction.customId.startsWith('ticket:add:')) return await onSelectTicket(interaction);
-      if (/^(tsetup|vsetup|dsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return await refusSetup(interaction);
+      if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return await refusSetup(interaction);
       if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
       if (interaction.customId.startsWith('vouch:')) return await onVouchSelect(interaction);
       if (interaction.customId.startsWith('vsetup:')) return await onVsetupSelect(interaction);
       if (interaction.customId.startsWith('dsetup:')) return await onDsetupSelect(interaction);
+      if (interaction.customId.startsWith('gsetup:')) return await onGsetupSelect(interaction);
       return;
     }
     if (interaction.isChatInputCommand()) {
@@ -233,12 +235,13 @@ function refusSetup(interaction) {
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
-  if (/^(tsetup|vsetup|dsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
+  if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchBouton(interaction);
   if (interaction.customId.startsWith('vsetup:')) return onVsetupBouton(interaction);
   if (interaction.customId.startsWith('dsetup:')) return onDsetupBouton(interaction);
+  if (interaction.customId.startsWith('gsetup:')) return onGsetupBouton(interaction);
   if (interaction.customId.startsWith('dons:')) return onBoutonDons(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
@@ -304,9 +307,10 @@ async function onDelier(interaction) {
 
 async function onModal(interaction) {
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
-  if (/^(tsetup|vsetup|dsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
+  if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);
   if (interaction.customId.startsWith('dsetup:')) return onDsetupModal(interaction);
+  if (interaction.customId.startsWith('gsetup:')) return onGsetupModal(interaction);
   if (interaction.customId.startsWith('dons:')) return onModalDons(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
   if (interaction.customId !== 'link:modal') return;
@@ -358,10 +362,10 @@ async function startWatcher(c) {
     const user = await c.users.fetch(discordId).catch(() => null);
     await user?.send({ embeds: [confirmation] }).catch(() => {});
 
-    if (config.discord.verifiedRoleId && config.discord.guildId) {
+    if (settings.roleVerifie() && config.discord.guildId) {
       const guild = await c.guilds.fetch(config.discord.guildId).catch(() => null);
       const member = await guild?.members.fetch(discordId).catch(() => null);
-      await member?.roles.add(config.discord.verifiedRoleId).catch((e) =>
+      await member?.roles.add(settings.roleVerifie()).catch((e) =>
         console.error('[link] role non attribue :', e.message));
     }
     // Des dons faits avant le link comptent des maintenant.
@@ -406,7 +410,7 @@ async function startWatcher(c) {
         Don: shortMoney(payment.amount),
         Total: shortMoney(total),
         Rang: nouveau >= 0 ? nomRole(paliers[nouveau]) : 'aucun',
-        ...(config.dons.beneficiaire ? { 'Reversé à': config.dons.beneficiaire } : {}),
+        ...(settings.beneficiaire() ? { 'Reversé à': settings.beneficiaire() } : {}),
       },
       joueur: nom,
     });
@@ -490,8 +494,8 @@ async function startWatcher(c) {
 }
 
 async function log(c, embed) {
-  if (!config.discord.logChannelId) return;
-  const channel = await c.channels.fetch(config.discord.logChannelId).catch(() => null);
+  if (!settings.salonLogs()) return;
+  const channel = await c.channels.fetch(settings.salonLogs()).catch(() => null);
   await channel?.send({ embeds: [embed] }).catch(() => {});
 }
 

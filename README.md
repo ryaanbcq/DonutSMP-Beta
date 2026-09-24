@@ -59,6 +59,27 @@ et s'arrete si le `.env` est incomplet.
 A la fin, `scripts/doctor.js` affiche l'etat de l'installation. Rien ne reste
 a remplir a la main ; `donut config` sert a changer un choix apres coup.
 
+## Configuration sur Discord : `/setup general`
+
+Une fois le bot installe et invite, tout le reste se regle depuis Discord, sans
+ouvrir un fichier. `/setup general` (permission « Gerer le serveur ») ouvre une
+fiche privee :
+
+- **✨ Tout créer pour moi** : role `Vérifié`, salons publics (connexion,
+  classement, donations) et staff (logs, journal, historique des dons),
+  panneaux publies et salons en lecture seule. Recliquer ne cree rien en double.
+- ou choisir ses propres roles et salons dans les menus : role des verifies,
+  role staff, salon des logs, journal du bot ;
+- page **Panneaux** : connexion et classement publies dans le salon choisi,
+  acces aux reglages tickets et vouches ;
+- page **Dons** : salon public des donations, historique, beneficiaire du
+  reversement quotidien, paliers et roles.
+
+Tout est enregistre en base et pris en compte a chaud ; les cles du `.env`
+(`VERIFIED_ROLE_ID`, `LOG_CHANNEL_ID`...) ne sont plus que des valeurs par
+defaut. Le terminal ne sert qu'a ce qu'aucune commande Discord ne peut faire :
+le token et la connexion Microsoft du compte en jeu.
+
 ## La commande `donut`
 
 `scripts/vps-install.sh` pose un lien dans `/usr/local/bin/donut`. Tout se

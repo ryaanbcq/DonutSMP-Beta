@@ -1,5 +1,6 @@
 import { store } from './db.js';
 import { config } from './config.js';
+import { brancherRoleAdmin } from './lib/admin.js';
 
 // Reglages que les commandes posent elles memes. Ils vivent en base : une
 // valeur donnee par /panel prend effet tout de suite, sans redemarrage, et le
@@ -24,6 +25,17 @@ export const settings = {
   roleTrusted: () => lire('vouch.role'),
   poserRoleTrusted: (id) => store.kvSet('vouch.role', id ? String(id) : ''),
 
+  // /setup general : ce qui vivait dans le .env. Le .env reste la valeur par
+  // defaut ; une valeur posee ici gagne, meme vide (= desactive).
+  roleVerifie: () => lire('general.roleVerifie', config.discord.verifiedRoleId),
+  roleAdmin: () => lire('general.roleAdmin', config.discord.adminRoleId),
+  salonLogs: () => lire('general.salonLogs', config.discord.logChannelId),
+  salonJournal: () => lire('general.salonJournal', config.discord.opsChannelId),
+  salonDonations: () => lire('dons.salonPanneau', config.dons.salonPanneauId),
+  salonHistoriqueDons: () => lire('dons.salonHistorique', config.dons.salonId),
+  beneficiaire: () => lire('dons.beneficiaire', config.dons.beneficiaire) ?? '',
+  poser: (cle, valeur) => store.kvSet(cle, valeur ? String(valeur) : ''),
+
   emojis: () => {
     const perso = store.kvGet('baltop.emojis');
     if (perso) return perso.split('|');
@@ -42,3 +54,7 @@ export function ouSeLier() {
     ? `rendez-vous dans <#${salon}> et cliquez sur **Se connecter**`
     : 'passez par le panneau de connexion du serveur et cliquez sur **Se connecter**';
 }
+
+// estAdmin lit le role staff d ici (settings ne peut pas etre importe par
+// admin.js : les tests d admin tourneraient sur la vraie base).
+brancherRoleAdmin(() => settings.roleAdmin());

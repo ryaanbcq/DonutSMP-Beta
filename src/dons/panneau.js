@@ -10,7 +10,7 @@ import { config } from '../config.js';
 import { store } from '../db.js';
 import { embed, FR } from '../lib/brand.js';
 import { shortMoney } from '../lib/format.js';
-import { ouSeLier } from '../settings.js';
+import { ouSeLier, settings } from '../settings.js';
 import { verrouiller, peutVerrouiller } from '../lib/salon.js';
 import { presence } from '../ingame/presence.js';
 import { escapeMarkdown } from 'discord.js';
@@ -84,10 +84,10 @@ export function rendrePanneauDons(guild, enLigne = enLigneAffiche) {
 
 /** Publie ou reecrit le panneau. Rend une note lisible, ou null sans salon. */
 export async function publierPanneauDons(client, guild) {
-  if (!config.dons.salonPanneauId) return null;
-  const salon = await client.channels.fetch(config.dons.salonPanneauId).catch(() => null);
+  if (!settings.salonDonations()) return null;
+  const salon = await client.channels.fetch(settings.salonDonations()).catch(() => null);
   if (!salon?.isTextBased?.()) {
-    console.warn('[don] DONATION_CHANNEL_ID introuvable, pas de panneau des dons');
+    console.warn('[don] salon donations introuvable, pas de panneau des dons');
     return null;
   }
   const contenu = {
@@ -116,7 +116,6 @@ export async function publierPanneauDons(client, guild) {
 
 /** Relit l etat du bot en jeu et reecrit le panneau quand l affichage change. */
 export function surveillerPanneauDons(client, { intervalMs = 30_000 } = {}) {
-  if (!config.dons.salonPanneauId) return null;
   const verifier = async () => {
     const { enLigne } = await presence();
     if (enLigne) horsLigneDepuis = null;
