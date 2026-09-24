@@ -59,7 +59,10 @@ export async function rendreSetupGeneral(guild, note = '') {
       + '### Essentiel\n'
       + `${ok(settings.roleVerifie())} **Rôle des vérifiés** · ${role(settings.roleVerifie())}\n`
       + `${settings.rolesAdmin().length ? '✅' : '➖'} **Rôles staff** · ${settings.rolesAdmin().length ? settings.rolesAdmin().map(role).join(' ') : '*« Gérer le serveur » suffit*'}\n`
-      + `${ok(settings.salonLogs())} **Logs des vérifications** · ${salon(settings.salonLogs())}\n`
+      + '### Logs\n'
+      + `${ok(settings.salonLogs())} **Liaisons (/link)** · ${salon(settings.salonLogs())}\n`
+      + `${ok(settings.salonHistoriqueDons())} **Donations** · ${salon(settings.salonHistoriqueDons())}\n`
+      + `${ok(reglagesTickets.salonLogs())} **Tickets** · ${salon(reglagesTickets.salonLogs())}\n`
       + `${ok(settings.salonJournal())} **Journal du bot** · ${salon(settings.salonJournal())}\n`
       + '### Panneaux\n'
       + `${ok(settings.salonLink())} **Connexion** · ${salon(settings.salonLink())}\n`
@@ -68,8 +71,7 @@ export async function rendreSetupGeneral(guild, note = '') {
       + `${ok(reglagesTickets.salonPanneau())} **Tickets** · ${salon(reglagesTickets.salonPanneau())}\n`
       + `${ok(settings.salonVouch())} **Vouches** · ${salon(settings.salonVouch())}\n`
       + '### Dons\n'
-      + `${ok(settings.beneficiaire())} **Reversés chaque nuit à** · ${settings.beneficiaire() ? `\`${settings.beneficiaire()}\`` : '*personne : le bot garde les dons*'}\n`
-      + `${ok(settings.salonHistoriqueDons())} **Historique** · ${salon(settings.salonHistoriqueDons())}`
+      + `${ok(settings.beneficiaire())} **Reversés chaque nuit à** · ${settings.beneficiaire() ? `\`${settings.beneficiaire()}\`` : '*personne : le bot garde les dons*'}`
       + (manque.length ? `\n\n⚠️ Il me manque **${manque.join('** et **')}** : réinvitez-moi avec ces droits.` : '')
       + (note ? `\n\n${note}` : ''),
   });
@@ -80,21 +82,51 @@ export async function rendreSetupGeneral(guild, note = '') {
   const admin = new RoleSelectMenuBuilder().setCustomId('gsetup:admin')
     .setPlaceholder('🛠️ Rôles staff (commandes admin du bot)').setMinValues(0).setMaxValues(10);
   if (settings.rolesAdmin().length) admin.setDefaultRoles(...settings.rolesAdmin());
-  const logs = texte('gsetup:logs', '📋 Salon des logs de vérification', settings.salonLogs());
-  const journal = texte('gsetup:journal', '🩺 Journal du bot (pannes, erreurs)', settings.salonJournal());
 
   return {
     embeds: [contenu],
     components: [
-      ...[verifie, admin, logs, journal].map((m) => new ActionRowBuilder().addComponents(m)),
+      ...[verifie, admin].map((m) => new ActionRowBuilder().addComponents(m)),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gsetup:tout').setLabel('Tout créer pour moi').setEmoji('✨').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('gsetup:page:panneaux').setLabel('Panneaux').setEmoji('📌').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:dons').setLabel('Dons').setEmoji('💝').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:page:logs').setLabel('Logs').setEmoji('📋').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:bot').setLabel('Bot en jeu').setEmoji('🤖').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
+}
+
+function pageLogs(note = '') {
+  return {
+    embeds: [embed('📋・LOGS', {
+      couleur: FR.bleu,
+      description: 'Un salon staff par type d\'événement. Les salons choisis ici deviennent visibles par les rôles staff.\n\n'
+        + `🔗 **Liaisons** · ${salon(settings.salonLogs())} : chaque compte vérifié\n`
+        + `💝 **Donations** · ${salon(settings.salonHistoriqueDons())} : chaque don et chaque reversement`
+        + `${settings.salonHistoriqueDons() ? '' : ' (sinon dans le journal)'}\n`
+        + `🎫 **Tickets** · ${salon(reglagesTickets.salonLogs())} : ouverture, fermeture, logs sauvegardés\n`
+        + `🩺 **Journal du bot** · ${salon(settings.salonJournal())} : pannes, connexion, erreurs`
+        + (note ? `\n\n${note}` : ''),
+    })],
+    components: [
+      new ActionRowBuilder().addComponents(texte('gsetup:logs', '🔗 Logs des liaisons (/link)', settings.salonLogs())),
+      new ActionRowBuilder().addComponents(texte('gsetup:historique:l', '💝 Logs des donations', settings.salonHistoriqueDons())),
+      new ActionRowBuilder().addComponents(texte('gsetup:ticketlogs', '🎫 Logs des tickets', reglagesTickets.salonLogs())),
+      new ActionRowBuilder().addComponents(texte('gsetup:journal', '🩺 Journal du bot (pannes, erreurs)', settings.salonJournal())),
+      new ActionRowBuilder().addComponents(retour()),
+    ],
+  };
+}
+
+/** Un salon de logs choisi : les roles staff le voient. */
+async function ouvrirAuStaff(guild, salonId) {
+  const s = salonId ? await guild.channels.fetch(salonId).catch(() => null) : null;
+  if (!s?.permissionOverwrites) return;
+  for (const r of settings.rolesAdmin()) {
+    await s.permissionOverwrites.edit(r, { ViewChannel: true, ReadMessageHistory: true }, { reason: 'Rôle staff du bot' }).catch(() => {});
+  }
 }
 
 async function pageBot(note = '') {
@@ -331,10 +363,20 @@ export async function onGsetupSelect(interaction) {
     settings.poser('general.roleVerifie', valeur);
     return interaction.update(await rendreSetupGeneral(guild, '✅ Rôle des vérifiés enregistré. Il est donné aux prochains comptes liés.'));
   }
-  if (id === 'logs' || id === 'journal') {
-    settings.poser(id === 'logs' ? 'general.salonLogs' : 'general.salonJournal', valeur);
-    if (id === 'journal') await changerSalonJournal(client, valeur);
-    return interaction.update(await rendreSetupGeneral(guild, valeur ? `✅ <#${valeur}> enregistré.` : '✅ Salon retiré.'));
+  if (['logs', 'journal', 'ticketlogs', 'historique:l'].includes(id)) {
+    await interaction.deferUpdate();
+    if (id === 'logs') settings.poser('general.salonLogs', valeur);
+    if (id === 'journal') {
+      settings.poser('general.salonJournal', valeur);
+      await changerSalonJournal(client, valeur);
+    }
+    if (id === 'ticketlogs') reglagesTickets.poserSalonLogs(valeur);
+    if (id === 'historique:l') {
+      settings.poser('dons.salonHistorique', valeur);
+      await changerSalonHistorique(client);
+    }
+    await ouvrirAuStaff(guild, valeur);
+    return interaction.editReply(pageLogs(valeur ? `✅ <#${valeur}> enregistré.` : '✅ Salon retiré.'));
   }
 
   await interaction.deferUpdate();
@@ -400,6 +442,7 @@ export async function onGsetupBouton(interaction) {
   if (id === 'page:accueil') return interaction.update(await rendreSetupGeneral(guild));
   if (id === 'page:panneaux') return interaction.update(pagePanneaux());
   if (id === 'page:top') return interaction.update(pageTop());
+  if (id === 'page:logs') return interaction.update(pageLogs());
   if (id === 'page:dons') return interaction.update(pageDons());
   if (id === 'page:bot') return interaction.update(await pageBot());
   if (id === 'changer') {
