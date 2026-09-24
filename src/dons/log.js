@@ -7,6 +7,9 @@ import { embed, FR } from '../lib/brand.js';
 import { surCanal } from '../ops/journal.js';
 
 let salon = null;
+
+/** Vrai quand le salon des dons est branche : le journal staff se tait alors. */
+export const salonDonsActif = () => Boolean(salon);
 let file = Promise.resolve();
 
 function poster(e) {

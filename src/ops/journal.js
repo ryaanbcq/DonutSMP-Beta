@@ -144,6 +144,13 @@ export async function demarrerJournal(client) {
     pollMs: 2000,
     onLine: (entree) => {
       if (!entree || typeof entree !== 'object' || !entree.titre) return;
+      // Un evenement de canal (dons) va dans SON salon ; le journal ne le
+      // reprend que si ce salon n est pas configure, pour ne rien perdre.
+      const relais = entree.canal && canaux.get(entree.canal);
+      if (relais) {
+        Promise.resolve(relais(entree)).catch(() => {});
+        return;
+      }
       journal({
         niveau: entree.niveau,
         titre: entree.titre,
@@ -154,7 +161,6 @@ export async function demarrerJournal(client) {
         source: entree.source ?? 'jeu',
         at: entree.at,
       });
-      if (entree.canal) Promise.resolve(canaux.get(entree.canal)?.(entree)).catch(() => {});
     },
   });
   await tailer.start();

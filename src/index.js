@@ -28,7 +28,7 @@ import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
 import { assurerRoles, majRolesDonateur, palierPour, nomRole } from './dons/dons.js';
-import { demarrerLogDons, logDon } from './dons/log.js';
+import { demarrerLogDons, logDon, salonDonsActif } from './dons/log.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { estAdmin } from './lib/admin.js';
@@ -384,7 +384,8 @@ async function startWatcher(c) {
     if (guild) await majRolesDonateur(guild, lien.discord_id, nom).catch((e) => console.warn('[don] roles :', e.message));
 
     const suivant = paliers[nouveau + 1];
-    journal({
+    // Le salon des dons a l historique complet : pas de doublon dans le journal.
+    if (!salonDonsActif()) journal({
       niveau: 'ok',
       titre: monte ? 'Don reçu : nouveau rang' : 'Don reçu',
       texte: lien
