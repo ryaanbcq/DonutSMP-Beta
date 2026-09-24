@@ -7,6 +7,7 @@
 import {
   SlashCommandBuilder, PermissionFlagsBits, MessageFlags, EmbedBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, FileUploadBuilder, AttachmentBuilder,
+  StringSelectMenuBuilder,
 } from 'discord.js';
 import { estAdmin } from '../lib/admin.js';
 import { FR } from '../lib/brand.js';
@@ -65,6 +66,12 @@ export async function execute(interaction) {
       champ('couleur', 'Couleur', TextInputStyle.Short, { max: 20, placeholder: '#AEEFFF, rouge, or, violet… (vide = bleu)' }),
       new LabelBuilder().setLabel('Image').setDescription('Glissez une image depuis votre appareil (facultatif)')
         .setFileUploadComponent(new FileUploadBuilder().setCustomId('image').setMinValues(0).setMaxValues(1).setRequired(false)),
+      new LabelBuilder().setLabel('Taille de l\'image')
+        .setStringSelectMenuComponent(new StringSelectMenuBuilder().setCustomId('taille').setRequired(false)
+          .addOptions(
+            { label: 'Grande, sous le texte', value: 'grande', emoji: '🖼️', default: true },
+            { label: 'Petite, à droite du texte', value: 'petite', emoji: '🔹' },
+          )),
     ));
 }
 
@@ -76,6 +83,8 @@ export async function onModalEmbed(interaction) {
   const contenu = interaction.fields.getTextInputValue('contenu').trim();
   const couleur = lireCouleur(interaction.fields.getTextInputValue('couleur'));
   const image = interaction.fields.getUploadedFiles('image')?.first() ?? null;
+  let petite = false;
+  try { petite = (interaction.fields.getStringSelectValues('taille') ?? [])[0] === 'petite'; } catch { /* rien choisi : grande */ }
 
   if (couleur === null) {
     return interaction.reply({ content: '❌ Couleur illisible : un code comme `#AEEFFF`, ou un nom (bleu, rouge, vert, jaune, or, violet, rose, orange, blanc, noir, gris).', ...EPH });
@@ -92,7 +101,8 @@ export async function onModalEmbed(interaction) {
   if (image) {
     const nom = `embed-${Date.now()}.${(image.name?.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'}`;
     fichier = new AttachmentBuilder(image.url, { name: nom });
-    e.setImage(`attachment://${nom}`);
+    if (petite) e.setThumbnail(`attachment://${nom}`);
+    else e.setImage(`attachment://${nom}`);
   }
 
   const salon = await interaction.client.channels.fetch(interaction.customId.split(':')[2]).catch(() => null);
