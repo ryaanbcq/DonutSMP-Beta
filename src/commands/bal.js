@@ -15,20 +15,45 @@ const dernier = new Map();
 export function option(o) {
   return o.setName('joueur')
     .setDescription('Le pseudo à consulter (le vôtre par défaut)')
-    .setMaxLength(24);
+    .setMaxLength(40);
+}
+
+export function optionMembre(o) {
+  return o.setName('membre')
+    .setDescription('Ou un membre Discord : son compte lié est consulté');
 }
 
 export const data = new SlashCommandBuilder()
   .setName('bal')
   .setDescription("Consulte le solde DonutSMP d'un joueur")
-  .addStringOption(option);
+  .addStringOption(option)
+  .addUserOption(optionMembre);
+
+/**
+ * Le pseudo vise : option membre, mention collee dans le champ pseudo
+ * (<@123>), pseudo tape, ou le compte de l appelant. Rend { pseudo } ou
+ * { erreur } quand le membre vise n a pas de compte lie.
+ */
+export function cible(interaction) {
+  const saisi = interaction.options.getString('joueur')?.trim() || null;
+  const mention = saisi?.match(/^<@!?(\d{17,20})>$/)?.[1];
+  const membreId = interaction.options.getUser('membre')?.id ?? mention ?? null;
+  if (membreId) {
+    const lien = store.getLink(membreId);
+    return lien
+      ? { pseudo: lien.mc_name }
+      : { erreur: `❌ <@${membreId}> n'a pas lié de compte Minecraft.` };
+  }
+  return { pseudo: saisi ?? store.getLink(interaction.user.id)?.mc_name };
+}
 
 export const requiresLink = true;
 
 export async function execute(interaction) {
-  const saisi = interaction.options.getString('joueur');
-  const propre = store.getLink(interaction.user.id);
-  const pseudo = saisi ?? propre?.mc_name;
+  const { pseudo, erreur } = cible(interaction);
+  if (erreur) {
+    return interaction.reply({ content: erreur, flags: MessageFlags.Ephemeral, allowedMentions: { users: [] } });
+  }
 
   if (!pseudo || !isValidName(pseudo)) {
     return interaction.reply({ content: '❌ Pseudo invalide.', flags: MessageFlags.Ephemeral });
