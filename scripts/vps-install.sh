@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Installe le bot sur un VPS neuf (Debian 12 / Ubuntu 22.04+).
+# Installe le bot sur un VPS neuf : Debian 12, Ubuntu 22.04+, ou Oracle Linux /
+# RHEL (Oracle Cloud Free Tier), en root ou avec sudo, x86 ou ARM (Ampere).
 #
 #   git clone git@github.com:ryaanbcq/DonutSMP-Beta.git /opt/donutsmp-fr-bot
 #   cd /opt/donutsmp-fr-bot && bash scripts/vps-install.sh
@@ -30,12 +31,33 @@ SUDO=''
 
 etape "Paquets de base"
 if command -v apt-get >/dev/null 2>&1; then
+  GESTIONNAIRE=apt
   export DEBIAN_FRONTEND=noninteractive
   $SUDO apt-get update -qq
   $SUDO apt-get install -y -qq curl ca-certificates git >/dev/null
   info "curl, git, ca-certificates"
+elif command -v dnf >/dev/null 2>&1; then
+  # Oracle Linux (image par defaut d Oracle Cloud), RHEL, Rocky, Alma.
+  GESTIONNAIRE=dnf
+  $SUDO dnf install -y -q curl ca-certificates git >/dev/null
+  info "curl, git, ca-certificates (dnf)"
 else
-  info "apt-get absent, je saute (installe curl et git toi meme si besoin)"
+  GESTIONNAIRE=aucun
+  info "ni apt ni dnf : installe curl, git et node 22 toi meme"
+fi
+
+# Petites machines (Oracle AMD micro, 1 Go) : npm ci peut manquer de memoire.
+# Un fichier d echange de 2 Go evite l OOM, et ne sert a rien ailleurs.
+ram_mo=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+swap_mo=$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+if [ "${ram_mo:-0}" -gt 0 ] && [ "$ram_mo" -lt 2000 ] && [ "${swap_mo:-0}" -lt 1000 ] && [ ! -f /swapfile ]; then
+  etape "Memoire d echange"
+  $SUDO fallocate -l 2G /swapfile 2>/dev/null || $SUDO dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+  $SUDO chmod 600 /swapfile
+  $SUDO mkswap /swapfile >/dev/null
+  $SUDO swapon /swapfile
+  grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | $SUDO tee -a /etc/fstab >/dev/null
+  info "${ram_mo} Mo de RAM : 2 Go d'echange ajoutes (/swapfile)"
 fi
 
 etape "Node 22+"
@@ -51,8 +73,17 @@ if command -v node >/dev/null 2>&1; then
   fi
 fi
 if [ "$besoin_node" -eq 1 ]; then
-  curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash - >/dev/null
-  $SUDO apt-get install -y -qq nodejs >/dev/null
+  if [ "$GESTIONNAIRE" = apt ]; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash - >/dev/null
+    $SUDO apt-get install -y -qq nodejs >/dev/null
+  elif [ "$GESTIONNAIRE" = dnf ]; then
+    # Le module nodejs d Oracle Linux est trop vieux : depot NodeSource.
+    curl -fsSL https://rpm.nodesource.com/setup_22.x | $SUDO -E bash - >/dev/null
+    $SUDO dnf install -y -q nodejs >/dev/null
+  else
+    echo "Installe node 22.5+ puis relance ce script." >&2
+    exit 1
+  fi
   info "node $(node -p 'process.versions.node')"
 fi
 
@@ -125,9 +156,13 @@ if [ "$SANS_INGAME" -eq 0 ]; then
   pm2 start ecosystem.config.cjs --only fr-ingame
 fi
 pm2 save
+# Au boot (redemarrage de maintenance chez l hebergeur) les deux process
+# repartent seuls. Utilisateur non root (ubuntu, opc sur Oracle) : via sudo.
 if [ "$(id -u)" -eq 0 ]; then
   pm2 startup systemd -u root --hp /root >/dev/null
   info "demarrage automatique au boot arme"
+elif $SUDO env PATH="$PATH:$(dirname "$(command -v node)")" "$(command -v pm2)" startup systemd -u "$USER" --hp "$HOME" >/dev/null 2>&1; then
+  info "demarrage automatique au boot arme ($USER)"
 else
   info "pour le demarrage au boot : sudo env PATH=\$PATH pm2 startup systemd -u $USER --hp $HOME"
 fi

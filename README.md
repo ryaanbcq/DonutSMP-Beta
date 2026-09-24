@@ -49,6 +49,23 @@ Le script guide tout le reste, sans aucun id a copier coller :
 5. **le code Microsoft** du compte en jeu, a saisir dans un navigateur. Aucun
    mot de passe ne passe par le script.
 
+### Oracle Cloud (Free Tier)
+
+Le script marche tel quel sur les images Ubuntu et Oracle Linux, en x86 comme
+en ARM (Ampere A1). Trois points propres a Oracle :
+
+- on se connecte en `ubuntu` ou `opc`, pas en root : cloner dans son dossier
+  (`git clone ... ~/donutsmp-fr-bot`) plutot que dans `/opt` ; le script utilise
+  sudo la ou il faut et arme le demarrage au boot ;
+- sur la petite machine AMD (1 Go), il ajoute 2 Go d'echange avant `npm ci` ;
+- **Oracle recupere les instances gratuites « inactives »** (CPU tres bas
+  pendant 7 jours), et ce bot consomme presque rien. Pour ne pas le perdre :
+  passer le compte en *Pay As You Go* (reste gratuit dans les limites du Free
+  Tier, et plus aucune recuperation).
+
+Aucun port entrant a ouvrir : le bot ne fait que des connexions sortantes
+(Discord, DonutSMP, Microsoft).
+
 Le depot etant prive, la machine a besoin d'une cle SSH autorisee sur GitHub
 (`ssh-keygen -t ed25519` puis la cle publique en deploy key du depot).
 
