@@ -45,6 +45,15 @@ export function paliers() {
 export const poserPaliers = (liste) => q.kvSet.run('dons.paliers', JSON.stringify(liste));
 
 const SUFFIXES = { k: 1e3, m: 1e6, b: 1e9, t: 1e12 };
+
+/** « 5M », « 2.5b », « 750 000 » -> entier, ou null si illisible. */
+export function lireMontant(texte) {
+  const r = String(texte ?? '').replace(/[\s$_]/g, '').replace(/,(?=\d{3}\b)/g, '')
+    .match(/^(\d+(?:[.,]\d+)?)([kmbt])?$/i);
+  if (!r) return null;
+  const v = Math.round(Number(r[1].replace(',', '.')) * (r[2] ? SUFFIXES[r[2].toLowerCase()] : 1));
+  return Number.isSafeInteger(v) && v > 0 ? v : null;
+}
 /** « 500M, 1B, 5B » -> [5e8, 1e9, 5e9]. Rend { paliers } ou { erreur }. */
 export function lirePaliers(texte) {
   const morceaux = String(texte ?? '').split(/[,;\s]+/).filter(Boolean);
