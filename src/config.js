@@ -28,7 +28,7 @@ export const config = {
     messageContent: process.env.DISCORD_MESSAGE_CONTENT === 'true',
   },
   mc: {
-    linkAccount: process.env.MC_LINK_ACCOUNT ?? 'OutmindFR',
+    linkAccount: process.env.MC_LINK_ACCOUNT ?? '',
   },
   payments: {
     source: process.env.PAYMENT_SOURCE ?? 'jsonl',
