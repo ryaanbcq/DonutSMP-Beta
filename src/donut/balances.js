@@ -12,6 +12,11 @@
 import { db, store } from '../db.js';
 import { donut } from './api.js';
 import { normName } from '../lib/names.js';
+import { config } from '../config.js';
+
+// Le beneficiaire des dons recoit chaque nuit l argent de toute la communaute :
+// son solde n a pas sa place dans le classement des fortunes.
+const horsClassement = () => normName(config.dons.beneficiaire) || '\u0000';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS balances (
@@ -112,9 +117,9 @@ export const balances = {
     return db.prepare(`
       SELECT b.*, l.discord_id AS lie_a, l.mc_name AS pseudo_lie FROM balances b
       JOIN links l ON l.mc_name_norm = b.mc_name_norm
-      WHERE b.updated_at > 0 AND b.${col} > 0
+      WHERE b.updated_at > 0 AND b.${col} > 0 AND b.mc_name_norm != ?
       ORDER BY b.${col} DESC LIMIT ?
-    `).all(limite).map((r, i) => ({
+    `).all(horsClassement(), limite).map((r, i) => ({
       rank: i + 1,
       // Le lien fait foi : la ligne de solde peut garder le Discord d un
       // ancien proprietaire du pseudo.
