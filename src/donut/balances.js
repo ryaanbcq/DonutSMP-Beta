@@ -110,14 +110,16 @@ export const balances = {
   classement(categorie = 'money', limite = 10) {
     const col = COLONNES[categorie] ?? 'money';
     return db.prepare(`
-      SELECT b.* FROM balances b
+      SELECT b.*, l.discord_id AS lie_a, l.mc_name AS pseudo_lie FROM balances b
       JOIN links l ON l.mc_name_norm = b.mc_name_norm
       WHERE b.updated_at > 0 AND b.${col} > 0
       ORDER BY b.${col} DESC LIMIT ?
     `).all(limite).map((r, i) => ({
       rank: i + 1,
-      name: r.mc_name,
-      discordId: r.discord_id,
+      // Le lien fait foi : la ligne de solde peut garder le Discord d un
+      // ancien proprietaire du pseudo.
+      name: r.pseudo_lie ?? r.mc_name,
+      discordId: r.lie_a ?? r.discord_id,
       value: r[col],
       updatedAt: r.updated_at,
     }));
