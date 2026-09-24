@@ -30,6 +30,7 @@ import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
 import { assurerRoles, majRolesDonateur, palierPour, nomRole, paliers as paliersDons } from './dons/dons.js';
 import { onGsetupSelect, onGsetupBouton, onGsetupModal } from './setup/general.js';
+import { onModalEmbed } from './commands/embed.js';
 import { onDsetupSelect, onDsetupBouton, onDsetupModal } from './dons/setup.js';
 import { publierPanneauDons, surveillerPanneauDons, onBoutonDons, onModalDons } from './dons/panneau.js';
 import { demarrerLogDons, logDon, salonDonsActif } from './dons/log.js';
@@ -312,6 +313,7 @@ async function onModal(interaction) {
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);
   if (interaction.customId.startsWith('dsetup:')) return onDsetupModal(interaction);
   if (interaction.customId.startsWith('gsetup:')) return onGsetupModal(interaction);
+  if (interaction.customId.startsWith('embed:')) return onModalEmbed(interaction);
   if (interaction.customId.startsWith('dons:')) return onModalDons(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
   if (interaction.customId !== 'link:modal') return;
