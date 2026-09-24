@@ -75,6 +75,18 @@ const cfg = {
   },
 };
 
+// Compte receveur retenu apres un « Changer de compte » depuis Discord : il
+// bat MC_LINK_ACCOUNT. `changement` = on accepte le prochain compte connecte.
+const FICHIER_COMPTE = process.env.BOT_ACCOUNT_FILE ?? './data/compte.json';
+let compte = { nom: null, changement: false };
+try { compte = { ...compte, ...JSON.parse(await readFile(FICHIER_COMPTE, 'utf8')) }; } catch { /* jamais change */ }
+if (compte.nom) cfg.expectedName = compte.nom;
+async function sauverCompte() {
+  await mkdir(dirname(FICHIER_COMPTE), { recursive: true });
+  await writeFile(`${FICHIER_COMPTE}.tmp`, JSON.stringify(compte));
+  await rename(`${FICHIER_COMPTE}.tmp`, FICHIER_COMPTE);
+}
+
 if (!cfg.username) {
   console.error('MC_EMAIL manquant dans .env (le compte Microsoft du bot receveur).');
   process.exit(1);
@@ -289,12 +301,22 @@ function connect() {
       note('ok', 'Bot en jeu connecté', `Connecté à **${cfg.host}**, les paiements de vérification sont vus.`,
         { champs: { Compte: ceBot.username }, joueur: ceBot.username });
     }
-    if (cfg.expectedName && ceBot.username.toLowerCase() !== cfg.expectedName.toLowerCase()) {
+    if (compte.changement) {
+      // Changement de compte demande depuis Discord : ce compte devient le receveur.
+      const ancien = cfg.expectedName;
+      compte = { nom: ceBot.username, changement: false, depuis: Date.now() };
+      cfg.expectedName = ceBot.username;
+      await sauverCompte().catch((e) => console.error('[mc] compte non enregistre :', e.message));
+      console.warn(`[mc] compte receveur change : ${ancien || '?'} -> ${ceBot.username}`);
+      note('ok', 'Compte du bot changé',
+        `Les joueurs paient désormais **${ceBot.username}** pour se lier et pour donner. Les panneaux se mettent à jour tout seuls.`,
+        { champs: { Avant: ancien || 'inconnu', Maintenant: ceBot.username }, joueur: ceBot.username });
+    } else if (cfg.expectedName && ceBot.username.toLowerCase() !== cfg.expectedName.toLowerCase()) {
       console.warn(`[mc] ATTENTION : connecte en ${ceBot.username} mais MC_LINK_ACCOUNT dit ${cfg.expectedName}.`);
       console.warn('[mc] les joueurs paieront le mauvais compte, corrige le .env.');
       note('err', 'Mauvais compte en jeu',
         'Les joueurs paient un autre compte : aucun paiement de vérification ne sera vu.'
-        + ' Corrige `MC_LINK_ACCOUNT` ou reconnecte le bon compte (`donut auth`).',
+        + ' Reconnecte le bon compte, ou adopte celui-ci : `/setup general` > Bot > Changer de compte.',
         { champs: { Connecté: ceBot.username, Attendu: cfg.expectedName }, joueur: ceBot.username, actions: ['relink'] });
     }
     await saveStatus();
@@ -701,6 +723,10 @@ setInterval(async () => {
   try { ordre = JSON.parse(await readFile(CONTROLE, 'utf8')); } catch { return; }
   await rm(CONTROLE, { force: true });
   if (ordre?.action !== 'relink') return;
+  if (ordre.changer) {
+    compte.changement = true;
+    await sauverCompte().catch(() => {});
+  }
   // Un ordre oublie (bot arrete plusieurs heures) ne doit pas deconnecter au demarrage.
   if (!(Date.now() - Number(ordre.at) < 5 * 60_000)) {
     console.warn('[mc] ordre de relink perime ignore');
@@ -719,8 +745,11 @@ setInterval(async () => {
     }
   }
   console.warn(`[mc] relink demande par ${ordre.par}, cache mis de cote dans ${sauvegarde}`);
-  note('info', 'Relink en cours',
-    'Ancien jeton mis de côté, reconnexion Microsoft lancée. Le code arrive dans un nouveau message.',
+  note('info', ordre.changer ? 'Changement de compte en cours' : 'Relink en cours',
+    (ordre.changer
+      ? 'Ancien jeton mis de côté. Connectez-vous avec le **nouveau** compte Microsoft : il deviendra le compte du bot.'
+      : 'Ancien jeton mis de côté, reconnexion Microsoft lancée.')
+    + ' Le code arrive dans un nouveau message.',
     { champs: { Par: ordre.par ?? 'inconnu' } });
   if (bot) {
     try { bot.end('relink'); } catch { /* deja morte */ }

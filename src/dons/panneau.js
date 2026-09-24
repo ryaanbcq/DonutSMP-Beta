@@ -7,6 +7,7 @@ import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags,
 } from 'discord.js';
 import { config } from '../config.js';
+import { compteBot } from '../ingame/compte.js';
 import { store } from '../db.js';
 import { embed, FR } from '../lib/brand.js';
 import { shortMoney } from '../lib/format.js';
@@ -25,6 +26,7 @@ const PUCES = ['🥉', '🥈', '🥇', '💎'];
 // panneau. Hors ligne, un /pay n est vu par personne : le don serait perdu.
 const HORS_LIGNE_APRES_MS = 90_000;
 let enLigneAffiche = true;
+let compteAffiche = null;
 let horsLigneDepuis = null;
 
 function boutons(enLigne) {
@@ -72,7 +74,7 @@ export function rendrePanneauDons(guild, enLigne = enLigneAffiche) {
           + ' et le don ne serait pas compté. Le bouton revient dès son retour.\n')
       + '### Comment donner\n'
       + 'Cliquez sur **Créer ma donation**, choisissez le montant, puis copiez la commande en jeu. Ou tapez-la vous-même :\n'
-      + `\`\`\`/pay ${config.mc.linkAccount} <montant>\`\`\``
+      + `\`\`\`/pay ${compteBot()} <montant>\`\`\``
       + `Minimum **${shortMoney(config.dons.min)}** par don. Chaque don s'additionne à votre total.\n\n`
       + '### Les rangs\n'
       + `${rangs.join('\n\n')}\n\n`
@@ -121,8 +123,11 @@ export function surveillerPanneauDons(client, { intervalMs = 30_000 } = {}) {
     if (enLigne) horsLigneDepuis = null;
     else horsLigneDepuis ??= Date.now();
     const affiche = enLigne || Date.now() - horsLigneDepuis < HORS_LIGNE_APRES_MS;
-    if (affiche === enLigneAffiche) return;
+    // Le compte du bot a change (/setup general) : la commande /pay affichee aussi.
+    const compte = compteBot();
+    if (affiche === enLigneAffiche && compte === (compteAffiche ??= compte)) return;
     enLigneAffiche = affiche;
+    compteAffiche = compte;
     await publierPanneauDons(client).catch((e) => console.error('[don] panneau :', e.message));
     console.log(`[don] panneau : bot ${affiche ? 'en ligne' : 'hors ligne'}`);
   };
@@ -181,7 +186,7 @@ export async function onModalDons(interaction) {
     embeds: [embed('💝・MA DONATION', {
       couleur: FR.or,
       image: lien?.mc_name ?? 'aucune',
-      description: `Copiez cette commande et collez-la **en jeu** :\n\`\`\`/pay ${config.mc.linkAccount} ${montant}\`\`\``
+      description: `Copiez cette commande et collez-la **en jeu** :\n\`\`\`/pay ${compteBot()} ${montant}\`\`\``
         + `Soit **${shortMoney(montant)}**.\n\n${suite}\n\n*Un don est définitif et n\'est jamais remboursé.*`,
     })],
     ...EPH,

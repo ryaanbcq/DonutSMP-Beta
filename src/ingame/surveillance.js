@@ -1,4 +1,5 @@
 import { db } from '../db.js';
+import { compteBot } from './compte.js';
 import { presence } from './presence.js';
 import { embed, FR } from '../lib/brand.js';
 import { config } from '../config.js';
@@ -54,7 +55,7 @@ export function surveillerPresence(client, { intervalMs = 30_000, annonceApresMs
       const n = await prevenir(client, (c) => embed('⚠️・PAIEMENT SUSPENDU', {
         couleur: FR.jaune,
         description:
-          `Notre bot **${config.mc.linkAccount}** vient de se déconnecter de DonutSMP.\n\n`
+          `Notre bot **${compteBot()}** vient de se déconnecter de DonutSMP.\n\n`
           + `**N'envoyez pas les $${c.amount} maintenant** : personne ne verrait le paiement `
           + "et vous perdriez cette somme.\n\n"
           + "Je vous préviens dès qu'il est de retour. Votre vérification reste valable "
@@ -75,7 +76,7 @@ export function surveillerPresence(client, { intervalMs = 30_000, annonceApresMs
       couleur: FR.vert,
       description:
         `Notre bot est de retour en jeu. Vous pouvez envoyer votre paiement :\n\n`
-        + `\`\`\`/pay ${config.mc.linkAccount} ${c.amount}\`\`\``,
+        + `\`\`\`/pay ${compteBot()} ${c.amount}\`\`\``,
     }));
   };
 

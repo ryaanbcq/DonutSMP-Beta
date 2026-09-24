@@ -30,9 +30,10 @@ export async function lireCodeMsa(fichier = config.ingame.msaCodeFile, maintenan
 const prive = (payload) => ({ ...payload, flags: MessageFlags.Ephemeral });
 
 /** Depose l ordre de relink, lu par le bot en jeu sous 2 s. */
-export async function demanderRelink(par, fichier = config.ingame.controlFile) {
+/** `changer` : le prochain compte connecte devient le compte du bot. */
+export async function demanderRelink(par, fichier = config.ingame.controlFile, { changer = false } = {}) {
   await mkdir(dirname(fichier), { recursive: true });
-  await writeFile(fichier, JSON.stringify({ action: 'relink', par, at: Date.now() }), { mode: 0o600 });
+  await writeFile(fichier, JSON.stringify({ action: 'relink', par, at: Date.now(), ...(changer ? { changer: true } : {}) }), { mode: 0o600 });
 }
 
 const refus = () => prive({

@@ -1,4 +1,5 @@
 import { MessageFlags } from 'discord.js';
+import { compteBot } from '../ingame/compte.js';
 import { startLink, LinkError } from './manager.js';
 import { remember } from './interactions.js';
 import { realCase } from '../donut/mojang.js';
@@ -16,7 +17,7 @@ export function embedChallenge(challenge) {
     description:
       `Pour prouver que **${challenge.mc_name}** vous appartient, envoyez cette somme `
       + `**exacte** en jeu sur DonutSMP.\n\n`
-      + `\`\`\`/pay ${config.mc.linkAccount} ${challenge.amount}\`\`\`\n`
+      + `\`\`\`/pay ${compteBot()} ${challenge.amount}\`\`\`\n`
       + `Cette somme n'est pas un frais : elle vous est **rendue automatiquement** `
       + `sous ${delai}.`,
   }).addFields(
@@ -43,7 +44,7 @@ export async function repondreChallenge(interaction, pseudoSaisi) {
       embeds: [embed('⚠️・SERVICE INDISPONIBLE', {
         couleur: FR.jaune,
         description:
-          `Notre bot **${config.mc.linkAccount}** n'est pas connecté à DonutSMP pour le moment, `
+          `Notre bot **${compteBot()}** n'est pas connecté à DonutSMP pour le moment, `
           + "il ne pourrait pas voir votre paiement.\n\n"
           + "**Aucune vérification n'est ouverte**, et surtout **n'envoyez pas d'argent** : "
           + "il serait perdu sans que votre compte soit lié.\n\n"

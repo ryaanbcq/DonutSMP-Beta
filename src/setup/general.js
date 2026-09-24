@@ -30,6 +30,10 @@ import { rendreSetupVouch } from '../vouch/setup.js';
 import { publier as publierClassement, rafraichirSiBesoin } from '../baltop/panel.js';
 import { panneauConnexion } from '../commands/panel.js';
 import { creerManquants } from '../../scripts/lib/discord-setup.js';
+import { compteBot, changementEnCours } from '../ingame/compte.js';
+import { lireCodeMsa, demanderRelink } from '../ops/actions.js';
+import { journal as noterJournal } from '../ops/journal.js';
+import { duree } from '../../ingame/diagnostic.js';
 
 const ok = (v) => (v ? '✅' : '⚠️');
 const salon = (id) => (id ? `<#${id}>` : '*à choisir*');
@@ -85,8 +89,43 @@ export async function rendreSetupGeneral(guild, note = '') {
         new ButtonBuilder().setCustomId('gsetup:tout').setLabel('Tout créer pour moi').setEmoji('✨').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('gsetup:page:panneaux').setLabel('Panneaux').setEmoji('📌').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:dons').setLabel('Dons').setEmoji('💝').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:page:bot').setLabel('Bot en jeu').setEmoji('🤖').setStyle(ButtonStyle.Secondary),
       ),
     ],
+  };
+}
+
+async function pageBot(note = '') {
+  const etat = await presence();
+  const code = await lireCodeMsa();
+  const changement = changementEnCours();
+  const lignes = [
+    `${etat.enLigne ? '🟢' : '🔴'} **État** · ${etat.enLigne ? 'connecté à DonutSMP' : `hors ligne${etat.age != null ? ` (dernier signe il y a ${duree(etat.age)})` : ''}`}`,
+    `👤 **Compte receveur** · \`${compteBot() || '?'}\`${etat.username && etat.username !== compteBot() ? ` (connecté en \`${etat.username}\`)` : ''}`,
+    `🌐 **Serveur** · \`${process.env.MC_HOST ?? 'donutsmp.net'}\``,
+    `🔑 **Connexion Microsoft** · ${code
+      ? `un code attend d'être validé, expire <t:${Math.floor(code.expireA / 1000)}:R>`
+      : (etat.enLigne ? 'jeton valide' : 'pas de code en attente')}`,
+  ];
+  if (changement) lignes.push('🔀 **Changement de compte en cours** : le prochain compte connecté deviendra le compte du bot.');
+
+  return {
+    embeds: [embed('🤖・BOT EN JEU', {
+      couleur: FR.bleu,
+      description: `${lignes.join('\n')}\n\n`
+        + '**Reconnecter** : même compte, nouveau jeton (compte bloqué, jeton expiré).\n'
+        + '**Changer de compte** : le bot se déconnecte, et le compte Microsoft avec lequel vous validez le code'
+        + ' devient le compte qui encaisse les `/link` et les dons. Il doit posséder Minecraft Java.'
+        + (note ? `\n\n${note}` : ''),
+    })],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('ops:msa').setLabel('Afficher le code').setEmoji('🔑')
+        .setStyle(ButtonStyle.Primary).setDisabled(!code),
+      new ButtonBuilder().setCustomId('ops:relink').setLabel('Reconnecter').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('gsetup:changer').setLabel('Changer de compte').setEmoji('🔀').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('gsetup:page:bot').setLabel('Actualiser').setEmoji('♻️').setStyle(ButtonStyle.Secondary),
+      retour(),
+    )],
   };
 }
 
@@ -301,6 +340,37 @@ export async function onGsetupBouton(interaction) {
   if (id === 'page:accueil') return interaction.update(await rendreSetupGeneral(guild));
   if (id === 'page:panneaux') return interaction.update(pagePanneaux());
   if (id === 'page:dons') return interaction.update(pageDons());
+  if (id === 'page:bot') return interaction.update(await pageBot());
+  if (id === 'changer') {
+    return interaction.update({
+      embeds: [embed('🔀・CHANGER DE COMPTE', {
+        couleur: FR.jaune,
+        description: `Le bot en jeu (\`${compteBot()}\`) va être **déconnecté**. Un code Microsoft arrive ensuite :`
+          + ' validez-le avec le **nouveau** compte (il doit posséder Minecraft Java).\n\n'
+          + 'Dès sa connexion, ce compte encaisse les `/link` et les dons, et les panneaux affichent son pseudo.'
+          + ' Pendant l\'opération, les `/link` et les dons sont suspendus.\n\n'
+          + '⚠️ Les dons pas encore reversés restent sur l\'**ancien** compte : faites le reversement avant, ou récupérez-les à la main.',
+      })],
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('gsetup:changer:ok').setLabel('Confirmer le changement').setEmoji('🔀').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('gsetup:page:bot').setLabel('Annuler').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      )],
+    });
+  }
+  if (id === 'changer:ok') {
+    const par = interaction.user.tag ?? interaction.user.id;
+    await demanderRelink(par, undefined, { changer: true });
+    noterJournal({
+      niveau: 'warn',
+      titre: 'Changement de compte demandé',
+      texte: `<@${interaction.user.id}> change le compte du bot en jeu (ancien : **${compteBot()}**).`,
+      champs: { Par: par },
+    });
+    // Laisse au bot en jeu le temps de lire l ordre (2 s) avant d afficher l etat.
+    await interaction.deferUpdate();
+    await new Promise((r) => setTimeout(r, 4000));
+    return interaction.editReply(await pageBot('🔀 Ordre transmis. Le code arrive dans quelques secondes : **Afficher le code** puis validez avec le nouveau compte, et **Actualiser** pour suivre.'));
+  }
   if (id === 'ouvrir:tickets') return interaction.update(rendreSetupTickets(guild));
   if (id === 'ouvrir:vouches') return interaction.update(rendreSetupVouch(guild));
   if (id === 'ouvrir:paliers') return interaction.update(rendreSetupDons(guild));

@@ -1,4 +1,5 @@
 import { readdir } from 'node:fs/promises';
+import { compteBot } from './ingame/compte.js';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -72,7 +73,7 @@ client.once('clientReady', async (c) => {
   });
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
-  console.log(`[link] compte receveur : ${config.mc.linkAccount}`);
+  console.log(`[link] compte receveur : ${compteBot()}`);
 
   const etat = await presence();
   console.log(etat.enLigne
