@@ -24,10 +24,12 @@ import { changerSalonHistorique } from '../dons/log.js';
 import { publierPanneauDons } from '../dons/panneau.js';
 import { assurerRoles } from '../dons/dons.js';
 import { rendreSetupDons } from '../dons/setup.js';
-import { rendreSetup as rendreSetupTickets } from '../tickets/setup.js';
+import { rendreSetup as rendreSetupTickets, publierPanneau as publierPanneauTickets } from '../tickets/setup.js';
 import { reglagesTickets } from '../tickets/reglages.js';
 import { rendreSetupVouch } from '../vouch/setup.js';
-import { publier as publierClassement, rafraichirSiBesoin } from '../baltop/panel.js';
+import { publier as publierClassement, rafraichirSiBesoin, majRoleTop } from '../baltop/panel.js';
+import { store } from '../db.js';
+import { balances } from '../donut/balances.js';
 import { panneauConnexion } from '../commands/panel.js';
 import { creerManquants } from '../../scripts/lib/discord-setup.js';
 import { compteBot, changementEnCours } from '../ingame/compte.js';
@@ -140,20 +142,49 @@ const retour = () => new ButtonBuilder().setCustomId('gsetup:page:accueil').setL
   .setStyle(ButtonStyle.Secondary);
 
 function pagePanneaux(note = '') {
+  const top = settings.roleTop();
   return {
     embeds: [embed('📌・PANNEAUX', {
       couleur: FR.bleu,
-      description: 'Choisissez un salon : le panneau y est publié (ou mis à jour) aussitôt, et le salon passe en lecture seule.'
-        + '\n\nTickets et vouches ont leurs propres réglages (rôles staff, catégories, forum) : boutons ci-dessous.'
+      description: 'Choisissez un salon : le panneau y est publié (ou mis à jour) aussitôt, et le salon passe en lecture seule.\n\n'
+        + `🔗 **Connexion** · ${salon(settings.salonLink())}\n`
+        + `🏆 **Classement** · ${salon(settings.salonBaltop())} · rôle du 1er : ${top ? role(top) : '*aucun*'}\n`
+        + `💝 **Donations** · ${salon(settings.salonDonations())}\n`
+        + `🎫 **Tickets** · ${salon(reglagesTickets.salonPanneau())}\n`
+        + `⭐ **Vouches** · ${salon(store.kvGet('vouch.salonPanneau'))} · forum ${salon(settings.salonVouch())}\n\n`
+        + 'Vouches (forum, rôle Trusted) et tickets (catégories, rôles staff, logs) ont leurs réglages : boutons ci-dessous.'
         + (note ? `\n\n${note}` : ''),
     })],
     components: [
-      new ActionRowBuilder().addComponents(texte('gsetup:link', '🔗 Salon du panneau de connexion', settings.salonLink())),
-      new ActionRowBuilder().addComponents(texte('gsetup:baltop', '🏆 Salon du classement des fortunes', settings.salonBaltop())),
+      new ActionRowBuilder().addComponents(texte('gsetup:link', '🔗 Panneau de connexion', settings.salonLink())),
+      new ActionRowBuilder().addComponents(texte('gsetup:baltop', '🏆 Classement des fortunes', settings.salonBaltop())),
+      new ActionRowBuilder().addComponents(texte('gsetup:donations:p', '💝 Panneau des donations', settings.salonDonations())),
+      new ActionRowBuilder().addComponents(texte('gsetup:tickets', '🎫 Panneau des tickets', reglagesTickets.salonPanneau())),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('gsetup:ouvrir:tickets').setLabel('Tickets').setEmoji('🎫').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('gsetup:page:top').setLabel('Rôle du 1er').setEmoji('🥇').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:ouvrir:vouches').setLabel('Vouches').setEmoji('⭐').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('gsetup:ouvrir:tickets').setLabel('Réglages tickets').setEmoji('🎫').setStyle(ButtonStyle.Primary),
         retour(),
+      ),
+    ],
+  };
+}
+
+function pageTop(note = '') {
+  const top = settings.roleTop();
+  const menu = new RoleSelectMenuBuilder().setCustomId('gsetup:roletop')
+    .setPlaceholder('🥇 Rôle donné au premier du classement').setMinValues(0).setMaxValues(1);
+  if (top) menu.setDefaultRoles(top);
+  return {
+    embeds: [embed('🥇・RÔLE DU PREMIER', {
+      couleur: FR.bleu,
+      description: `Le membre en tête du classement des fortunes reçoit ce rôle, et le perd quand il est dépassé.\n\n**Actuel** · ${top ? role(top) : '*aucun*'}`
+        + (note ? `\n\n${note}` : ''),
+    })],
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('gsetup:page:panneaux').setLabel('Retour').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -313,10 +344,39 @@ export async function onGsetupSelect(interaction) {
       .then((n) => `✅ <#${valeur}> : ${n}.`).catch((e) => `❌ ${e.message}`);
     return interaction.editReply(pagePanneaux(note));
   }
-  if (id === 'donations') {
+  if (id === 'tickets') {
+    if (!valeur) return interaction.editReply(pagePanneaux());
+    const note = await publierPanneauTickets(guild, valeur)
+      .then(({ note: n }) => { reglagesTickets.poserSalonPanneau(valeur); return `✅ <#${valeur}> : ${n}.`; })
+      .catch((e) => `❌ ${e.message}`);
+    return interaction.editReply(pagePanneaux(note));
+  }
+  if (id === 'roletop') {
+    if (valeur) {
+      const refus = refusRole(guild, guild.roles.cache.get(valeur));
+      if (refus) return interaction.editReply(pageTop(`❌ ${refus}.`));
+    }
+    // Retire l ancien role au premier actuel, puis laisse majRoleTop reposer le nouveau.
+    const ancien = settings.roleTop();
+    const premier = store.kvGet('baltop.top1');
+    if (ancien && premier && ancien !== valeur) {
+      const m = await guild.members.fetch(premier).catch(() => null);
+      await m?.roles.remove(ancien).catch(() => {});
+    }
+    if (valeur) settings.poserRoleTop(valeur); else settings.retirerRoleTop();
+    store.kvSet('baltop.top1', '');
+    if (valeur) await majRoleTop(client).catch(() => {});
+    const tete = balances.classement('money', 1)[0];
+    return interaction.editReply(pageTop(valeur
+      ? `✅ ${role(valeur)} enregistré${tete ? `, donné à <@${tete.discordId}>` : ''}.`
+      : '✅ Plus de rôle pour le premier.'));
+  }
+  if (id === 'donations' || id === 'donations:p') {
+    const depuisPanneaux = id === 'donations:p';
     settings.poser('dons.salonPanneau', valeur);
     const n = valeur ? await publierPanneauDons(client, guild).catch((e) => `❌ ${e.message}`) : null;
-    return interaction.editReply(pageDons(valeur ? `✅ <#${valeur}> : ${n ?? 'panneau publié'}.` : '✅ Plus de panneau des donations.'));
+    const note = valeur ? `✅ <#${valeur}> : ${n ?? 'panneau publié'}.` : '✅ Plus de panneau des donations.';
+    return interaction.editReply(depuisPanneaux ? pagePanneaux(note) : pageDons(note));
   }
   if (id === 'historique') {
     settings.poser('dons.salonHistorique', valeur);
@@ -339,6 +399,7 @@ export async function onGsetupBouton(interaction) {
   }
   if (id === 'page:accueil') return interaction.update(await rendreSetupGeneral(guild));
   if (id === 'page:panneaux') return interaction.update(pagePanneaux());
+  if (id === 'page:top') return interaction.update(pageTop());
   if (id === 'page:dons') return interaction.update(pageDons());
   if (id === 'page:bot') return interaction.update(await pageBot());
   if (id === 'changer') {
