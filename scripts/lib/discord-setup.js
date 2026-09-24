@@ -122,6 +122,8 @@ const DROITS_BOT_SALON = P.ViewChannel | P.SendMessages | P.EmbedLinks | P.Attac
  */
 export async function creerManquants(api, { guildId, botId, env, adminRoleId = '', journal = () => {} }) {
   const manquants = A_CREER.filter((x) => !env[x.cle]);
+  // Un ou plusieurs roles staff (ids separes par des virgules) voient les salons staff.
+  const admins = String(adminRoleId ?? '').split(',').map((x) => x.trim()).filter(Boolean);
   if (!manquants.length) return {};
 
   const roles = await api.get(`/guilds/${guildId}/roles`);
@@ -138,7 +140,7 @@ export async function creerManquants(api, { guildId, botId, env, adminRoleId = '
     ];
     if (prive) {
       overwrites.push({ id: guildId, type: 0, allow: '0', deny: String(P.ViewChannel) });
-      if (adminRoleId) overwrites.push({ id: adminRoleId, type: 0, allow: String(P.ViewChannel | P.ReadMessageHistory), deny: '0' });
+      for (const id of admins) overwrites.push({ id, type: 0, allow: String(P.ViewChannel | P.ReadMessageHistory), deny: '0' });
     }
     const c = await api.post(`/guilds/${guildId}/channels`, { name: nom, type: CATEGORIE, permission_overwrites: overwrites });
     salons.push(c);
@@ -163,7 +165,7 @@ export async function creerManquants(api, { guildId, botId, env, adminRoleId = '
     const overwrites = [{ id: botId, type: 1, allow: String(DROITS_BOT_SALON), deny: '0' }];
     if (x.categorie === 'staff') {
       overwrites.push({ id: guildId, type: 0, allow: '0', deny: String(P.ViewChannel) });
-      if (adminRoleId) overwrites.push({ id: adminRoleId, type: 0, allow: String(P.ViewChannel | P.ReadMessageHistory), deny: '0' });
+      for (const id of admins) overwrites.push({ id, type: 0, allow: String(P.ViewChannel | P.ReadMessageHistory), deny: '0' });
     } else if (x.lectureSeule) {
       // Les slash commands restent utilisables : c est un autre droit.
       overwrites.push({ id: guildId, type: 0, allow: '0', deny: String(P.SendMessages | P.CreatePublicThreads) });

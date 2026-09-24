@@ -12,15 +12,16 @@ import { config } from '../config.js';
  * `reglages` n est passe que par les tests : config.js lit process.env une
  * seule fois, au chargement du module.
  */
-let roleAdminLu = () => config.discord.adminRoleId;
+const liste = (v) => (Array.isArray(v) ? v : String(v ?? '').split(',')).map((x) => x.trim()).filter(Boolean);
+let rolesAdminLus = () => liste(config.discord.adminRoleId);
 /** Branche par settings.js : le role staff peut etre pose par /setup general. */
-export function brancherRoleAdmin(fn) { roleAdminLu = fn; }
+export function brancherRoleAdmin(fn) { rolesAdminLus = fn; }
 
 export function estAdmin(membre, reglages = null) {
   if (!membre) return false;
   if (membre.permissions?.has?.(PermissionFlagsBits.ManageGuild)) return true;
-  const roleId = reglages ? reglages.adminRoleId : roleAdminLu();
-  if (roleId && membre.roles?.cache?.has?.(roleId)) return true;
+  const roles = reglages ? liste(reglages.adminRoleId) : rolesAdminLus();
+  if (roles.some((r) => membre.roles?.cache?.has?.(r))) return true;
   const id = membre.id ?? membre.user?.id;
   return Boolean(id) && ((reglages ?? config.discord).adminUserIds ?? []).includes(id);
 }

@@ -36,3 +36,10 @@ test('ADMIN_USER_IDS est nettoye des espaces par la config', async () => {
   assert.deepEqual(config.discord.adminUserIds, ['7', '8']);
   assert.equal(config.discord.adminRoleId, '42');
 });
+
+test('plusieurs roles staff : un seul suffit', () => {
+  const r = reglages('10, 20,30');
+  assert.equal(estAdmin(membre({ roles: ['20'] }), r), true);
+  assert.equal(estAdmin(membre({ roles: ['30', '99'] }), r), true);
+  assert.equal(estAdmin(membre({ roles: ['99'] }), r), false);
+});

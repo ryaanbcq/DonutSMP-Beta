@@ -28,7 +28,9 @@ export const settings = {
   // /setup general : ce qui vivait dans le .env. Le .env reste la valeur par
   // defaut ; une valeur posee ici gagne, meme vide (= desactive).
   roleVerifie: () => lire('general.roleVerifie', config.discord.verifiedRoleId),
-  roleAdmin: () => lire('general.roleAdmin', config.discord.adminRoleId),
+  // Plusieurs roles staff possibles, stockes separes par des virgules.
+  rolesAdmin: () => String(lire('general.roleAdmin', config.discord.adminRoleId) ?? '')
+    .split(',').map((x) => x.trim()).filter(Boolean),
   salonLogs: () => lire('general.salonLogs', config.discord.logChannelId),
   salonJournal: () => lire('general.salonJournal', config.discord.opsChannelId),
   salonDonations: () => lire('dons.salonPanneau', config.dons.salonPanneauId),
@@ -57,4 +59,4 @@ export function ouSeLier() {
 
 // estAdmin lit le role staff d ici (settings ne peut pas etre importe par
 // admin.js : les tests d admin tourneraient sur la vraie base).
-brancherRoleAdmin(() => settings.roleAdmin());
+brancherRoleAdmin(() => settings.rolesAdmin());

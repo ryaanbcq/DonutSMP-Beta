@@ -52,7 +52,7 @@ export async function rendreSetupGeneral(guild, note = '') {
       + `${etat.enLigne ? '🟢' : '🔴'} **Bot en jeu** · ${etat.enLigne ? `connecté (${etat.username})` : 'hors ligne : les `/link` et les dons sont suspendus'}\n\n`
       + '### Essentiel\n'
       + `${ok(settings.roleVerifie())} **Rôle des vérifiés** · ${role(settings.roleVerifie())}\n`
-      + `${settings.roleAdmin() ? '✅' : '➖'} **Rôle staff** · ${settings.roleAdmin() ? role(settings.roleAdmin()) : '*« Gérer le serveur » suffit*'}\n`
+      + `${settings.rolesAdmin().length ? '✅' : '➖'} **Rôles staff** · ${settings.rolesAdmin().length ? settings.rolesAdmin().map(role).join(' ') : '*« Gérer le serveur » suffit*'}\n`
       + `${ok(settings.salonLogs())} **Logs des vérifications** · ${salon(settings.salonLogs())}\n`
       + `${ok(settings.salonJournal())} **Journal du bot** · ${salon(settings.salonJournal())}\n`
       + '### Panneaux\n'
@@ -72,8 +72,8 @@ export async function rendreSetupGeneral(guild, note = '') {
     .setPlaceholder('✅ Rôle donné aux comptes vérifiés').setMinValues(1).setMaxValues(1);
   if (settings.roleVerifie()) verifie.setDefaultRoles(settings.roleVerifie());
   const admin = new RoleSelectMenuBuilder().setCustomId('gsetup:admin')
-    .setPlaceholder('🛠️ Rôle staff (commandes admin du bot)').setMinValues(0).setMaxValues(1);
-  if (settings.roleAdmin()) admin.setDefaultRoles(settings.roleAdmin());
+    .setPlaceholder('🛠️ Rôles staff (commandes admin du bot)').setMinValues(0).setMaxValues(10);
+  if (settings.rolesAdmin().length) admin.setDefaultRoles(...settings.rolesAdmin());
   const logs = texte('gsetup:logs', '📋 Salon des logs de vérification', settings.salonLogs());
   const journal = texte('gsetup:journal', '🩺 Journal du bot (pannes, erreurs)', settings.salonJournal());
 
@@ -199,7 +199,7 @@ async function toutCreer(guild) {
   const env = Object.fromEntries(Object.entries(CLES).map(([k, [, lire]]) => [k, lire()]));
   const faits = [];
   const poses = await creerManquants(api, {
-    guildId: guild.id, botId: client.user.id, env, adminRoleId: settings.roleAdmin() ?? '', journal: (t) => faits.push(t),
+    guildId: guild.id, botId: client.user.id, env, adminRoleId: settings.rolesAdmin().join(','), journal: (t) => faits.push(t),
   });
   for (const [k, id] of Object.entries(poses)) settings.poser(CLES[k][0], id);
   // Le cache discord.js ne connait pas encore ce qui vient d etre cree.
@@ -217,6 +217,26 @@ async function toutCreer(guild) {
   return `✨ ${faits.length ? `Créé : ${faits.join(', ')}.` : 'Rien à créer, tout existait.'}\n${notes.map((n) => `• ${n}`).join('\n')}`;
 }
 
+/**
+ * Les roles staff voient les salons staff du bot (logs, journal, historique) ;
+ * un role retire de la liste perd cet acces. Rend une note, vide si rien.
+ */
+async function ouvrirSalonsStaff(guild, avant, apres) {
+  const salons = [settings.salonLogs(), settings.salonJournal(), settings.salonHistoriqueDons()].filter(Boolean);
+  const retires = avant.filter((r) => !apres.includes(r));
+  let faits = 0;
+  for (const id of salons) {
+    const s = await guild.channels.fetch(id).catch(() => null);
+    if (!s?.permissionOverwrites) continue;
+    for (const r of apres) {
+      await s.permissionOverwrites.edit(r, { ViewChannel: true, ReadMessageHistory: true }, { reason: 'Rôle staff du bot' })
+        .then(() => { faits += 1; }).catch(() => {});
+    }
+    for (const r of retires) await s.permissionOverwrites.delete(r, 'Plus rôle staff du bot').catch(() => {});
+  }
+  return faits ? ', et voient les salons staff du bot' : '';
+}
+
 // ------------------------------------------------------------ interactions
 
 export async function onGsetupSelect(interaction) {
@@ -224,15 +244,22 @@ export async function onGsetupSelect(interaction) {
   const id = interaction.customId.slice('gsetup:'.length);
   const valeur = interaction.values[0] ?? '';
 
-  if (id === 'verifie' || id === 'admin') {
-    if (valeur && id === 'verifie') {
+  if (id === 'admin') {
+    const avant = settings.rolesAdmin();
+    settings.poser('general.roleAdmin', interaction.values.join(','));
+    await interaction.deferUpdate();
+    const note = await ouvrirSalonsStaff(guild, avant, interaction.values);
+    return interaction.editReply(await rendreSetupGeneral(guild, interaction.values.length
+      ? `✅ ${interaction.values.map(role).join(' ')} ont accès aux commandes staff${note}.`
+      : '✅ Plus de rôle staff : « Gérer le serveur » suffit.'));
+  }
+  if (id === 'verifie') {
+    if (valeur) {
       const refus = refusRole(guild, guild.roles.cache.get(valeur));
       if (refus) return interaction.update(await rendreSetupGeneral(guild, `❌ ${refus}.`));
     }
-    settings.poser(id === 'verifie' ? 'general.roleVerifie' : 'general.roleAdmin', valeur);
-    return interaction.update(await rendreSetupGeneral(guild, id === 'verifie'
-      ? '✅ Rôle des vérifiés enregistré. Il est donné aux prochains comptes liés.'
-      : (valeur ? '✅ Ce rôle a désormais accès aux commandes staff.' : '✅ Plus de rôle staff : « Gérer le serveur » suffit.')));
+    settings.poser('general.roleVerifie', valeur);
+    return interaction.update(await rendreSetupGeneral(guild, '✅ Rôle des vérifiés enregistré. Il est donné aux prochains comptes liés.'));
   }
   if (id === 'logs' || id === 'journal') {
     settings.poser(id === 'logs' ? 'general.salonLogs' : 'general.salonJournal', valeur);
