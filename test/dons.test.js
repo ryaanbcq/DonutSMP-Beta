@@ -8,7 +8,8 @@ process.env.DB_PATH = './data/test-dons.db';
 for (const f of ['', '-wal', '-shm']) rmSync(`./data/test-dons.db${f}`, { force: true });
 
 const { resolvePayment, startLink } = await import('../src/link/manager.js');
-const { palierPour, totalDe, nomRole } = await import('../src/dons/dons.js');
+const { palierPour, totalDe, nomRole, lirePaliers } = await import('../src/dons/dons.js');
+const { rendreSetupDons } = await import('../src/dons/setup.js');
 const { Reversements, arrondiAffichable } = await import('../ingame/dons.js');
 
 // ------------------------------------------------------------ cote Discord
@@ -35,6 +36,23 @@ test('paliers : le plus haut atteint', () => {
   assert.equal(palierPour(149e6, p), 1);
   assert.equal(palierPour(2e9, p), 4);
   assert.equal(nomRole(150e6), 'Donateur 150M');
+});
+
+test('/setup dons : lecture des paliers saisis', () => {
+  assert.deepEqual(lirePaliers('1B, 500M, 5B').paliers, [5e8, 1e9, 5e9]);
+  assert.deepEqual(lirePaliers('$2.5B 750m').paliers, [7.5e8, 2.5e9]);
+  assert.ok(lirePaliers('500M, beaucoup').erreur);
+  assert.ok(lirePaliers('5K').erreur, 'sous le don minimum');
+  assert.ok(lirePaliers('1B 2B 3B 4B 5B').erreur, 'cinq paliers : trop pour la fiche');
+});
+
+test('/setup dons : la fiche se construit (un menu par palier + boutons)', () => {
+  const guild = { id: 'g', roles: { cache: new Map() }, members: { me: null } };
+  const vue = rendreSetupDons(guild);
+  const json = vue.components.map((r) => r.toJSON());
+  assert.equal(json.length, 3 + 1);
+  assert.equal(json.at(-1).components.length, 3);
+  assert.match(vue.embeds[0].toJSON().description, /aucun rôle/);
 });
 
 // ------------------------------------------------------------- cote jeu

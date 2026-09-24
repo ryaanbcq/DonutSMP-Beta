@@ -27,7 +27,8 @@ import { repondreChallenge } from './link/flow.js';
 import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
-import { assurerRoles, majRolesDonateur, palierPour, nomRole } from './dons/dons.js';
+import { assurerRoles, majRolesDonateur, palierPour, nomRole, paliers as paliersDons } from './dons/dons.js';
+import { onDsetupSelect, onDsetupBouton, onDsetupModal } from './dons/setup.js';
 import { demarrerLogDons, logDon, salonDonsActif } from './dons/log.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
@@ -105,7 +106,7 @@ client.once('clientReady', async (c) => {
   } else {
     console.log('[baltop] aucun panneau pose, utilise /panel baltop dans un salon');
   }
-  if (config.discord.guildId && config.dons.paliers.length) {
+  if (config.discord.guildId) {
     const g = await c.guilds.fetch(config.discord.guildId).catch(() => null);
     if (g) await assurerRoles(g).catch((e) => console.error('[don] roles de donateur :', e.message));
   }
@@ -169,10 +170,11 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId.startsWith('recl:')) return await onReclamationSelect(interaction);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
       if (interaction.customId.startsWith('ticket:add:')) return await onSelectTicket(interaction);
-      if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return await refusSetup(interaction);
+      if (/^(tsetup|vsetup|dsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return await refusSetup(interaction);
       if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
       if (interaction.customId.startsWith('vouch:')) return await onVouchSelect(interaction);
       if (interaction.customId.startsWith('vsetup:')) return await onVsetupSelect(interaction);
+      if (interaction.customId.startsWith('dsetup:')) return await onDsetupSelect(interaction);
       return;
     }
     if (interaction.isChatInputCommand()) {
@@ -227,11 +229,12 @@ function refusSetup(interaction) {
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
-  if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
+  if (/^(tsetup|vsetup|dsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupBouton(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchBouton(interaction);
   if (interaction.customId.startsWith('vsetup:')) return onVsetupBouton(interaction);
+  if (interaction.customId.startsWith('dsetup:')) return onDsetupBouton(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 
@@ -296,8 +299,9 @@ async function onDelier(interaction) {
 
 async function onModal(interaction) {
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
-  if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
+  if (/^(tsetup|vsetup|dsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);
+  if (interaction.customId.startsWith('dsetup:')) return onDsetupModal(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
@@ -376,7 +380,7 @@ async function startWatcher(c) {
   watcher.on('donation', async ({ payment, avant, total }) => {
     const nom = payment.from;
     const lien = store.getLinkByName(nom);
-    const paliers = config.dons.paliers;
+    const paliers = paliersDons();
     const nouveau = palierPour(total);
     const monte = nouveau > palierPour(avant);
     console.log(`[don] ${nom} ${shortMoney(payment.amount)}, total ${shortMoney(total)}${lien ? '' : ' (pas lie)'}`);
