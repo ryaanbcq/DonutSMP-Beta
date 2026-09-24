@@ -27,6 +27,7 @@ import { repondreChallenge } from './link/flow.js';
 import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
+import { assurerRoles, majRolesDonateur, palierPour, nomRole } from './dons/dons.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { estAdmin } from './lib/admin.js';
@@ -100,6 +101,10 @@ client.once('clientReady', async (c) => {
     await rafraichirSiBesoin(c, { force: true });
   } else {
     console.log('[baltop] aucun panneau pose, utilise /panel baltop dans un salon');
+  }
+  if (config.discord.guildId && config.dons.paliers.length) {
+    const g = await c.guilds.fetch(config.discord.guildId).catch(() => null);
+    if (g) await assurerRoles(g).catch((e) => console.error('[don] roles de donateur :', e.message));
   }
   await startWatcher(c);
   const fils = await assurerFils(c).catch((e) => { console.error('[vouch] fils :', e.message); return 0; });
@@ -346,6 +351,9 @@ async function startWatcher(c) {
       await member?.roles.add(config.discord.verifiedRoleId).catch((e) =>
         console.error('[link] role non attribue :', e.message));
     }
+    // Des dons faits avant le link comptent des maintenant.
+    const guildDons = await c.guilds.fetch(config.discord.guildId).catch(() => null);
+    if (guildDons) await majRolesDonateur(guildDons, discordId, challenge.mc_name).catch(() => {});
 
     await log(c, embed(TITRES.staff, {
       couleur: FR.vert,
@@ -360,6 +368,49 @@ async function startWatcher(c) {
       champs: { Joueur: challenge.mc_name, Payé: shortMoney(payment.amount) },
       joueur: challenge.mc_name,
     });
+  });
+
+  watcher.on('donation', async ({ payment, avant, total }) => {
+    const nom = payment.from;
+    const lien = store.getLinkByName(nom);
+    const paliers = config.dons.paliers;
+    const nouveau = palierPour(total);
+    const monte = nouveau > palierPour(avant);
+    console.log(`[don] ${nom} ${shortMoney(payment.amount)}, total ${shortMoney(total)}${lien ? '' : ' (pas lie)'}`);
+
+    const guild = lien ? await c.guilds.fetch(config.discord.guildId).catch(() => null) : null;
+    if (guild) await majRolesDonateur(guild, lien.discord_id, nom).catch((e) => console.warn('[don] roles :', e.message));
+
+    const suivant = paliers[nouveau + 1];
+    journal({
+      niveau: 'ok',
+      titre: monte ? 'Don reçu : nouveau rang' : 'Don reçu',
+      texte: lien
+        ? `<@${lien.discord_id}> (**${nom}**) a donné **${shortMoney(payment.amount)}**.`
+        : `**${nom}** a donné **${shortMoney(payment.amount)}**. Pas encore lié : son rang arrivera avec son link.`,
+      champs: {
+        Don: shortMoney(payment.amount),
+        Total: shortMoney(total),
+        Rang: nouveau >= 0 ? nomRole(paliers[nouveau]) : 'aucun',
+        ...(config.dons.beneficiaire ? { 'Reversé à': config.dons.beneficiaire } : {}),
+      },
+      joueur: nom,
+    });
+
+    if (!lien) return;
+    const user = await c.users.fetch(lien.discord_id).catch(() => null);
+    await user?.send({
+      embeds: [embed('💝・MERCI POUR TON DON', {
+        couleur: FR.or,
+        image: nom,
+        description: `Ton don de **${shortMoney(payment.amount)}** est bien arrivé, merci !`
+          + (monte ? `\n\nTu passes **${nomRole(paliers[nouveau])}** 🎉` : '')
+          + (suivant ? `\n\nProchain rang à **${shortMoney(suivant)}** de dons au total.` : ''),
+      }).addFields(
+        { name: 'Total donné', value: shortMoney(total), inline: true },
+        { name: 'Rang', value: nouveau >= 0 ? nomRole(paliers[nouveau]) : 'Aucun pour le moment', inline: true },
+      )],
+    }).catch(() => {});
   });
 
   watcher.on('unmatched', ({ payment, raison, challenge }) => {

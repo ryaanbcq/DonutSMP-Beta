@@ -15,6 +15,7 @@ import { dirname } from 'node:path';
 import 'dotenv/config';
 import { parsePayment, parsePaymentSent, parseBalance } from '../src/minecraft/payments.js';
 import { RefundLedger } from './refunds.js';
+import { Reversements } from './dons.js';
 import { creerVerificateur } from './verifications.js';
 import nbt from 'prismarine-nbt';
 import { lireDialogueStats } from '../src/minecraft/dialog.js';
@@ -64,6 +65,13 @@ const cfg = {
     delayMin: (Number(process.env.REFUND_DELAY_MIN_S) || 60) * 1000,
     delayMax: (Number(process.env.REFUND_DELAY_MAX_S) || 120) * 1000,
     confirmMs: (Number(process.env.REFUND_CONFIRM_S) || 90) * 1000,
+  },
+  // Dons : tout /pay recu a partir de `min` (les /link vont de 1 a 1000).
+  dons: {
+    file: process.env.DONATION_FILE ?? './data/dons.json',
+    min: Number(process.env.DONATION_MIN) || 10_000,
+    beneficiaire: (process.env.DONATION_RECIPIENT ?? '').trim(),
+    heure: Number(process.env.DONATION_FORWARD_HOUR) || 0,
   },
 };
 
@@ -312,6 +320,14 @@ function connect() {
       lastPayment = { line: recu.raw, at };
       console.log(`[pay] recu ${recu.amount} de ${recu.from}${reel && reel !== recu.from ? ` (${reel})` : ''}`);
       feed(line, at, reel).catch((e) => console.error('[pay] ecriture impossible :', e.message));
+      // Un don ne se rembourse pas : il part au beneficiaire avec le reversement du jour.
+      if (dons?.estUnDon(recu.amount)) {
+        if (dons.ajouterDon({ from: reel ?? recu.from, amount: recu.amount, at })) {
+          console.log(`[don] ${recu.amount} de ${recu.from}, cumul a reverser ${dons.etat.cumul}`);
+          dons.save().catch((e) => console.error('[don] ecriture impossible :', e.message));
+        }
+        return;
+      }
       // Le remboursement part au vrai pseudo : « /pay Steve » ne paie pas .Steve.
       planifierRemboursement({ ...recu, from: reel ?? recu.from, receivedAt: at });
       return;
@@ -319,8 +335,13 @@ function connect() {
 
     // Delai entre commandes : la derniere commande n est pas partie.
     if (/^You need to wait another [\d.]+ seconds? to execute a command/i.test(line.trim())) {
+      const donEnVol = dons?.enVol();
       const enVol = ledger?.inFlight();
-      if (enVol && Date.now() - enVol.sentAt < 3_000) {
+      if (donEnVol && Date.now() - donEnVol.sentAt < 3_000) {
+        dons.annulerEnvoi(donEnVol.id);
+        dons.save().catch(() => {});
+        console.warn(`[don] /pay ${donEnVol.to} avale par le delai entre commandes, renvoi`);
+      } else if (enVol && Date.now() - enVol.sentAt < 3_000) {
         ledger.annulerEnvoi(enVol.id);
         ledger.save().catch(() => {});
         console.warn(`[refund] /pay ${enVol.to} avale par le delai entre commandes, renvoi dans 2 s`);
@@ -348,6 +369,13 @@ function connect() {
         if (!prioritaires.some((d) => d.type === 'solde' && memeJoueur(d.nom, entry.to))) {
           prioritaires.push({ type: 'solde', nom: entry.to });
         }
+      } else if (dons?.matchConfirmation(envoye.to, envoye.amount)) {
+        const v = dons.marquer(dons.enVol().id, 'paid', { paidAt: Date.now() });
+        dons.save().catch(() => {});
+        console.log(`[don] reverse ${v.amount} a ${v.to}`);
+        note('ok', 'Dons reversés',
+          `Les dons du jour sont partis à **${v.to}**.`,
+          { champs: { Bénéficiaire: v.to, Montant: shortMoney(v.amount), Jour: v.jour }, joueur: v.to });
       } else {
         console.warn(`[refund] confirmation sans entree en vol : ${envoye.raw}`);
       }
@@ -773,7 +801,8 @@ setInterval(() => {
   }
 
   const suivant = ledger.due();
-  if (!suivant || !peutCommander()) return;
+  // Un reversement de dons en vol : on attend sa confirmation.
+  if (!suivant || !peutCommander() || dons?.enVol()) return;
 
   // Seuls les paiements de verification se rendent (voir verifications.js).
   const verdict = verificateur.rembourser(suivant, ledger.compteDuJour(suivant.to, suivant.day));
@@ -789,6 +818,42 @@ setInterval(() => {
   }
   envoyerRemboursement(suivant);
 }, 2_000).unref();
+
+// Reversement quotidien des dons. Passe apres les remboursements (jamais deux
+// /pay en vol en meme temps) et n est JAMAIS renvoye sans confirmation.
+let dons = null;
+setInterval(() => {
+  if (!dons || !bot?.player) return;
+  const enVol = dons.enVol();
+  if (enVol) {
+    if (Date.now() - enVol.sentAt > cfg.refunds.confirmMs) {
+      dons.marquer(enVol.id, 'doute', { douteAt: Date.now() });
+      dons.save().catch(() => {});
+      signalerDouteDon(enVol, 'aucune confirmation « You paid » dans les temps');
+    }
+    return;
+  }
+  if (dons.planifier()) dons.save().catch(() => {});
+  const v = dons.aEnvoyer();
+  if (!v || ledger?.inFlight() || !peutCommander()) return;
+  if (!/^\.?[A-Za-z0-9_]{1,24}$/.test(v.to) || !Number.isInteger(v.amount) || v.amount <= 0) {
+    dons.marquer(v.id, 'doute', { raison: 'entree invalide' });
+    dons.save().catch(() => {});
+    return;
+  }
+  commander(`/pay ${v.to} ${v.amount}`);
+  dons.marquer(v.id, 'sent', { sentAt: Date.now() });
+  dons.save().catch(() => {});
+  console.log(`[don] /pay ${v.to} ${v.amount} envoye (reversement ${v.jour})`);
+}, 2_000).unref();
+
+function signalerDouteDon(v, cause) {
+  console.error(`[don] EN DOUTE : ${v.amount} a ${v.to} (${cause})`);
+  note('err', 'Reversement incertain',
+    `Le \`/pay\` des dons à **${v.to}** est peut-être parti, sans confirmation vue. Il n'est **pas** renvoyé`
+    + ' automatiquement : vérifie avec le bénéficiaire, puis envoie à la main si besoin.',
+    { champs: { Bénéficiaire: v.to, Montant: shortMoney(v.amount), Jour: v.jour, Cause: cause }, joueur: v.to });
+}
 
 function signalerDoute(e, cause) {
   console.error(`[refund] EN DOUTE : ${e.amount} a ${e.to} (${cause})`);
@@ -864,6 +929,13 @@ if (cfg.refunds.enabled) {
 } else {
   console.warn('[refund] remboursements DESACTIVES (REFUND_ENABLED=false)');
 }
+
+dons = await new Reversements(cfg.dons).load();
+for (const v of dons.doutesAuChargement) signalerDouteDon(v, 'arrêt du bot entre le /pay et sa confirmation');
+if (dons.doutesAuChargement.length) await dons.save();
+console.log(cfg.dons.beneficiaire
+  ? `[don] dons a partir de ${cfg.dons.min}, reverses chaque jour a ${cfg.dons.heure} h (Paris) a ${cfg.dons.beneficiaire}, cumul ${dons.etat.cumul}`
+  : `[don] dons a partir de ${cfg.dons.min}, AUCUN beneficiaire (DONATION_RECIPIENT) : cumul ${dons.etat.cumul} garde`);
 
 if (cfg.soldes.enabled) {
   await chargerSuivis();

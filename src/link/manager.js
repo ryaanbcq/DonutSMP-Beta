@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { estUnDon, enregistrerDon, totalDe } from '../dons/dons.js';
 import { store, cleOrpheline } from '../db.js';
 import { config } from '../config.js';
 import { normName, isValidName } from '../lib/names.js';
@@ -71,12 +72,20 @@ export function cancelLink(discordId) {
 
 /**
  * Confronte un paiement vu en jeu aux challenges en cours.
- * Rend { outcome, ... } ; outcome vaut 'linked', 'conflict' ou 'unmatched'.
+ * Rend { outcome, ... } ; outcome vaut 'linked', 'conflict', 'donation' ou 'unmatched'.
  */
 export function resolvePayment(payment) {
   store.expireStale();
 
   const challenge = store.findChallenge(payment.from, payment.amount);
+  // Au dessus des montants de /link : un don, jamais une verification.
+  if (!challenge && estUnDon(payment.amount)) {
+    const nom = payment.reel ?? payment.from;
+    const avant = totalDe(nom);
+    store.recordPayment(payment, 'donation');
+    const total = enregistrerDon({ ...payment, from: nom });
+    return { outcome: 'donation', payment: { ...payment, from: nom }, avant, total };
+  }
   if (!challenge) {
     store.recordPayment(payment, 'unmatched');
     return { outcome: 'unmatched', payment };

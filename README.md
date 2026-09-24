@@ -337,3 +337,21 @@ node scripts/admin.js unlink <discordId>
 node scripts/admin.js pending                    # verifications en cours
 node scripts/admin.js payments 20                # derniers paiements vus et leur verdict
 ```
+
+## Dons
+
+Tout `/pay` au bot a partir de `DONATION_MIN` (10K par defaut) est un don : les
+montants de `/link` vont de 1 a 1000, les deux ne se confondent jamais, et un
+don ne se rembourse pas.
+
+- Le don est compte au **compte Minecraft** qui a paye. Un joueur pas encore
+  lie garde ses dons : son rang arrive avec son link. Un unlink retire le rang,
+  le compte le garde.
+- Un role par palier (`DONATION_TIERS`, par defaut 5M, 50M, 150M, 300M, 500M),
+  cree par le bot au demarrage. Le membre porte seulement celui de son plus
+  haut palier, et recoit un MP de remerciement a chaque don.
+- Chaque jour a `DONATION_FORWARD_HOUR` (heure de Paris), le bot en jeu reverse
+  les dons recus a `DONATION_RECIPIENT`. Il reverse le cumul des dons, jamais
+  le solde du compte, arrondi a ce que DonutSMP affiche (le reste part le
+  lendemain). Sans confirmation « You paid », le reversement passe en doute et
+  n'est jamais renvoye tout seul : le journal le signale.

@@ -5,6 +5,7 @@ import { balances } from '../donut/balances.js';
 import { publierSuivis } from '../donut/ingame-balances.js';
 import { config } from '../config.js';
 import { rafraichirSiBesoin } from '../baltop/panel.js';
+import { rolesDonateur } from '../dons/dons.js';
 
 /**
  * Detache le compte d un membre. Partage par la commande /unlink et par le
@@ -29,6 +30,10 @@ export async function delier(userId, member) {
 
   if (config.discord.verifiedRoleId) {
     await member?.roles?.remove(config.discord.verifiedRoleId).catch(() => {});
+  }
+  // Les dons restent au compte Minecraft : le rang repartira avec lui.
+  for (const id of rolesDonateur()) {
+    if (member?.roles?.cache?.has(id)) await member.roles.remove(id).catch(() => {});
   }
 
   return { etat: 'delie', pseudo: lien.mc_name };

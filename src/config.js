@@ -62,6 +62,14 @@ export const config = {
     // Ordres du journal staff vers le bot en jeu (relink).
     controlFile: process.env.INGAME_CONTROL_FILE ?? './data/ingame-control.json',
   },
+  // Dons au bot : tout /pay a partir de `min`, rangs par total cumule,
+  // reversement quotidien au beneficiaire (fait par le bot en jeu).
+  dons: {
+    min: num('DONATION_MIN', 10_000),
+    paliers: (process.env.DONATION_TIERS ?? '5000000,50000000,150000000,300000000,500000000')
+      .split(',').map((x) => Number(x.trim())).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b),
+    beneficiaire: (process.env.DONATION_RECIPIENT ?? '').trim(),
+  },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),
   baltop: {
