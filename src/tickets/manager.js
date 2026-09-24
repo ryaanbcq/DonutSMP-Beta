@@ -282,6 +282,7 @@ async function demanderSuppression(interaction, { staff }) {
   return interaction.reply({
     content: '🗑️ Supprimer ce ticket ? La conversation sera perdue, sauf si vous avez cliqué **Sauvegarder les logs** avant.',
     components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('ticket:transcript').setLabel('Sauvegarder les logs').setEmoji('📄').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('ticket:delete:ok').setLabel('Oui, supprimer').setStyle(ButtonStyle.Danger),
     )],
     ...EPH,
