@@ -27,7 +27,7 @@ import { repondreChallenge } from './link/flow.js';
 import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
-import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket } from './tickets/manager.js';
+import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { estAdmin } from './lib/admin.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
@@ -160,6 +160,7 @@ client.on('interactionCreate', async (interaction) => {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
       if (interaction.customId.startsWith('recl:')) return await onReclamationSelect(interaction);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
+      if (interaction.customId.startsWith('ticket:add:')) return await onSelectTicket(interaction);
       if (/^(tsetup|vsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return await refusSetup(interaction);
       if (interaction.customId.startsWith('tsetup:')) return await onSetupSelect(interaction);
       if (interaction.customId.startsWith('vouch:')) return await onVouchSelect(interaction);

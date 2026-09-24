@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle,
+  UserSelectMenuBuilder, StringSelectMenuBuilder, OverwriteType,
   ChannelType, PermissionFlagsBits, MessageFlags, AttachmentBuilder, GatewayIntentBits,
 } from 'discord.js';
 import { store } from '../db.js';
@@ -184,6 +185,7 @@ export async function onBoutonTicket(interaction) {
     case 'transcript': return sauvegarder(interaction, ticket, { staff });
     case 'delete': return demanderSuppression(interaction, { staff });
     case 'delete:ok': return supprimer(interaction, ticket, { staff });
+    case 'add': return proposerAjout(interaction, ticket, { staff, auteur });
     default: return interaction.reply({ content: '❌ Action inconnue.', ...EPH });
   }
 }
@@ -205,7 +207,9 @@ async function fermer(interaction, ticket, { staff, auteur }) {
 
   store.setTicketEtat(ticket.channel_id, 'ferme', interaction.user.id);
   const salon = interaction.channel;
-  await salon.permissionOverwrites.edit(ticket.discord_id, { SendMessages: false }, { reason: 'Ticket fermé' }).catch(() => {});
+  for (const id of [ticket.discord_id, ...invites(salon, ticket)]) {
+    await salon.permissionOverwrites.edit(id, { SendMessages: false }, { reason: 'Ticket fermé' }).catch(() => {});
+  }
   if (!salon.name.startsWith(FERME)) await salon.setName(`${FERME}${salon.name}`.slice(0, 100)).catch(() => {});
   await majEntete(interaction, { ...ticket, etat: 'ferme' }, { prisPar: ticket.pris_par });
 
@@ -225,7 +229,9 @@ async function rouvrir(interaction, ticket, { staff }) {
 
   store.setTicketEtat(ticket.channel_id, 'ouvert', interaction.user.id);
   const salon = interaction.channel;
-  await salon.permissionOverwrites.edit(ticket.discord_id, { SendMessages: true }, { reason: 'Ticket rouvert' }).catch(() => {});
+  for (const id of [ticket.discord_id, ...invites(salon, ticket)]) {
+    await salon.permissionOverwrites.edit(id, { SendMessages: true }, { reason: 'Ticket rouvert' }).catch(() => {});
+  }
   if (salon.name.startsWith(FERME)) await salon.setName(salon.name.slice(FERME.length)).catch(() => {});
   await majEntete(interaction, { ...ticket, etat: 'ouvert' }, { prisPar: ticket.pris_par });
 
@@ -292,6 +298,89 @@ async function supprimer(interaction, ticket, { staff }) {
   await majJournal(interaction.guild, store.getTicket(ticket.channel_id));
   console.log(`[ticket] #${ticket.id} supprime par ${interaction.user.tag}`);
   await interaction.channel.delete(`Ticket #${ticket.id} supprimé par ${interaction.user.tag}`);
+}
+
+// ---------------------------------------------------------------------------
+// Membres ajoutes
+// ---------------------------------------------------------------------------
+
+// Les invites ne sont pas en base : ce sont les droits « membre » du salon,
+// hors auteur et bot. Ce qui est sur le salon fait foi, meme apres un ajout
+// a la main dans les parametres Discord.
+function invites(salon, ticket) {
+  const moi = salon.guild.members.me?.id;
+  return salon.permissionOverwrites.cache
+    .filter((o) => o.type === OverwriteType.Member && o.id !== ticket.discord_id && o.id !== moi
+      && o.allow.has(PermissionFlagsBits.ViewChannel))
+    .map((o) => o.id);
+}
+
+async function proposerAjout(interaction, ticket, { staff, auteur }) {
+  if (!staff && !auteur) return refus(interaction, '❌ Seuls l\'auteur du ticket et le staff peuvent ajouter quelqu\'un.');
+  if (ticket.etat !== 'ouvert') return refus(interaction, 'ℹ️ Rouvrez le ticket avant d\'y ajouter quelqu\'un.');
+
+  const rangees = [new ActionRowBuilder().addComponents(
+    new UserSelectMenuBuilder().setCustomId('ticket:add:pick')
+      .setPlaceholder('Membres à ajouter au ticket').setMinValues(1).setMaxValues(5),
+  )];
+  const deja = invites(interaction.channel, ticket);
+  if (deja.length) {
+    const noms = await Promise.all(deja.slice(0, 25).map(async (id) => {
+      const m = await interaction.guild.members.fetch(id).catch(() => null);
+      return { id, nom: m?.displayName ?? id };
+    }));
+    rangees.push(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId('ticket:add:remove')
+        .setPlaceholder('Retirer un membre ajouté').setMinValues(1).setMaxValues(noms.length)
+        .addOptions(noms.map((n) => ({ label: n.nom.slice(0, 100), value: n.id }))),
+    ));
+  }
+  return interaction.reply({ components: rangees, ...EPH });
+}
+
+export async function onSelectTicket(interaction) {
+  const ticket = store.getTicket(interaction.channelId);
+  if (!ticket || ticket.etat !== 'ouvert') {
+    return interaction.update({ content: 'ℹ️ Ce ticket n\'est plus ouvert.', components: [] });
+  }
+  // Revalide : le menu a pu rester ouvert pendant qu un role changeait.
+  const staff = estStaff(interaction.member);
+  if (!staff && interaction.user.id !== ticket.discord_id) {
+    return interaction.update({ content: '❌ Réservé à l\'auteur du ticket et au staff.', components: [] });
+  }
+  const salon = interaction.channel;
+
+  if (interaction.customId === 'ticket:add:pick') {
+    const cibles = [...interaction.users.values()]
+      .filter((u) => !u.bot && u.id !== ticket.discord_id && !invites(salon, ticket).includes(u.id));
+    if (!cibles.length) return interaction.update({ content: 'ℹ️ Rien à ajouter : déjà dans le ticket, ou bot.', components: [] });
+    // Memes droits que l auteur du ticket (PERMS_MEMBRE).
+    const allow = { ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true, EmbedLinks: true };
+    for (const u of cibles) {
+      await salon.permissionOverwrites.edit(u.id, allow, { reason: `Ajouté au ticket #${ticket.id} par ${interaction.user.tag}` });
+    }
+    await interaction.update({ content: `✅ Ajouté : ${cibles.map((u) => `<@${u.id}>`).join(', ')}`, components: [] });
+    console.log(`[ticket] #${ticket.id} ${interaction.user.tag} ajoute ${cibles.map((u) => u.tag).join(', ')}`);
+    return salon.send({
+      content: cibles.map((u) => `<@${u.id}>`).join(' '),
+      embeds: [embedLog(TITRE_TICKET, `<@${interaction.user.id}> a ajouté ${cibles.map((u) => `<@${u.id}>`).join(', ')} à ce ticket.`, FR.bleu)],
+      allowedMentions: { users: cibles.map((u) => u.id) },
+    }).catch(() => {});
+  }
+
+  if (interaction.customId === 'ticket:add:remove') {
+    const ids = interaction.values.filter((id) => invites(salon, ticket).includes(id));
+    for (const id of ids) {
+      await salon.permissionOverwrites.delete(id, `Retiré du ticket #${ticket.id} par ${interaction.user.tag}`);
+    }
+    await interaction.update({ content: ids.length ? `✅ Retiré : ${ids.map((id) => `<@${id}>`).join(', ')}` : 'ℹ️ Rien à retirer.', components: [] });
+    if (!ids.length) return;
+    console.log(`[ticket] #${ticket.id} ${interaction.user.tag} retire ${ids.join(', ')}`);
+    return salon.send({
+      embeds: [embedLog(TITRE_TICKET, `<@${interaction.user.id}> a retiré ${ids.map((id) => `<@${id}>`).join(', ')} de ce ticket.`, FR.jaune)],
+      allowedMentions: { users: [] },
+    }).catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------------------

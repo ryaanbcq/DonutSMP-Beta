@@ -68,6 +68,8 @@ export function boutonsTicket(etat) {
       ? new ButtonBuilder().setCustomId('ticket:close').setLabel('Fermer').setEmoji('🔒').setStyle(ButtonStyle.Secondary)
       : new ButtonBuilder().setCustomId('ticket:reopen').setLabel('Rouvrir').setEmoji('🔓').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('ticket:claim').setLabel('Prendre en charge').setEmoji('🙋').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('ticket:add').setLabel('Ajouter un membre').setEmoji('➕').setStyle(ButtonStyle.Secondary)
+      .setDisabled(!ouvert),
     new ButtonBuilder().setCustomId('ticket:transcript').setLabel('Sauvegarder les logs').setEmoji('📄').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('ticket:delete').setLabel('Supprimer').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
   );
