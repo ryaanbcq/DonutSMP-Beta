@@ -77,15 +77,16 @@ else
   node scripts/sync-env.js
 fi
 
-# Le token ne se devine pas : il faut le coller une fois. setup.js le lit sur
-# stdin, en deduit l id de l application et le serveur, et ecrit le .env.
-if ! grep -q '^DISCORD_TOKEN=.\+' .env; then
-  if [ "$AUTO" -eq 1 ]; then
+# Token, serveur, droits, intent, roles et salons. Relancable : setup.js
+# saute ce qui est deja pose et ne cree jamais en double.
+etape "Discord"
+if [ "$AUTO" -eq 1 ]; then
+  if ! grep -q '^DISCORD_TOKEN=.\+' .env; then
     echo "DISCORD_TOKEN vide et --auto demande : remplis .env puis relance." >&2
     exit 1
   fi
-  etape "Token Discord"
-  info "Portail dev > ton application > Bot > Reset Token"
+  node scripts/setup.js --auto
+else
   node scripts/setup.js
 fi
 

@@ -31,12 +31,22 @@ cd /opt/donutsmp-fr-bot
 bash scripts/vps-install.sh
 ```
 
-Le script pose deux questions, les seules choses qu'une machine ne peut pas
-deviner :
+Le script guide tout le reste, sans aucun id a copier coller :
 
 1. **le token du bot** (portail dev > ton application > Bot > Reset Token),
    colle une fois, ecrit en chmod 600, jamais reaffiche ;
-2. **le code Microsoft** du compte en jeu, a saisir dans un navigateur. Aucun
+2. **l invitation** : il affiche le lien (avec tous les droits utiles) et
+   attend que le bot arrive sur le serveur ; s il est sur plusieurs serveurs,
+   on choisit dans une liste. S il manque des droits, il donne le lien pour
+   les completer et attend ;
+3. **Message Content** : il donne la page du portail ou cocher l intent et
+   attend qu il soit actif (import des anciens vouches, transcripts) ;
+4. **roles et salons** : une seule question, « je les cree ? ». Oui = role
+   `Vérifié`, categorie `DONUTSMP FR` (#connexion, #classement en lecture
+   seule) et categorie privee `DONUTSMP FR · STAFF` (#logs-verifications,
+   #journal-bot). Non = les choisir dans `donut config`. Relancer ne cree
+   jamais en double ;
+5. **le code Microsoft** du compte en jeu, a saisir dans un navigateur. Aucun
    mot de passe ne passe par le script.
 
 Le depot etant prive, la machine a besoin d'une cle SSH autorisee sur GitHub
@@ -46,9 +56,8 @@ Il est idempotent : le relancer ne casse rien, il saute ce qui est deja fait.
 `--sans-ingame` installe le bot Discord seul, `--auto` ne pose aucune question
 et s'arrete si le `.env` est incomplet.
 
-A la fin, `scripts/doctor.js` affiche l'etat de l'installation. Ce qui reste a
-remplir a la main dans `.env` : `VERIFIED_ROLE_ID`, `LOG_CHANNEL_ID` et les
-salons du classement, puisque ce sont des ids de ton serveur.
+A la fin, `scripts/doctor.js` affiche l'etat de l'installation. Rien ne reste
+a remplir a la main ; `donut config` sert a changer un choix apres coup.
 
 ## La commande `donut`
 

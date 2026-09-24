@@ -17,6 +17,7 @@ import {
   masquer, entreeFermee, tty,
   RESET, GRAS, PALE, BLEU, OR, VERT, ROUGE, JAUNE, GRIS,
 } from './lib/tui.js';
+import { lienInvitation } from './lib/discord-setup.js';
 
 const run = promisify(execFile);
 const API = 'https://discord.com/api/v10';
@@ -149,8 +150,7 @@ async function choisirServeur() {
     effacer();
     banniere('Serveur', 'le bot n est sur aucun serveur');
     console.log(`\n  Invite le, puis reviens ici :\n`);
-    console.log(`  ${BLEU}https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}`
-      + `&scope=bot%20applications.commands&permissions=268954112${RESET}\n`);
+    console.log(`  ${BLEU}${lienInvitation(process.env.DISCORD_CLIENT_ID)}${RESET}\n`);
     await pause();
     return;
   }

@@ -7,6 +7,7 @@
 // moins un point bloquant est rouge.
 
 import 'dotenv/config';
+import { droitsManquants, lienInvitation } from './lib/discord-setup.js';
 import { readFile, access, stat, mkdir, readdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -121,7 +122,7 @@ if (!token) {
     const guilds = await api('/users/@me/guilds', token).catch(() => []);
     const g = guilds.find((x) => x.id === guildId);
     if (!g) {
-      ko('le bot n est pas sur DISCORD_GUILD_ID', `serveurs vus : ${guilds.map((x) => x.id).join(', ') || 'aucun'}`);
+      ko('le bot n est pas sur DISCORD_GUILD_ID', `serveurs vus : ${guilds.map((x) => x.id).join(', ') || 'aucun'}  (donut setup)`);
     } else {
       ok(`present sur ${g.name}`, g.id);
 
@@ -129,18 +130,9 @@ if (!token) {
       const membre = await api(`/guilds/${guildId}/members/${me.id}`, token);
       const siens = roles.filter((r) => membre.roles.includes(r.id) || r.id === guildId);
       const perms = siens.reduce((acc, r) => acc | BigInt(r.permissions), 0n);
-      const ADMIN = 1n << 3n;
-      const requises = {
-        'Voir les salons': 1n << 10n,
-        'Envoyer des messages': 1n << 11n,
-        'Integrer des liens': 1n << 14n,
-        'Historique des messages': 1n << 16n,
-        'Gerer les roles': 1n << 28n,
-      };
-      const absentes = Object.entries(requises)
-        .filter(([, bit]) => !(perms & ADMIN) && !(perms & bit))
-        .map(([nom]) => nom);
-      if (absentes.length) ko(`permissions manquantes : ${absentes.join(', ')}`, 'reinviter le bot avec le lien de setup.js');
+      // Meme liste que le lien d invitation de setup.js.
+      const absentes = droitsManquants(perms);
+      if (absentes.length) ko(`permissions manquantes : ${absentes.join(', ')}`, `reautoriser le bot : ${lienInvitation(me.id, guildId)}`);
       else ok('permissions suffisantes');
 
       const maPosition = Math.max(...siens.map((r) => r.position), 0);

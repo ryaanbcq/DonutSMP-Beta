@@ -1,41 +1,54 @@
-// Recupere l'identite de l'application Discord a partir du token et remplit .env.
+// Branche le bot sur Discord, de bout en bout, sans id a copier coller.
 //
-// Le TOKEN ne se pull pas : Discord ne l'expose par aucune API, il n'est visible
-// qu'une fois dans le portail dev (Applications > ton app > Bot > Reset Token).
-// Tout le reste se deduit de lui : id de l'application, nom, serveurs, lien
-// d'invitation. On lit le token sur stdin pour qu'il ne traine pas dans
-// l'historique du shell ni dans la liste des process.
+//   1. token       colle une fois (le seul secret qu une machine ne devine pas)
+//   2. serveur     lien d invitation, puis on ATTEND que le bot arrive ;
+//                  plusieurs serveurs : on choisit dans une liste
+//   3. droits      verifies, et relien d invitation si il en manque
+//   4. intent      Message Content (import des anciens vouches, transcripts) :
+//                  on attend qu il soit coche dans le portail
+//   5. roles et salons manquants : crees a la demande
 //
-//   node scripts/setup.js
-//   pbpaste | node scripts/setup.js        (token deja dans le presse papier)
+// Le TOKEN ne se pull pas : Discord ne l expose par aucune API, il n est visible
+// qu une fois dans le portail dev (Applications > ton app > Bot > Reset Token).
+// Il est lu sur stdin pour ne trainer ni dans l historique du shell ni dans la
+// liste des process.
+//
+//   node scripts/setup.js            (relancable : saute ce qui est fait)
+//   node scripts/setup.js --new      saisir un autre token
+//   node scripts/setup.js --auto     aucune question ni attente (CI)
+//   pbpaste | node scripts/setup.js  token deja dans le presse papier
 
 import 'dotenv/config';
-import { createInterface } from 'node:readline/promises';
 import { readFile, writeFile } from 'node:fs/promises';
-import { stdin, stdout } from 'node:process';
+import { stdin } from 'node:process';
+import {
+  menu, demander, confirmer, fermer, RESET, PALE, BLEU, VERT, JAUNE, ROUGE, GRAS,
+} from './lib/tui.js';
+import {
+  client, lienInvitation, lienPortailBot, aMessageContent, droitsDuBot, droitsManquants,
+  attendre, creerManquants, A_CREER,
+} from './lib/discord-setup.js';
 
-const API = 'https://discord.com/api/v10';
-
-// Vue + Envoyer des messages + Integrer des liens + Historique + Gerer les roles
-const PERMISSIONS = 1024 + 2048 + 16384 + 65536 + 268435456;
+const AUTO = process.argv.includes('--auto');
+const interactif = Boolean(stdin.isTTY) && !AUTO;
 
 const mask = (t) => (t.length > 12 ? `${t.slice(0, 6)}...${t.slice(-4)}` : '***');
+const ok = (t) => console.log(`  ${VERT}✓${RESET} ${t}`);
+const attention = (t) => console.log(`  ${JAUNE}!${RESET} ${t}`);
+const etape = (t) => console.log(`\n${GRAS}${t}${RESET}`);
+const lien = (u) => console.log(`\n    ${BLEU}${u}${RESET}\n`);
 
-async function api(path, token) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { Authorization: `Bot ${token}`, 'User-Agent': 'donutsmp-fr-bot setup' },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (res.status === 401) throw new Error('Token refuse par Discord. Il a peut etre ete regenere depuis.');
-  if (!res.ok) throw new Error(`Discord ${res.status} sur ${path}`);
-  return res.json();
+function echec(message, conseil = '') {
+  console.error(`\n  ${ROUGE}✗${RESET} ${message}`);
+  if (conseil) console.error(`    ${conseil}`);
+  fermer();
+  process.exit(1);
 }
 
 async function readToken() {
   // Deja configure : on reutilise le token plutot que de le redemander.
-  // `--new` force une nouvelle saisie (token regenere, autre application).
   if (process.env.DISCORD_TOKEN && !process.argv.includes('--new')) {
-    console.log('Token repris depuis .env (--new pour en saisir un autre).');
+    ok(`token repris du .env (${mask(process.env.DISCORD_TOKEN.trim())})`);
     return process.env.DISCORD_TOKEN.trim();
   }
   if (!stdin.isTTY) {
@@ -47,76 +60,142 @@ async function readToken() {
     });
     return piped.trim();
   }
-  const rl = createInterface({ input: stdin, output: stdout });
-  console.log('Portail dev > ton application > Bot > Reset Token, puis colle le ici.');
-  const token = (await rl.question('Token du bot : ')).trim();
-  rl.close();
-  return token;
+  console.log(`  Ouvre ${BLEU}https://discord.com/developers/applications${RESET}`);
+  console.log('  > ton application (ou « New Application ») > Bot > Reset Token, puis colle le ici.');
+  return (await demander('  Token du bot : ')).trim();
 }
 
 async function patchEnv(values) {
   let content = '';
   try { content = await readFile('.env', 'utf8'); }
   catch { content = await readFile('.env.example', 'utf8'); }
-
   for (const [key, value] of Object.entries(values)) {
     const line = `${key}=${value}`;
     const re = new RegExp(`^${key}=.*$`, 'm');
     content = re.test(content) ? content.replace(re, line) : `${content.trimEnd()}\n${line}\n`;
+    process.env[key] = value;
   }
   await writeFile('.env', content, { mode: 0o600 });
 }
 
+// ------------------------------------------------------------------- token
+etape('Discord : token');
 const token = await readToken();
-if (!token) {
-  console.error('Aucun token fourni.');
-  process.exit(1);
-}
+if (!token) echec('Aucun token fourni.');
 if (!/^[\w-]{20,}\.[\w-]{5,}\.[\w-]{20,}$/.test(token)) {
-  console.error('Ca ne ressemble pas a un token de bot. Attendu trois blocs separes par des points.');
-  console.error('Note : le CLIENT SECRET et le token sont deux choses differentes, il faut le token.');
-  process.exit(1);
+  echec('Ca ne ressemble pas a un token de bot (trois blocs separes par des points).',
+    'Le CLIENT SECRET et le token sont deux choses differentes : il faut le token, onglet Bot.');
 }
 
+const api = client(token);
+let app;
+let me;
 try {
-  console.log(`\nToken lu (${mask(token)}), interrogation de Discord...\n`);
-
-  const app = await api('/oauth2/applications/@me', token);
-  const me = await api('/users/@me', token);
-  const guilds = await api('/users/@me/guilds', token).catch(() => []);
-
-  console.log(`Application : ${app.name}`);
-  console.log(`  id            ${app.id}`);
-  console.log(`  bot           ${me.username} (${me.id})`);
-  console.log(`  public        ${app.bot_public ? 'oui' : 'non'}`);
-  if (app.owner) console.log(`  proprietaire  ${app.owner.username ?? app.owner.id}`);
-
-  const values = { DISCORD_TOKEN: token, DISCORD_CLIENT_ID: app.id };
-
-  if (guilds.length === 0) {
-    console.log('\nLe bot n est sur aucun serveur. Invite le avec ce lien, puis relance ce script :');
-  } else {
-    console.log(`\nServeurs (${guilds.length}) :`);
-    for (const g of guilds) console.log(`  ${g.id}  ${g.name}`);
-    if (guilds.length === 1) {
-      values.DISCORD_GUILD_ID = guilds[0].id;
-      console.log(`\nUn seul serveur, DISCORD_GUILD_ID pose sur ${guilds[0].name}.`);
-    } else {
-      console.log('\nPlusieurs serveurs : choisis le tien et mets son id dans DISCORD_GUILD_ID.');
-    }
-  }
-
-  const invite = `https://discord.com/oauth2/authorize?client_id=${app.id}`
-    + `&scope=bot%20applications.commands&permissions=${PERMISSIONS}`;
-  console.log(`\nLien d invitation :\n  ${invite}`);
-
-  await patchEnv(values);
-  console.log('\n.env mis a jour (chmod 600). Le token n a jamais ete affiche en clair.');
-  console.log('Suite : npm run deploy puis npm start');
-} catch (err) {
-  console.error(`\nEchec : ${err.message}`);
-  if (/refuse/.test(err.message)) {
-    console.error('Regenere le token dans le portail dev et relance ce script.');
-  }
-  process.exit(1);
+  app = await api.get('/oauth2/applications/@me');
+  me = await api.get('/users/@me');
+} catch (e) {
+  if (e.status === 401) echec('Token refuse par Discord.', 'Il a sans doute ete regenere : Reset Token, puis `donut token`.');
+  echec(`Discord ne repond pas (${e.message}).`, 'Verifie la connexion internet de la machine.');
 }
+await patchEnv({ DISCORD_TOKEN: token, DISCORD_CLIENT_ID: app.id });
+ok(`bot ${me.username}, application ${app.name}`);
+
+// ----------------------------------------------------------------- serveur
+etape('Discord : serveur');
+const serveurs = async () => api.get('/users/@me/guilds');
+let guilds = await serveurs().catch(() => []);
+
+if (guilds.length === 0) {
+  console.log('  Le bot n est encore sur aucun serveur. Ouvre ce lien et choisis ton serveur :');
+  lien(lienInvitation(app.id));
+  if (!interactif) echec('Invite le bot puis relance.');
+  console.log(`  ${PALE}J attends qu il arrive (Ctrl+C pour abandonner)...${RESET}`);
+  guilds = await attendre(async () => {
+    const g = await serveurs();
+    return g.length ? g : null;
+  }) ?? echec('Toujours aucun serveur au bout de 15 min.', 'Relance `donut setup` une fois le bot invite.');
+}
+
+let guild = guilds.find((g) => g.id === process.env.DISCORD_GUILD_ID);
+if (!guild && guilds.length === 1) [guild] = guilds;
+if (!guild) {
+  if (!interactif) echec('Le bot est sur plusieurs serveurs : choisis le tien avec `donut config`.');
+  const id = await menu({
+    titre: '  SERVEUR DU BOT',
+    sous: 'le bot est invite sur plusieurs serveurs',
+    items: guilds.map((g) => ({ cle: g.id, libelle: g.name, note: g.id })),
+    aide: '↑↓ naviguer   ↵ choisir',
+  });
+  guild = guilds.find((g) => g.id === id) ?? echec('Aucun serveur choisi.');
+}
+await patchEnv({ DISCORD_GUILD_ID: guild.id });
+ok(`serveur ${guild.name}`);
+
+// ------------------------------------------------------------------ droits
+etape('Discord : droits du bot');
+let manquants = droitsManquants(await droitsDuBot(api, guild.id, me.id));
+if (manquants.length) {
+  attention(`il manque : ${manquants.join(', ')}`);
+  console.log('  Reautorise le bot avec ce lien (il ne quitte pas le serveur, ses droits sont juste completes) :');
+  lien(lienInvitation(app.id, guild.id));
+  if (interactif) {
+    console.log(`  ${PALE}J attends...${RESET}`);
+    await attendre(async () => droitsManquants(await droitsDuBot(api, guild.id, me.id)).length === 0);
+    manquants = droitsManquants(await droitsDuBot(api, guild.id, me.id));
+  }
+}
+if (manquants.length) attention('droits encore incomplets : tickets, fils ou role des verifies peuvent echouer');
+else ok('tous les droits necessaires');
+
+// ------------------------------------------------------------------ intent
+etape('Discord : lecture des messages');
+if (aMessageContent(app)) {
+  ok('intent Message Content actif');
+  await patchEnv({ DISCORD_MESSAGE_CONTENT: 'true' });
+} else {
+  console.log('  Pour importer les anciens vouches, le bot doit pouvoir lire le texte des messages.');
+  console.log('  Sur cette page, active « Message Content Intent » puis « Save Changes » :');
+  lien(lienPortailBot(app.id));
+  let actif = false;
+  if (interactif) {
+    console.log(`  ${PALE}J attends...${RESET}`);
+    actif = Boolean(await attendre(async () => aMessageContent(await api.get('/oauth2/applications/@me')), { delaiMs: 10 * 60_000 }));
+  }
+  // Demander l intent sans qu il soit coche : Discord refuse la connexion.
+  await patchEnv({ DISCORD_MESSAGE_CONTENT: actif ? 'true' : 'false' });
+  if (actif) ok('intent Message Content actif');
+  else attention('intent absent : le bot tourne, mais sans import de vouches ni texte dans les transcripts');
+}
+
+// ------------------------------------------------------- roles et salons
+etape('Discord : roles et salons');
+const aFaire = A_CREER.filter((x) => !process.env[x.cle]);
+if (!aFaire.length) {
+  ok('deja configures (a changer : `donut config`)');
+} else {
+  console.log(`  A poser : ${aFaire.map((x) => (x.type === 'role' ? `role ${x.nom}` : `#${x.nom}`)).join(', ')}`);
+  // Sans clavier (script, CI) : on cree, sauf --auto qui ne touche a rien.
+  const creer = interactif
+    ? await confirmer('Je les cree sur ton serveur ? (non = les choisir toi meme avec `donut config`)')
+    : !AUTO;
+  if (creer) {
+    try {
+      const poses = await creerManquants(api, {
+        guildId: guild.id,
+        botId: me.id,
+        env: process.env,
+        adminRoleId: process.env.ADMIN_ROLE_ID ?? '',
+        journal: ok,
+      });
+      await patchEnv(poses);
+    } catch (e) {
+      attention(`creation interrompue (${e.message}) : relance \`donut setup\`, rien ne sera cree en double`);
+    }
+  } else {
+    attention('a choisir avec `donut config` > Discord');
+  }
+}
+
+console.log(`\n  ${VERT}Discord est branche.${RESET} ${PALE}.env ecrit en chmod 600, le token n a jamais ete affiche.${RESET}`);
+fermer();
+process.exit(0);
