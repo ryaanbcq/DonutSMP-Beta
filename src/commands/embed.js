@@ -6,7 +6,7 @@
 
 import {
   SlashCommandBuilder, PermissionFlagsBits, MessageFlags, EmbedBuilder,
-  ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder,
+  ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, FileUploadBuilder, AttachmentBuilder,
 } from 'discord.js';
 import { estAdmin } from '../lib/admin.js';
 import { FR } from '../lib/brand.js';
@@ -38,8 +38,6 @@ export function lireCouleur(texte) {
   return parseInt(hex, 16);
 }
 
-const estUrlImage = (u) => /^https?:\/\/\S+$/i.test(u);
-
 export async function execute(interaction) {
   if (!estAdmin(interaction.member)) {
     return interaction.reply({ content: '❌ Réservé au staff.', ...EPH });
@@ -52,20 +50,21 @@ export async function execute(interaction) {
   }
 
   const champ = (id, label, style, { requis = false, max, placeholder } = {}) => {
-    const t = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(requis);
+    const t = new TextInputBuilder().setCustomId(id).setStyle(style).setRequired(requis);
     if (max) t.setMaxLength(max);
     if (placeholder) t.setPlaceholder(placeholder);
-    return new ActionRowBuilder().addComponents(t);
+    return new LabelBuilder().setLabel(label).setTextInputComponent(t);
   };
 
   return interaction.showModal(new ModalBuilder()
     .setCustomId(`embed:create:${salon.id}`)
     .setTitle('Créer un embed')
-    .addComponents(
+    .addLabelComponents(
       champ('titre', 'Titre', TextInputStyle.Short, { max: 256, placeholder: 'Facultatif' }),
       champ('contenu', 'Contenu', TextInputStyle.Paragraph, { requis: true, max: 4000, placeholder: 'Markdown accepté : **gras**, listes, liens, mentions…' }),
       champ('couleur', 'Couleur', TextInputStyle.Short, { max: 20, placeholder: '#AEEFFF, rouge, or, violet… (vide = bleu)' }),
-      champ('image', 'Image (lien)', TextInputStyle.Short, { max: 500, placeholder: 'https://… (facultatif)' }),
+      new LabelBuilder().setLabel('Image').setDescription('Glissez une image depuis votre appareil (facultatif)')
+        .setFileUploadComponent(new FileUploadBuilder().setCustomId('image').setMinValues(0).setMaxValues(1).setRequired(false)),
     ));
 }
 
@@ -76,18 +75,25 @@ export async function onModalEmbed(interaction) {
   const titre = interaction.fields.getTextInputValue('titre').trim();
   const contenu = interaction.fields.getTextInputValue('contenu').trim();
   const couleur = lireCouleur(interaction.fields.getTextInputValue('couleur'));
-  const image = interaction.fields.getTextInputValue('image').trim();
+  const image = interaction.fields.getUploadedFiles('image')?.first() ?? null;
 
   if (couleur === null) {
     return interaction.reply({ content: '❌ Couleur illisible : un code comme `#AEEFFF`, ou un nom (bleu, rouge, vert, jaune, or, violet, rose, orange, blanc, noir, gris).', ...EPH });
   }
-  if (image && !estUrlImage(image)) {
-    return interaction.reply({ content: '❌ L\'image doit être un lien qui commence par `https://`.', ...EPH });
+  if (image && !String(image.contentType ?? '').startsWith('image/')) {
+    return interaction.reply({ content: '❌ Le fichier joint n\'est pas une image (png, jpg, gif, webp).', ...EPH });
   }
 
   const e = new EmbedBuilder().setColor(couleur).setDescription(contenu);
   if (titre) e.setTitle(titre);
-  if (image) e.setImage(image);
+  // L image est re-jointe au message du bot : le lien du fichier envoye dans
+  // le formulaire est signe et expire sous 24 h, une piece jointe reste.
+  let fichier = null;
+  if (image) {
+    const nom = `embed-${Date.now()}.${(image.name?.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'}`;
+    fichier = new AttachmentBuilder(image.url, { name: nom });
+    e.setImage(`attachment://${nom}`);
+  }
 
   const salon = await interaction.client.channels.fetch(interaction.customId.split(':')[2]).catch(() => null);
   if (!salon?.isTextBased?.()) return interaction.reply({ content: '❌ Salon introuvable.', ...EPH });
@@ -96,7 +102,7 @@ export async function onModalEmbed(interaction) {
   try {
     // Envoi normal du bot, sans lien avec la commande. Les mentions du texte
     // s affichent mais ne notifient personne.
-    await salon.send({ embeds: [e], allowedMentions: { parse: [] } });
+    await salon.send({ embeds: [e], files: fichier ? [fichier] : [], allowedMentions: { parse: [] } });
   } catch (err) {
     return interaction.editReply(`❌ Envoi refusé par Discord : ${err.message}`);
   }
