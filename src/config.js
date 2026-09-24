@@ -66,7 +66,7 @@ export const config = {
   // reversement quotidien au beneficiaire (fait par le bot en jeu).
   dons: {
     min: num('DONATION_MIN', 10_000),
-    paliers: (process.env.DONATION_TIERS ?? '5000000,50000000,150000000,300000000,500000000')
+    paliers: (process.env.DONATION_TIERS ?? '500000000,1000000000,5000000000')
       .split(',').map((x) => Number(x.trim())).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b),
     beneficiaire: (process.env.DONATION_RECIPIENT ?? '').trim(),
     // Historique des dons et des reversements, a part du journal technique.

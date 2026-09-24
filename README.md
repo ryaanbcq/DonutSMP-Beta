@@ -347,7 +347,7 @@ don ne se rembourse pas.
 - Le don est compte au **compte Minecraft** qui a paye. Un joueur pas encore
   lie garde ses dons : son rang arrive avec son link. Un unlink retire le rang,
   le compte le garde.
-- Un role par palier (`DONATION_TIERS`, par defaut 5M, 50M, 150M, 300M, 500M),
+- Un role par palier (`DONATION_TIERS`, par defaut 500M, 1B, 5B),
   cree par le bot au demarrage. Le membre porte seulement celui de son plus
   haut palier, et recoit un MP de remerciement a chaque don.
 - Chaque jour a `DONATION_FORWARD_HOUR` (heure de Paris), le bot en jeu reverse

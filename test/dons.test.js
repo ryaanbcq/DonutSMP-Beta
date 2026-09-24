@@ -29,7 +29,7 @@ test('un paiement de /link reste une verification, un petit paiement perdu reste
 });
 
 test('paliers : le plus haut atteint', () => {
-  const p = [5e6, 50e6, 150e6, 300e6, 500e6];
+  const p = [5e6, 50e6, 150e6, 300e6, 500e6]; // liste arbitraire : la fonction ne depend pas des paliers configures
   assert.equal(palierPour(4_999_999, p), -1);
   assert.equal(palierPour(5e6, p), 0);
   assert.equal(palierPour(149e6, p), 1);
