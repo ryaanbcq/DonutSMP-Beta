@@ -13,7 +13,9 @@ import { shortMoney } from '../lib/format.js';
 import { ouSeLier } from '../settings.js';
 import { verrouiller, peutVerrouiller } from '../lib/salon.js';
 import { presence } from '../ingame/presence.js';
-import { paliers, roleDuPalier, nomRole, lireMontant, totalDe, palierPour } from './dons.js';
+import { escapeMarkdown } from 'discord.js';
+import { rang } from '../baltop/panel.js';
+import { paliers, roleDuPalier, nomRole, lireMontant, totalDe, palierPour, classementDons } from './dons.js';
 
 const CLE = 'dons.panneau';
 const PUCES = ['🥉', '🥈', '🥇', '💎'];
@@ -30,6 +32,26 @@ function boutons(enLigne) {
     new ButtonBuilder().setCustomId('dons:creer').setLabel('Créer ma donation').setEmoji('💝')
       .setStyle(ButtonStyle.Success).setDisabled(!enLigne),
   )];
+}
+
+/** Top 10 des donateurs, par compte Minecraft (lies ou non). */
+export function rendreDonateurs() {
+  const liste = paliers();
+  const top = classementDons(10);
+  const lignes = top.length
+    ? top.map((r, i) => {
+      const p = palierPour(r.total, liste);
+      const id = p >= 0 ? roleDuPalier(liste[p]) : null;
+      const role = p >= 0 ? ` · ${id ? `<@&${id}>` : nomRole(liste[p])}` : '';
+      const qui = r.discordId ? `<@${r.discordId}> · **${escapeMarkdown(r.name)}**` : `**${escapeMarkdown(r.name)}**`;
+      return `${rang(i)} ${qui} — \`\`${shortMoney(r.total)}\`\`${role}`;
+    }).join('\n')
+    : '*Aucun don pour le moment : soyez le premier !*';
+  return embed('🏆・PLUS GROS DONATEURS', {
+    couleur: FR.or,
+    image: 'aucune',
+    description: `**Merci à ceux qui font vivre le bot ! Total des dons de chacun, depuis le début.**\n\n${lignes}`,
+  });
 }
 
 export function rendrePanneauDons(guild, enLigne = enLigneAffiche) {
@@ -69,7 +91,8 @@ export async function publierPanneauDons(client, guild) {
     return null;
   }
   const contenu = {
-    embeds: [rendrePanneauDons(guild ?? salon.guild)],
+    // Le classement d abord, l explication et le bouton ensuite.
+    embeds: [rendreDonateurs(), rendrePanneauDons(guild ?? salon.guild)],
     components: boutons(enLigneAffiche),
     allowedMentions: { parse: [] },
   };
