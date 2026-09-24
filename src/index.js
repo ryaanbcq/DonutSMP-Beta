@@ -19,7 +19,7 @@ import { balances, demarrerRafraichissement } from './donut/balances.js';
 import { publierSuivis, surveillerSoldes, demanderSolde, attendreSolde } from './donut/ingame-balances.js';
 import { surveillerStats } from './donut/ingame-stats.js';
 import { donut } from './donut/api.js';
-import { surveiller as surveillerClassement, rafraichirSiBesoin } from './baltop/panel.js';
+import { surveiller as surveillerClassement, rafraichirSiBesoin, actualiserAuProchainSolde } from './baltop/panel.js';
 import { settings, ouSeLier } from './settings.js';
 import { surveillerPresence } from './ingame/surveillance.js';
 import { presence } from './ingame/presence.js';
@@ -313,6 +313,7 @@ async function startWatcher(c) {
     // Solde releve tout de suite : sans ca le nouveau membre attendrait le
     // prochain tour de cycle, jusqu a un quart d heure, pour apparaitre au
     // classement.
+    actualiserAuProchainSolde(challenge.mc_name);
     await demanderSolde(challenge.mc_name).catch(() => {});
     const solde = await attendreSolde(challenge.mc_name).catch(() => null);
 

@@ -4,6 +4,7 @@ import { forget } from './interactions.js';
 import { balances } from '../donut/balances.js';
 import { publierSuivis } from '../donut/ingame-balances.js';
 import { config } from '../config.js';
+import { rafraichirSiBesoin } from '../baltop/panel.js';
 
 /**
  * Detache le compte d un membre. Partage par la commande /unlink et par le
@@ -23,6 +24,8 @@ export async function delier(userId, member) {
   store.transfererReputation(userId, cleOrpheline(lien.mc_name));
   balances.oublier(lien.mc_name);
   publierSuivis().catch(() => {});
+  // Sorti du classement tout de suite, sans attendre la limite d edition.
+  if (member?.client) rafraichirSiBesoin(member.client, { force: true }).catch(() => {});
 
   if (config.discord.verifiedRoleId) {
     await member?.roles?.remove(config.discord.verifiedRoleId).catch(() => {});

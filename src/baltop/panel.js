@@ -4,6 +4,7 @@ import { embed, TITRES, FR } from '../lib/brand.js';
 import { shortMoney } from '../lib/format.js';
 import { store } from '../db.js';
 import { settings } from '../settings.js';
+import { normName } from '../lib/names.js';
 
 const RANGS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 const MEDAILLES = ['🥇', '🥈', '🥉'];
@@ -164,11 +165,21 @@ export async function rafraichirSiBesoin(client, { force = false } = {}) {
  * personne ne le sache. Le balayage rattrape, la limite d edition empeche
  * qu il fasse du bruit.
  */
+// Comptes qui viennent d etre lies : leur premier solde passe devant la
+// limite d edition. Un membre qui se link doit se voir au classement dans la
+// foulee, pas deux minutes plus tard parce qu un autre releve venait de passer.
+const urgents = new Set();
+
+export function actualiserAuProchainSolde(nom) {
+  urgents.add(normName(nom));
+}
+
 export function surveiller(client, { balayageMs = 60_000 } = {}) {
   derniereSignature = signature();
 
-  const declencher = () => {
-    rafraichirSiBesoin(client).catch((e) => console.error('[baltop] ', e.message));
+  const declencher = (lien) => {
+    const force = Boolean(lien?.mc_name && urgents.delete(normName(lien.mc_name)));
+    rafraichirSiBesoin(client, { force }).catch((e) => console.error('[baltop] ', e.message));
   };
 
   const timer = setInterval(declencher, balayageMs);
