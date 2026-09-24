@@ -48,7 +48,7 @@ export function rendreDonateurs() {
     }).join('\n')
     : '*Aucun don pour le moment : soyez le premier !*';
   return embed('🏆・PLUS GROS DONATEURS', {
-    couleur: FR.or,
+    couleur: FR.bleu,
     image: 'aucune',
     description: `**Merci à ceux qui font vivre le bot ! Total des dons de chacun, depuis le début.**\n\n${lignes}`,
   });
@@ -63,13 +63,13 @@ export function rendrePanneauDons(guild, enLigne = enLigneAffiche) {
   });
 
   return embed('💝・DONATIONS', {
-    couleur: FR.or,
+    couleur: FR.bleu,
     description:
       '**Vous aimez le bot et la communauté DonutSMP FR ? Soutenez-nous par un don en jeu !**\n\n'
       + (enLigne
-        ? '> 🟢 **Bot en ligne** · vos dons sont comptés en direct.\n\n'
+        ? '> 🟢 **Bot en ligne** · vos dons sont comptés en direct.\n'
         : '> 🔴 **Bot hors ligne** · n\'envoyez rien pour l\'instant : le bot ne verrait pas votre paiement'
-          + ' et le don ne serait pas compté. Le bouton revient dès son retour.\n\n')
+          + ' et le don ne serait pas compté. Le bouton revient dès son retour.\n')
       + '### Comment donner\n'
       + 'Cliquez sur **Créer ma donation**, choisissez le montant, puis copiez la commande en jeu. Ou tapez-la vous-même :\n'
       + `\`\`\`/pay ${config.mc.linkAccount} <montant>\`\`\``
