@@ -58,8 +58,9 @@ client.commands = await loadCommands();
 
 client.once('clientReady', async (c) => {
   setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
-  await demarrerJournal(c);
+  // Le salon des dons d abord : le journal relit le flux des son demarrage.
   await demarrerLogDons(c);
+  await demarrerJournal(c);
   journal({
     niveau: 'ok',
     titre: 'Bot Discord démarré',
