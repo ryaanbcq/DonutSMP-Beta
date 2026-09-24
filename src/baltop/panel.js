@@ -33,7 +33,7 @@ export function rendre() {
       : '');
 
   const lignes = top.length
-    ? top.map((r, i) => `${rang(i)} <@${r.discordId}> · **${escapeMarkdown(r.name)}** — \`\`${shortMoney(r.value)}\`\``).join('\n')
+    ? top.map((r, i) => `${rang(i)} <@${r.discordId}> · **${escapeMarkdown(r.name)}** : \`\`${shortMoney(r.value)}\`\``).join('\n')
     : '*Aucun solde relevé pour le moment.*';
 
   const salonLink = settings.salonLink();

@@ -44,7 +44,7 @@ export function rendreDonateurs() {
       const id = p >= 0 ? roleDuPalier(liste[p]) : null;
       const role = p >= 0 ? ` · ${id ? `<@&${id}>` : nomRole(liste[p])}` : '';
       const qui = r.discordId ? `<@${r.discordId}> · **${escapeMarkdown(r.name)}**` : `**${escapeMarkdown(r.name)}**`;
-      return `${rang(i)} ${qui} — \`\`${shortMoney(r.total)}\`\`${role}`;
+      return `${rang(i)} ${qui} : \`\`${shortMoney(r.total)}\`\`${role}`;
     }).join('\n')
     : '*Aucun don pour le moment : soyez le premier !*';
   return embed('🏆・PLUS GROS DONATEURS', {
