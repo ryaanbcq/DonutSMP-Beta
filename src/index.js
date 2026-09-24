@@ -29,6 +29,7 @@ import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
 import { assurerRoles, majRolesDonateur, palierPour, nomRole, paliers as paliersDons } from './dons/dons.js';
 import { onDsetupSelect, onDsetupBouton, onDsetupModal } from './dons/setup.js';
+import { publierPanneauDons } from './dons/panneau.js';
 import { demarrerLogDons, logDon, salonDonsActif } from './dons/log.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
@@ -109,6 +110,7 @@ client.once('clientReady', async (c) => {
   if (config.discord.guildId) {
     const g = await c.guilds.fetch(config.discord.guildId).catch(() => null);
     if (g) await assurerRoles(g).catch((e) => console.error('[don] roles de donateur :', e.message));
+    if (g) await publierPanneauDons(c, g).catch((e) => console.error('[don] panneau :', e.message));
   }
   await startWatcher(c);
   const fils = await assurerFils(c).catch((e) => { console.error('[vouch] fils :', e.message); return 0; });

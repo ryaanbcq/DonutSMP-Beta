@@ -71,6 +71,8 @@ export const config = {
     beneficiaire: (process.env.DONATION_RECIPIENT ?? '').trim(),
     // Historique des dons et des reversements, a part du journal technique.
     salonId: process.env.DONATION_LOG_CHANNEL_ID ?? '',
+    // Salon public ou le bot publie le panneau des dons (rangs, comment donner).
+    salonPanneauId: process.env.DONATION_CHANNEL_ID ?? '',
   },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),

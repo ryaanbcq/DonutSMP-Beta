@@ -101,6 +101,7 @@ export const A_CREER = [
   { cle: 'VERIFIED_ROLE_ID', type: 'role', nom: 'Vérifié' },
   { cle: 'LINK_CHANNEL_ID', type: 'salon', nom: 'connexion', categorie: 'public', lectureSeule: true },
   { cle: 'BALTOP_CHANNEL_ID', type: 'salon', nom: 'classement', categorie: 'public', lectureSeule: true },
+  { cle: 'DONATION_CHANNEL_ID', type: 'salon', nom: 'donations', categorie: 'public', lectureSeule: true },
   { cle: 'LOG_CHANNEL_ID', type: 'salon', nom: 'logs-verifications', categorie: 'staff' },
   { cle: 'OPS_CHANNEL_ID', type: 'salon', nom: 'journal-bot', categorie: 'staff' },
   { cle: 'DONATION_LOG_CHANNEL_ID', type: 'salon', nom: 'logs-dons', categorie: 'staff' },

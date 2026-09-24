@@ -15,6 +15,7 @@ import {
   paliers, poserPaliers, lirePaliers, roleDuPalier, poserRolePalier, rolesDonateur,
   assurerRoles, resynchroniser,
 } from './dons.js';
+import { publierPanneauDons } from './panneau.js';
 
 const court = (n) => shortMoney(n).replace('$', '');
 
@@ -34,6 +35,7 @@ export function rendreSetupDons(guild, note = '') {
       + ' (total de ses dons).\n\n'
       + `**Don minimum** · ${shortMoney(config.dons.min)}\n`
       + `**Reversé chaque jour à** · ${config.dons.beneficiaire || 'personne (le bot garde les dons)'}\n`
+      + `**Panneau public** · ${config.dons.salonPanneauId ? `<#${config.dons.salonPanneauId}>` : 'aucun salon (DONATION_CHANNEL_ID)'}\n`
       + `**Historique** · ${config.dons.salonId ? `<#${config.dons.salonId}>` : 'dans le journal staff'}\n\n`
       + `**Paliers**\n${lignes.join('\n')}`
       + (moi && !moi.permissions.has(PermissionFlagsBits.ManageRoles) ? '\n\n⚠️ Il me manque **Gérer les rôles**.' : '')
@@ -86,6 +88,7 @@ export async function onDsetupSelect(interaction) {
   await interaction.deferUpdate();
   poserRolePalier(palier, role.id);
   const n = await resynchroniser(guild, ancien ? [ancien] : []);
+  await publierPanneauDons(interaction.client, guild).catch(() => {});
   return interaction.editReply(rendreSetupDons(guild,
     `✅ Palier **${court(palier)}** → <@&${role.id}>. ${n} membre(s) avec un rang, rôles remis à jour.`));
 }
@@ -104,6 +107,7 @@ export async function onDsetupBouton(interaction) {
   if (interaction.customId === 'dsetup:creer') {
     await assurerRoles(guild).catch((e) => console.warn('[don] roles :', e.message));
     const n = await resynchroniser(guild);
+    await publierPanneauDons(interaction.client, guild).catch(() => {});
     return interaction.editReply(rendreSetupDons(guild, `✅ Rôles créés. ${n} membre(s) avec un rang.`));
   }
   if (interaction.customId === 'dsetup:sync') {
@@ -124,6 +128,7 @@ export async function onDsetupModal(interaction) {
   // la (ancien palier revenu) est repris.
   await assurerRoles(guild).catch((e) => console.warn('[don] roles :', e.message));
   const n = await resynchroniser(guild, anciensRoles);
+  await publierPanneauDons(interaction.client, guild).catch(() => {});
   return interaction.editReply(rendreSetupDons(guild,
     `✅ Paliers : **${nouveaux.map(court).join(' · ')}**. ${n} membre(s) avec un rang.`
     + ' Les rôles des anciens paliers ne sont plus donnés (supprimez-les si besoin).'));
