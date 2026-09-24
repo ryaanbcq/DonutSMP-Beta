@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installe le bot sur un VPS neuf (Debian 12 / Ubuntu 22.04+).
 #
-#   git clone git@github.com:<toi>/donutsmp-fr-bot.git /opt/donutsmp-fr-bot
+#   git clone git@github.com:ryaanbcq/DonutSMP-Beta.git /opt/donutsmp-fr-bot
 #   cd /opt/donutsmp-fr-bot && bash scripts/vps-install.sh
 #
 # Le script est idempotent : le relancer ne casse rien, il saute ce qui est

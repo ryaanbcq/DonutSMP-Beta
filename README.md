@@ -26,7 +26,7 @@ pose par le script (node 22, pm2, dependances, `.env`, slash commands, compte
 Microsoft, demarrage au boot) :
 
 ```bash
-git clone git@github.com:ryaanbcq/donutsmp-fr-bot.git /opt/donutsmp-fr-bot
+git clone git@github.com:ryaanbcq/DonutSMP-Beta.git /opt/donutsmp-fr-bot
 cd /opt/donutsmp-fr-bot
 bash scripts/vps-install.sh
 ```
