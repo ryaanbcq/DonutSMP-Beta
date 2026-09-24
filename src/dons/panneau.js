@@ -50,7 +50,7 @@ export function rendreDonateurs() {
   return embed('🏆・PLUS GROS DONATEURS', {
     couleur: FR.bleu,
     image: 'aucune',
-    description: `**Merci à ceux qui font vivre le bot ! Total des dons de chacun, depuis le début.**\n\n${lignes}`,
+    description: `**Merci à ceux qui font vivre la communauté ! Total des dons de chacun, depuis le début.**\n\n${lignes}`,
   });
 }
 
