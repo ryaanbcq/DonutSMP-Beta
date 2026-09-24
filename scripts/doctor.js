@@ -86,7 +86,7 @@ let envBrut = '';
 
   for (const k of ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID', 'MC_LINK_ACCOUNT']) {
     if (process.env[k]) ok(`${k} rempli`);
-    else ko(`${k} vide`, k === 'DISCORD_TOKEN' ? 'node scripts/setup.js' : 'a remplir a la main');
+    else ko(`${k} vide`, k === 'MC_LINK_ACCOUNT' ? 'donut auth' : 'donut setup');
   }
 
   // Le compte du casino encaisse de vrais depots joueurs : un paiement de link
@@ -95,7 +95,6 @@ let envBrut = '';
     ko('MC_LINK_ACCOUNT est le compte du casino', 'prendre un compte dedie');
   }
   if (process.env.DONUT_MOCK === 'true') ko('DONUT_MOCK=true', 'de faux soldes seraient publies en prod');
-  if (!process.env.DONUT_API_KEY) warn('DONUT_API_KEY vide', '/baltop et /stats ne peuvent pas interroger DonutSMP');
   if (process.env.BYPASS_ROLE_ID) warn('BYPASS_ROLE_ID pose', 'role beta qui saute le /link, a vider en prod');
   if (!process.env.OPS_CHANNEL_ID) warn('OPS_CHANNEL_ID vide', 'aucun journal Discord : les pannes ne se voient que dans les logs');
 }
@@ -194,7 +193,7 @@ titre('Donnees et bot en jeu');
 
   const cache = process.env.MC_PROFILES_FOLDER ?? './data/msa-cache';
   if (!(await existe(cache))) {
-    ko('pas de cache Microsoft', 'node scripts/auth.js');
+    ko('pas de cache Microsoft', 'donut auth');
   } else {
     try {
       await run(process.execPath, ['scripts/auth.js', '--check'], { timeout: 60_000 });
