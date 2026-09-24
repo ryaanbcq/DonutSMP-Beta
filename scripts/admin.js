@@ -1,7 +1,7 @@
 // Outil staff : lier, delier et inspecter a la main, sans passer par Discord.
 //   node scripts/admin.js list
 //   node scripts/admin.js link <discordId> <pseudo>
-//   node scripts/admin.js unlink <discordId>
+//   node scripts/admin.js unlink <discordId|pseudo>
 //   node scripts/admin.js pending
 //   node scripts/admin.js payments [n]
 import { store, db } from '../src/db.js';
@@ -33,11 +33,15 @@ switch (cmd) {
   }
 
   case 'unlink': {
-    const [discordId] = args;
-    const link = store.getLink(discordId);
-    if (!link) { console.error('Ce Discord n est pas lie.'); process.exit(1); }
-    store.removeLink(discordId);
-    console.log(`Delie : ${link.mc_name}.`);
+    // Meme chemin que le bouton Unlink : sortie du classement, reputation
+    // laissee au pseudo, liste des soldes suivis mise a jour. Le role des
+    // verifies ne peut pas etre retire d ici (pas de client Discord).
+    const [cible] = args;
+    const link = store.getLink(cible) ?? store.getLinkByName(cible ?? '');
+    if (!link) { console.error('Ni ce Discord ni ce pseudo ne sont lies.'); process.exit(1); }
+    const { delier } = await import('../src/link/unlink.js');
+    await delier(link.discord_id, null);
+    console.log(`Delie : ${link.mc_name} (discord ${link.discord_id}). Le classement se met a jour sous 2 min.`);
     break;
   }
 
@@ -65,7 +69,7 @@ switch (cmd) {
     console.log(`usage:
   node scripts/admin.js list                       les comptes lies
   node scripts/admin.js link <discordId> <pseudo>  lier a la main
-  node scripts/admin.js unlink <discordId>         delier
+  node scripts/admin.js unlink <discordId|pseudo>  delier (classement, reputation)
   node scripts/admin.js pending                    verifications en cours
   node scripts/admin.js payments [n]               derniers paiements vus`);
 }
