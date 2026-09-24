@@ -49,6 +49,11 @@ let file = Promise.resolve();
 
 export function salonConfigure() { return Boolean(salon); }
 
+// Salons thematiques (dons...) : recoivent en plus les evenements marques
+// de leur canal, sans passer par le dedoublonnage du journal.
+const canaux = new Map();
+export function surCanal(nom, fn) { canaux.set(nom, fn); }
+
 /** Pose un salon a la main. Utilise par les tests, jamais par le bot. */
 export function poserSalon(s) {
   salon = s;
@@ -122,16 +127,16 @@ async function envoyer(evenement) {
  * Sans OPS_CHANNEL_ID, tout devient silencieux et rien ne casse.
  */
 export async function demarrerJournal(client) {
+  // Le flux est lu meme sans journal : les salons thematiques (dons) en vivent aussi.
   if (!config.discord.opsChannelId) {
     console.log('[journal] OPS_CHANNEL_ID absent, journal Discord desactive');
-    return;
+  } else {
+    salon = await client.channels.fetch(config.discord.opsChannelId).catch((e) => {
+      console.error('[journal] salon introuvable :', e.message);
+      return null;
+    });
+    if (salon) console.log(`[journal] evenements postes dans #${salon.name}`);
   }
-  salon = await client.channels.fetch(config.discord.opsChannelId).catch((e) => {
-    console.error('[journal] salon introuvable :', e.message);
-    return null;
-  });
-  if (!salon) return;
-  console.log(`[journal] evenements postes dans #${salon.name}`);
 
   const tailer = new Tailer({
     file: config.ingame.eventsFile,
@@ -149,6 +154,7 @@ export async function demarrerJournal(client) {
         source: entree.source ?? 'jeu',
         at: entree.at,
       });
+      if (entree.canal) Promise.resolve(canaux.get(entree.canal)?.(entree)).catch(() => {});
     },
   });
   await tailer.start();

@@ -69,6 +69,8 @@ export const config = {
     paliers: (process.env.DONATION_TIERS ?? '5000000,50000000,150000000,300000000,500000000')
       .split(',').map((x) => Number(x.trim())).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b),
     beneficiaire: (process.env.DONATION_RECIPIENT ?? '').trim(),
+    // Historique des dons et des reversements, a part du journal technique.
+    salonId: process.env.DONATION_LOG_CHANNEL_ID ?? '',
   },
   // Repris tel quel par les textes joueurs qui annoncent le remboursement.
   refundDelayMaxS: num('REFUND_DELAY_MAX_S', 120),

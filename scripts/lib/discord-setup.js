@@ -103,6 +103,7 @@ export const A_CREER = [
   { cle: 'BALTOP_CHANNEL_ID', type: 'salon', nom: 'classement', categorie: 'public', lectureSeule: true },
   { cle: 'LOG_CHANNEL_ID', type: 'salon', nom: 'logs-verifications', categorie: 'staff' },
   { cle: 'OPS_CHANNEL_ID', type: 'salon', nom: 'journal-bot', categorie: 'staff' },
+  { cle: 'DONATION_LOG_CHANNEL_ID', type: 'salon', nom: 'logs-dons', categorie: 'staff' },
 ];
 
 const CATEGORIES = { public: 'DONUTSMP FR', staff: 'DONUTSMP FR · STAFF' };

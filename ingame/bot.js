@@ -375,7 +375,7 @@ function connect() {
         console.log(`[don] reverse ${v.amount} a ${v.to}`);
         note('ok', 'Dons reversés',
           `Les dons du jour sont partis à **${v.to}**.`,
-          { champs: { Bénéficiaire: v.to, Montant: shortMoney(v.amount), Jour: v.jour }, joueur: v.to });
+          { champs: { Bénéficiaire: v.to, Montant: shortMoney(v.amount), Jour: v.jour }, joueur: v.to, canal: 'dons' });
       } else {
         console.warn(`[refund] confirmation sans entree en vol : ${envoye.raw}`);
       }
@@ -852,7 +852,7 @@ function signalerDouteDon(v, cause) {
   note('err', 'Reversement incertain',
     `Le \`/pay\` des dons à **${v.to}** est peut-être parti, sans confirmation vue. Il n'est **pas** renvoyé`
     + ' automatiquement : vérifie avec le bénéficiaire, puis envoie à la main si besoin.',
-    { champs: { Bénéficiaire: v.to, Montant: shortMoney(v.amount), Jour: v.jour, Cause: cause }, joueur: v.to });
+    { champs: { Bénéficiaire: v.to, Montant: shortMoney(v.amount), Jour: v.jour, Cause: cause }, joueur: v.to, canal: 'dons' });
 }
 
 function signalerDoute(e, cause) {

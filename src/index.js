@@ -28,6 +28,7 @@ import { delier } from './link/unlink.js';
 import { shortMoney } from './lib/format.js';
 import { bypass } from './lib/names.js';
 import { assurerRoles, majRolesDonateur, palierPour, nomRole } from './dons/dons.js';
+import { demarrerLogDons, logDon } from './dons/log.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { estAdmin } from './lib/admin.js';
@@ -58,6 +59,7 @@ client.commands = await loadCommands();
 client.once('clientReady', async (c) => {
   setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
   await demarrerJournal(c);
+  await demarrerLogDons(c);
   journal({
     niveau: 'ok',
     titre: 'Bot Discord démarré',
@@ -395,6 +397,15 @@ async function startWatcher(c) {
         ...(config.dons.beneficiaire ? { 'Reversé à': config.dons.beneficiaire } : {}),
       },
       joueur: nom,
+    });
+
+    logDon({
+      nom,
+      discordId: lien?.discord_id,
+      montant: shortMoney(payment.amount),
+      total: shortMoney(total),
+      rang: nouveau >= 0 ? nomRole(paliers[nouveau]) : 'aucun',
+      monte,
     });
 
     if (!lien) return;

@@ -20,8 +20,8 @@ const creerDossier = promisify(mkdir);
 const ecrire = promisify(writeFile);
 const supprimer = promisify(rm);
 
-const ligne = (niveau, titre, texte, { champs = null, joueur = null, actions = null } = {}) => JSON.stringify({
-  at: Date.now(), source: 'jeu', niveau, titre, texte, champs, joueur, actions,
+const ligne = (niveau, titre, texte, { champs = null, joueur = null, actions = null, canal = null } = {}) => JSON.stringify({
+  at: Date.now(), source: 'jeu', niveau, titre, texte, champs, joueur, actions, ...(canal ? { canal } : {}),
 });
 
 /**

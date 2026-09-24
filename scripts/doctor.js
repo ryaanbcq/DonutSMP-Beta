@@ -153,7 +153,7 @@ if (!token) {
       if (!process.env.ADMIN_ROLE_ID && !admins.length) warn('aucun admin configure', 'seuls les « Gerer le serveur » ont les commandes staff');
       sousLeBot(process.env.BALTOP_TOP_ROLE_ID, 'BALTOP_TOP_ROLE_ID');
 
-      for (const [cle, quoi] of [['LOG_CHANNEL_ID', 'salon de logs'], ['BALTOP_CHANNEL_ID', 'salon du classement'], ['LINK_CHANNEL_ID', 'salon de connexion'], ['OPS_CHANNEL_ID', 'salon du journal']]) {
+      for (const [cle, quoi] of [['LOG_CHANNEL_ID', 'salon de logs'], ['BALTOP_CHANNEL_ID', 'salon du classement'], ['LINK_CHANNEL_ID', 'salon de connexion'], ['OPS_CHANNEL_ID', 'salon du journal'], ['DONATION_LOG_CHANNEL_ID', 'salon des dons']]) {
         const id = process.env[cle];
         if (!id) continue;
         try {

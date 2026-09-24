@@ -198,6 +198,7 @@ async function ecranDiscord() {
         { cle: 'logs', libelle: 'Salon des logs', valeur: (await nomSalon(lire(txt, 'LOG_CHANNEL_ID'))) || vide, etat: lire(txt, 'LOG_CHANNEL_ID') ? 'ok' : 'off' },
         { cle: 'classement', libelle: 'Salon du classement', valeur: (await nomSalon(lire(txt, 'BALTOP_CHANNEL_ID'))) || vide, etat: lire(txt, 'BALTOP_CHANNEL_ID') ? 'ok' : 'off' },
         { cle: 'connexion', libelle: 'Salon de connexion', valeur: (await nomSalon(lire(txt, 'LINK_CHANNEL_ID'))) || vide, etat: lire(txt, 'LINK_CHANNEL_ID') ? 'ok' : 'off' },
+        { cle: 'dons', libelle: 'Salon des dons', valeur: (await nomSalon(lire(txt, 'DONATION_LOG_CHANNEL_ID'))) || vide, note: 'dons et reversements, staff', etat: lire(txt, 'DONATION_LOG_CHANNEL_ID') ? 'ok' : 'off' },
         { cle: 'journal', libelle: 'Salon du journal', valeur: (await nomSalon(lire(txt, 'OPS_CHANNEL_ID'))) || vide, note: 'pannes et activite, staff', etat: lire(txt, 'OPS_CHANNEL_ID') ? 'ok' : 'off' },
         { separateur: '' },
         { cle: 'logo', libelle: 'Logo des embeds', valeur: val(lire(txt, 'LOGO_URL')), note: 'vide = avatar du bot' },
@@ -213,6 +214,7 @@ async function ecranDiscord() {
     else if (c === 'classement') await choisirSalon('BALTOP_CHANNEL_ID', 'Salon du classement');
     else if (c === 'connexion') await choisirSalon('LINK_CHANNEL_ID', 'Salon de connexion');
     else if (c === 'journal') await choisirSalon('OPS_CHANNEL_ID', 'Salon du journal du bot');
+    else if (c === 'dons') await choisirSalon('DONATION_LOG_CHANNEL_ID', 'Salon des dons');
     else if (c === 'logo') await editer('LOGO_URL', 'Logo des embeds', 'URL publique, jamais une piece jointe Discord (elle expire)');
   }
 }
