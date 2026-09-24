@@ -19,7 +19,7 @@ import { balances, demarrerRafraichissement } from './donut/balances.js';
 import { publierSuivis, surveillerSoldes, demanderSolde, attendreSolde } from './donut/ingame-balances.js';
 import { surveillerStats } from './donut/ingame-stats.js';
 import { donut } from './donut/api.js';
-import { surveiller as surveillerClassement, rafraichirSiBesoin, actualiserAuProchainSolde } from './baltop/panel.js';
+import { surveiller as surveillerClassement, rafraichirSiBesoin, actualiserAuProchainSolde, onBoutonBaltop } from './baltop/panel.js';
 import { settings, ouSeLier } from './settings.js';
 import { surveillerPresence } from './ingame/surveillance.js';
 import { presence } from './ingame/presence.js';
@@ -240,6 +240,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('vsetup:')) return onVsetupBouton(interaction);
   if (interaction.customId.startsWith('dsetup:')) return onDsetupBouton(interaction);
   if (interaction.customId.startsWith('dons:')) return onBoutonDons(interaction);
+  if (interaction.customId.startsWith('baltop:')) return onBoutonBaltop(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 

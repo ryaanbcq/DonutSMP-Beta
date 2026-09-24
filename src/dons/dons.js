@@ -78,6 +78,16 @@ export function enregistrerDon(payment, at = Date.now()) {
 
 export const totalDe = (mcName) => q.total.get(normName(mcName)).t;
 
+const qTop = db.prepare(`
+  SELECT d.mc_name_norm, MAX(d.mc_name) AS mc_name, SUM(d.amount) AS total, l.discord_id, l.mc_name AS lie
+  FROM dons d LEFT JOIN links l ON l.mc_name_norm = d.mc_name_norm
+  GROUP BY d.mc_name_norm ORDER BY total DESC LIMIT ?
+`);
+/** Plus gros donateurs, par compte Minecraft (lies ou non). */
+export const classementDons = (limite = 10) => qTop.all(limite).map((r) => ({
+  name: r.lie ?? r.mc_name, discordId: r.discord_id ?? null, total: r.total,
+}));
+
 /** Index du plus haut palier atteint, -1 si aucun. */
 export function palierPour(total, liste = paliers()) {
   let i = -1;

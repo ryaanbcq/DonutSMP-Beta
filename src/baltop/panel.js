@@ -1,4 +1,6 @@
-import { escapeMarkdown } from 'discord.js';
+import {
+  escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+} from 'discord.js';
 import { balances } from '../donut/balances.js';
 import { config } from '../config.js';
 import { embed, TITRES, FR } from '../lib/brand.js';
@@ -6,6 +8,7 @@ import { shortMoney } from '../lib/format.js';
 import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { normName } from '../lib/names.js';
+import { classementDons, palierPour, paliers, roleDuPalier, nomRole } from '../dons/dons.js';
 
 const RANGS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 const MEDAILLES = ['🥇', '🥈', '🥉'];
@@ -63,7 +66,7 @@ export async function publier(client, salonForce = null) {
     return null;
   }
 
-  const contenu = { embeds: [rendre()] };
+  const contenu = { embeds: [rendre()], components: [basculer('dons')] };
   const connu = store.kvGet(CLE_MESSAGE);
 
   if (connu) {
@@ -186,4 +189,43 @@ export function surveiller(client, { balayageMs = 60_000 } = {}) {
   const timer = setInterval(declencher, balayageMs);
   timer.unref?.();
   return declencher;
+}
+
+// ------------------------------------------------ Bascule fortunes / donateurs
+// Le panneau public est le meme pour tous : le bouton ouvre une vue PRIVEE,
+// ou l on passe d un classement a l autre sans toucher au message public.
+
+function basculer(vers) {
+  return new ActionRowBuilder().addComponents(vers === 'dons'
+    ? new ButtonBuilder().setCustomId('baltop:dons').setLabel('Plus gros donateurs').setEmoji('💝').setStyle(ButtonStyle.Secondary)
+    : new ButtonBuilder().setCustomId('baltop:fortunes').setLabel('Plus grosses fortunes').setEmoji('🏆').setStyle(ButtonStyle.Secondary));
+}
+
+export function rendreDonateurs() {
+  const top = classementDons(10);
+  const liste = paliers();
+  const lignes = top.length
+    ? top.map((r, i) => {
+      const p = palierPour(r.total, liste);
+      const role = p >= 0 ? (roleDuPalier(liste[p]) ? ` · <@&${roleDuPalier(liste[p])}>` : ` · ${nomRole(liste[p])}`) : '';
+      const qui = r.discordId ? `<@${r.discordId}> · **${escapeMarkdown(r.name)}**` : `**${escapeMarkdown(r.name)}**`;
+      return `${rang(i)} ${qui} — \`\`${shortMoney(r.total)}\`\`${role}`;
+    }).join('\n')
+    : '*Aucun don pour le moment.*';
+  const salon = config.dons.salonPanneauId;
+  return embed('💝・PLUS GROS DONATEURS', {
+    couleur: FR.or,
+    image: 'aucune',
+    description: `**Merci à ceux qui font vivre le bot ! Total des dons de chacun, depuis le début.**\n\n${lignes}`
+      + (salon ? `\n\n*Pour donner et voir les rangs : <#${salon}>.*` : ''),
+  });
+}
+
+export async function onBoutonBaltop(interaction) {
+  const vue = interaction.customId === 'baltop:dons'
+    ? { embeds: [rendreDonateurs()], components: [basculer('fortunes')] }
+    : { embeds: [rendre()], components: [basculer('dons')] };
+  // Depuis le panneau public : nouvelle vue privee. Depuis la vue privee : on la remplace.
+  if (interaction.message?.flags?.has(MessageFlags.Ephemeral)) return interaction.update(vue);
+  return interaction.reply({ ...vue, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
 }
