@@ -3,6 +3,7 @@ import {
   PermissionFlagsBits, MessageFlags, ChannelType,
 } from 'discord.js';
 import { config } from '../config.js';
+import { estAdmin } from '../lib/admin.js';
 import { store } from '../db.js';
 import { embed, TITRES } from '../lib/brand.js';
 import { verrouiller, deverrouiller, peutVerrouiller } from '../lib/salon.js';
@@ -123,7 +124,6 @@ const PANNEAUX = {
 export const data = new SlashCommandBuilder()
   .setName('panel')
   .setDescription('Publie un panneau du bot dans un salon')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addSubcommand((s) => sousCommande(s, 'link', 'Panneau de connexion avec le bouton de liaison'))
   .addSubcommand((s) =>
     sousCommande(s, 'baltop', 'Classement des fortunes de la commu, réécrit tout seul')
@@ -155,6 +155,7 @@ function sousCommande(s, nom, description) {
 }
 
 export async function execute(interaction) {
+  if (!estAdmin(interaction.member)) return interaction.reply({ content: '❌ Réservé aux admins du bot (rôle choisi dans /setup general, ou « Gérer le serveur »).', flags: MessageFlags.Ephemeral });
   const type = interaction.options.getSubcommand();
   const salon = interaction.options.getChannel('salon') ?? interaction.channel;
   const moi = interaction.guild?.members?.me;

@@ -17,7 +17,6 @@ export const requiresLink = false;
 export const data = new SlashCommandBuilder()
   .setName('embed')
   .setDescription('Embeds du serveur')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .addSubcommand((s) => s.setName('create').setDescription('Composer un embed, posté par le bot dans ce salon'));
 
 const EPH = { flags: MessageFlags.Ephemeral };

@@ -6,6 +6,7 @@ import {
 import { store } from '../db.js';
 import { FR } from '../lib/brand.js';
 import { estAdmin } from '../lib/admin.js';
+import { settings } from '../settings.js';
 import { reglagesTickets, slugCategorie } from './reglages.js';
 import { enteteTicket, boutonsTicket, embedLog, TITRE_TICKET } from './panel.js';
 import { rendreTranscript, collecterMessages } from './transcript.js';
@@ -118,7 +119,8 @@ export async function onFormulaireOuverture(interaction) {
 
   const guild = interaction.guild;
   const moi = guild.members.me;
-  const roles = reglagesTickets.roles().filter((id) => guild.roles.cache.has(id));
+  // Helpers (/setup tickets) et admins du bot (/setup general) voient tous les tickets.
+  const roles = [...new Set([...reglagesTickets.roles(), ...settings.rolesAdmin()])].filter((id) => guild.roles.cache.has(id));
 
   const overwrites = [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },

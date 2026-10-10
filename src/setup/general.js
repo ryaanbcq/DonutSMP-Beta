@@ -58,7 +58,7 @@ export async function rendreSetupGeneral(guild, note = '') {
       + `${etat.enLigne ? '🟢' : '🔴'} **Bot en jeu** · ${etat.enLigne ? `connecté (${etat.username})` : 'hors ligne : les `/link` et les dons sont suspendus'}\n\n`
       + '### Essentiel\n'
       + `${ok(settings.roleVerifie())} **Rôle des vérifiés** · ${role(settings.roleVerifie())}\n`
-      + `${settings.rolesAdmin().length ? '✅' : '➖'} **Rôles staff** · ${settings.rolesAdmin().length ? settings.rolesAdmin().map(role).join(' ') : '*« Gérer le serveur » suffit*'}\n`
+      + `${settings.rolesAdmin().length ? '✅' : '➖'} **Rôles admin du bot** (/setup, /panel, /embed, tickets) · ${settings.rolesAdmin().length ? settings.rolesAdmin().map(role).join(' ') : '*« Gérer le serveur » suffit*'}\n`
       + '### Logs\n'
       + `${ok(settings.salonLogs())} **Liaisons (/link)** · ${salon(settings.salonLogs())}\n`
       + `${ok(settings.salonHistoriqueDons())} **Donations** · ${salon(settings.salonHistoriqueDons())}\n`
@@ -80,7 +80,7 @@ export async function rendreSetupGeneral(guild, note = '') {
     .setPlaceholder('✅ Rôle donné aux comptes vérifiés').setMinValues(1).setMaxValues(1);
   if (settings.roleVerifie()) verifie.setDefaultRoles(settings.roleVerifie());
   const admin = new RoleSelectMenuBuilder().setCustomId('gsetup:admin')
-    .setPlaceholder('🛠️ Rôles staff (commandes admin du bot)').setMinValues(0).setMaxValues(10);
+    .setPlaceholder('🛠️ Rôles admin du bot : /setup, /panel, /embed, tickets').setMinValues(0).setMaxValues(10);
   if (settings.rolesAdmin().length) admin.setDefaultRoles(...settings.rolesAdmin());
 
   return {
@@ -352,8 +352,8 @@ export async function onGsetupSelect(interaction) {
     await interaction.deferUpdate();
     const note = await ouvrirSalonsStaff(guild, avant, interaction.values);
     return interaction.editReply(await rendreSetupGeneral(guild, interaction.values.length
-      ? `✅ ${interaction.values.map(role).join(' ')} ont accès aux commandes staff${note}.`
-      : '✅ Plus de rôle staff : « Gérer le serveur » suffit.'));
+      ? `✅ ${interaction.values.map(role).join(' ')} ont accès à /setup, /panel, /embed et aux tickets${note}.`
+      : '✅ Plus de rôle admin du bot : « Gérer le serveur » suffit.'));
   }
   if (id === 'verifie') {
     if (valeur) {

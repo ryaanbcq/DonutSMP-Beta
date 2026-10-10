@@ -31,7 +31,7 @@ export function rendreSetup(guild, note = '') {
       + `**Panneau membres** · ${r.salonPanneau() ? `<#${r.salonPanneau()}>` : 'pas encore publié'}\n`
       + `**Dossier des tickets** · ${r.dossier() ? `<#${r.dossier()}>` : 'à la racine du serveur'}\n`
       + `**Logs** · ${r.salonLogs() ? `<#${r.salonLogs()}>` : 'aucun'}\n`
-      + `**Rôles staff** · ${roles.length ? roles.map((id) => `<@&${id}>`).join(' ') : 'aucun, seuls les « Gérer le serveur »'}\n`
+      + `**Rôles helpers** (tickets seulement) · ${roles.length ? roles.map((id) => `<@&${id}>`).join(' ') : 'aucun : seuls les admins du bot voient les tickets'}\n`
       + `**Catégories (${cats.length})** · ${cats.map((c) => `${c.emoji} ${c.nom} \`${slugCategorie(c)}\``).join(' · ') || 'aucune'}`
       + (manque.length ? `\n\n⚠️ Il me manque **${manque.join('** et **')}** pour créer les salons de ticket.` : '')
       + (note ? `\n\n${note}` : ''),
@@ -59,7 +59,7 @@ export function rendreSetup(guild, note = '') {
 
   const staff = new RoleSelectMenuBuilder()
     .setCustomId('tsetup:roles')
-    .setPlaceholder('🛡️ Rôles staff qui voient les tickets')
+    .setPlaceholder('🛟 Rôles helpers : voient et gèrent les tickets')
     .setMinValues(0)
     .setMaxValues(25);
   if (roles.length) staff.setDefaultRoles(roles);
