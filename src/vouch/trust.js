@@ -5,16 +5,13 @@
 // pas devant un joueur a 4,8 sur quarante avis. Un scam vouch vaut POIDS_SCAM
 // avis a zero etoile, et les avis vieillissent : de 1 a 0,6 sur six mois.
 // Sur un gros profil, un scam pese au moins 10 % des avis positifs (sinon 99
-// bons avis le noyaient : -3 points), et tant qu'un signalement a moins de
-// 90 jours, le score est plafonne sous « De confiance » (69) : pas de Trusted.
+// bons avis le noyaient : -3 points).
 
 const PRIOR = 0.7;
 const PRIOR_N = 5;
 const POIDS_SCAM = 3;
 const DEMI_VIE_JOURS = 180;
 const PART_SCAM = 0.1;
-const PLAFOND_SCAM_RECENT = 69;
-const SCAM_RECENT_JOURS = 90;
 
 export const PALIERS = [
   { min: 95, emoji: '💎', nom: 'Légende' },
@@ -48,7 +45,6 @@ export function calculerTrust(avis, now = Date.now()) {
   // Poids total des avis positifs : il fixe le poids minimal d'un scam.
   const poidsPositifs = avis.filter((a) => a.value > 0).reduce((t, a) => t + recence(a.created_at ?? now, now), 0);
   const poidsScam = Math.max(POIDS_SCAM, PART_SCAM * poidsPositifs);
-  let scamRecent = false;
 
   for (const a of avis) {
     const d = recence(a.created_at ?? now, now);
@@ -61,14 +57,11 @@ export function calculerTrust(avis, now = Date.now()) {
     } else {
       poids += poidsScam * d;
       neg += 1;
-      if (now - (a.created_at ?? now) < SCAM_RECENT_JOURS * 86_400_000) scamRecent = true;
     }
   }
 
   const n = pos + neg;
-  const brut = Math.round((somme / poids) * 100);
-  const plafonne = scamRecent && brut > PLAFOND_SCAM_RECENT;
-  const score = plafonne ? PLAFOND_SCAM_RECENT : brut;
+  const score = Math.round((somme / poids) * 100);
   const moyenne = pos ? sommeEtoiles / pos : 0;
 
   let palier;
@@ -78,7 +71,7 @@ export function calculerTrust(avis, now = Date.now()) {
 
   return {
     score, n, pos, neg, moyenne,
-    palier, plafonne,
+    palier,
     trusted: palier !== PALIER_SIGNALE && n >= MIN_AVIS && score >= SEUIL_TRUSTED,
   };
 }
