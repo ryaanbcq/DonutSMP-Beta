@@ -47,3 +47,23 @@ test('etoiles et barre', () => {
   assert.equal(barre(0), '░░░░░░░░░░');
   assert.equal(barre(50, 4), '██░░');
 });
+
+test('un scam pese au moins 10 % des avis positifs sur un gros profil', () => {
+  const vieux = Date.now() - 200 * 86_400_000; // hors plafond des 90 jours
+  const t = calculerTrust([...Array(99).fill({ value: 1, stars: 5 }), { value: -1, stars: null, created_at: vieux }]);
+  assert.ok(t.score <= 92, `99 x 5★ + 1 scam ancien → ${t.score}, il ne doit plus noyer le scam`);
+});
+
+test('un signalement recent plafonne le score a 69 : pas de Trusted', () => {
+  const t = calculerTrust([...Array(99).fill({ value: 1, stars: 5 }), { value: -1, stars: null }]);
+  assert.equal(t.score, 69);
+  assert.equal(t.plafonne, true);
+  assert.equal(t.trusted, false);
+});
+
+test('un profil signale n affiche plus de score', async () => {
+  const { ligneScore } = await import('../src/vouch/trust.js');
+  const t = calculerTrust([...Array(50).fill({ value: 1, stars: 5 }), { value: -1, stars: null }, { value: -1, stars: null }]);
+  assert.match(ligneScore(t), /suspendu/);
+  assert.doesNotMatch(ligneScore(t), /\/ 100/);
+});

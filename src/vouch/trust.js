@@ -4,11 +4,17 @@
 // fictifs a PRIOR (3,5 etoiles) : un joueur avec UN seul 5 etoiles ne passe
 // pas devant un joueur a 4,8 sur quarante avis. Un scam vouch vaut POIDS_SCAM
 // avis a zero etoile, et les avis vieillissent : de 1 a 0,6 sur six mois.
+// Sur un gros profil, un scam pese au moins 10 % des avis positifs (sinon 99
+// bons avis le noyaient : -3 points), et tant qu'un signalement a moins de
+// 90 jours, le score est plafonne sous « De confiance » (69) : pas de Trusted.
 
 const PRIOR = 0.7;
 const PRIOR_N = 5;
 const POIDS_SCAM = 3;
 const DEMI_VIE_JOURS = 180;
+const PART_SCAM = 0.1;
+const PLAFOND_SCAM_RECENT = 69;
+const SCAM_RECENT_JOURS = 90;
 
 export const PALIERS = [
   { min: 95, emoji: '💎', nom: 'Légende' },
@@ -39,6 +45,11 @@ export function calculerTrust(avis, now = Date.now()) {
   let neg = 0;
   let sommeEtoiles = 0;
 
+  // Poids total des avis positifs : il fixe le poids minimal d'un scam.
+  const poidsPositifs = avis.filter((a) => a.value > 0).reduce((t, a) => t + recence(a.created_at ?? now, now), 0);
+  const poidsScam = Math.max(POIDS_SCAM, PART_SCAM * poidsPositifs);
+  let scamRecent = false;
+
   for (const a of avis) {
     const d = recence(a.created_at ?? now, now);
     if (a.value > 0) {
@@ -48,13 +59,16 @@ export function calculerTrust(avis, now = Date.now()) {
       pos += 1;
       sommeEtoiles += etoiles;
     } else {
-      poids += POIDS_SCAM * d;
+      poids += poidsScam * d;
       neg += 1;
+      if (now - (a.created_at ?? now) < SCAM_RECENT_JOURS * 86_400_000) scamRecent = true;
     }
   }
 
   const n = pos + neg;
-  const score = Math.round((somme / poids) * 100);
+  const brut = Math.round((somme / poids) * 100);
+  const plafonne = scamRecent && brut > PLAFOND_SCAM_RECENT;
+  const score = plafonne ? PLAFOND_SCAM_RECENT : brut;
   const moyenne = pos ? sommeEtoiles / pos : 0;
 
   let palier;
@@ -64,7 +78,7 @@ export function calculerTrust(avis, now = Date.now()) {
 
   return {
     score, n, pos, neg, moyenne,
-    palier,
+    palier, plafonne,
     trusted: palier !== PALIER_SIGNALE && n >= MIN_AVIS && score >= SEUIL_TRUSTED,
   };
 }
@@ -76,8 +90,10 @@ export function etoiles(n) {
 
 /** Ligne « barre + score », ou l attente tant qu il n y a pas assez d avis pour que le score veuille dire quelque chose. */
 export function ligneScore(t, largeur = 10) {
+  // Signale : un score de 93 a cote d'une tete de mort se contredisait.
+  if (t.palier === PALIER_SIGNALE) return `*☠️ Trust score suspendu : ${t.neg} signalements*`;
   if (t.n < MIN_AVIS) return `*Trust score dès ${MIN_AVIS} avis (${t.n} / ${MIN_AVIS})*`;
-  return `\`${barre(t.score, largeur)}\` **${t.score} / 100**`;
+  return `\`${barre(t.score, largeur)}\` **${t.score} / 100**${t.plafonne ? ' · *plafonné : signalement récent*' : ''}`;
 }
 
 export function barre(score, largeur = 10) {

@@ -125,7 +125,7 @@ export function carteReputation(link) {
     { name: 'Vouches', value: `✅ ${t.pos}`, inline: true },
     { name: 'Signalements', value: `${t.neg ? '☠️' : '✅'} ${t.neg}`, inline: true },
     { name: 'Dernier avis', value: dernier ? `<t:${Math.floor(dernier.created_at / 1000)}:R>` : 'Aucun', inline: true },
-  ).setFooter({ text: 'Trust score : moyenne pondérée, un signalement pèse trois avis.' });
+  ).setFooter({ text: 'Trust score : moyenne pondérée des avis. Un signalement de moins de 90 jours le plafonne à 69.' });
   const boutons = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`vouch:noter:${link.discord_id}`)
       .setLabel(`Donner un avis sur ${link.mc_name}`).setEmoji('⭐').setStyle(ButtonStyle.Primary),
