@@ -1,7 +1,7 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, ModalBuilder,
   TextInputBuilder, TextInputStyle, MessageFlags, PermissionFlagsBits, LabelBuilder, FileUploadBuilder,
-  AttachmentBuilder,
+  AttachmentBuilder, EmbedBuilder,
 } from 'discord.js';
 import { store } from '../db.js';
 import { journal } from '../ops/journal.js';
@@ -42,6 +42,13 @@ const estPreuve = (a) => /^(image|video)\//.test(a.contentType ?? '')
 // Rendu
 // ---------------------------------------------------------------------------
 
+const estImageNom = (n) => /\.(png|jpe?g|gif|webp)$/i.test(n ?? '');
+function ligneFichiers(preuves) {
+  const img = preuves.filter((f) => estImageNom(f.name)).length;
+  const vid = preuves.length - img;
+  return [img && `${img} image${img > 1 ? 's' : ''} (aperçu ci-dessous)`, vid && `${vid} vidéo${vid > 1 ? 's' : ''}`].filter(Boolean).join(', ');
+}
+
 export function rendre(b, note = '') {
   const cible = b.cible ? store.getLink(b.cible) : null;
   const t = cible ? trustDe(cible.discord_id) : null;
@@ -59,7 +66,7 @@ export function rendre(b, note = '') {
       + `2️⃣ Verdict : ${b.verdict ? (scam ? '⚠️ **Signalement**' : '✅ **Vouch**') : '*à choisir*'}\n`
       + `3️⃣ Note : ${scam ? '*sans objet pour un signalement*' : b.etoiles ? `**${etoiles(b.etoiles)}**` : '*à choisir*'}\n`
       + `4️⃣ Message : ${b.message ? `\n> ${b.message.replace(/\n/g, '\n> ')}` : scam ? `*obligatoire, ${MIN_SCAM} caractères minimum*` : '*facultatif*'}`
-      + `\n📎 Preuves : ${b.preuves?.length ? b.preuves.map((f) => `\`${f.name}\``).join(', ') : scam ? '*obligatoire : au moins une capture ou vidéo du trade*' : '*aucune*'}`;
+      + `\n📎 Preuves : ${b.preuves?.length ? ligneFichiers(b.preuves) : scam ? '*obligatoire : au moins une capture ou vidéo du trade*' : '*aucune*'}`;
   }
   if (note) description += `\n\n${note}`;
 
@@ -69,10 +76,19 @@ export function rendre(b, note = '') {
     description,
   });
 
+  // Les preuves s'affichent en vrai (aperçus) au lieu d'une liste de noms de fichiers.
+  const embeds = [contenu];
+  const images = (b.preuves ?? []).filter((f) => estImageNom(f.name));
+  if (images.length) {
+    contenu.setImage(`attachment://${images[0].name}`);
+    for (const f of images.slice(1)) embeds.push(new EmbedBuilder().setColor(contenu.data.color).setImage(`attachment://${f.name}`));
+  }
+  const pj = { files: [...(b.preuves ?? [])], attachments: [] };
+
   const choix = new ActionRowBuilder().addComponents(
     new UserSelectMenuBuilder().setCustomId('vouch:cible').setPlaceholder('👤 Le membre à noter'),
   );
-  if (!cible) return { embeds: [contenu], components: [choix] };
+  if (!cible) return { embeds, components: [choix], ...pj };
 
   const verdict = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('vouch:verdict:pos').setLabel('Vouch').setEmoji('✅')
@@ -95,7 +111,7 @@ export function rendre(b, note = '') {
       .setStyle(ButtonStyle.Success).setDisabled(!complet),
     new ButtonBuilder().setCustomId('vouch:annuler').setLabel('Annuler').setStyle(ButtonStyle.Secondary),
   );
-  return { embeds: [contenu], components: [choix, verdict, notes, actions] };
+  return { embeds, components: [choix, verdict, notes, actions], ...pj };
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +283,7 @@ export async function onBouton(interaction) {
   const b = brouillon(interaction.user.id);
   if (id === 'vouch:annuler') {
     brouillons.delete(String(interaction.user.id));
-    return interaction.update({ embeds: [embed('⭐・DONNER UN AVIS', { description: 'Avis annulé, rien n\'a été publié.' })], components: [] });
+    return interaction.update({ embeds: [embed('⭐・DONNER UN AVIS', { description: 'Avis annulé, rien n\'a été publié.' })], components: [], attachments: [] });
   }
   if (id === 'vouch:existant:modifier') {
     const existant = b.cible ? store.getVouch(interaction.user.id, b.cible) : null;
@@ -343,7 +359,9 @@ export async function onModal(interaction) {
       if (!estPreuve(a)) { note += `\n⚠️ \`${a.name}\` n'est ni une image ni une vidéo, ignoré.`; continue; }
       const res = await fetch(a.url).catch(() => null);
       if (!res?.ok) { note += `\n⚠️ \`${a.name}\` n'a pas pu être récupéré.`; continue; }
-      preuves.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: a.name }));
+      // Nom propre : les noms iPhone (« image_… », espaces, accents) cassent attachment://.
+      const ext = (a.name.match(/\.([a-z0-9]{2,5})$/i)?.[1] ?? (a.contentType ?? '').split('/')[1] ?? 'png').toLowerCase();
+      preuves.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: `preuve-${preuves.length + 1}.${ext}` }));
     }
     const b = poser(interaction.user.id, { message, preuves });
     return interaction.editReply(rendre(b, note.trim()));
@@ -394,6 +412,7 @@ async function publier(interaction, b) {
         + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t)}`,
     })],
     components: [],
+    attachments: [], // les apercus du brouillon disparaissent avec lui
   });
 }
 
