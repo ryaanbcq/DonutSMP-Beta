@@ -10,7 +10,7 @@ test('un seul 5 etoiles ne bat pas quarante avis a 4.8', () => {
   const seul = calculerTrust([vouch(5)]);
   const beaucoup = calculerTrust([...Array(32).fill(vouch(5)), ...Array(8).fill(vouch(4))]);
   assert.ok(beaucoup.score > seul.score, `${beaucoup.score} doit depasser ${seul.score}`);
-  assert.equal(seul.palier.nom, 'Nouveau', 'moins de 3 avis = nouveau');
+  assert.equal(seul.palier.nom, 'Nouveau', 'moins de 10 avis = nouveau');
 });
 
 test('paliers : dix 5 etoiles = Trusted, quarante = Legende', () => {

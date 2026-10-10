@@ -26,7 +26,7 @@ export const PALIERS = [
 export const PALIER_NOUVEAU = { emoji: '🌱', nom: 'Nouveau' };
 export const PALIER_SIGNALE = { emoji: '☠️', nom: 'Signalé' };
 export const SEUIL_TRUSTED = 85;
-export const MIN_AVIS = 3;
+export const MIN_AVIS = 10;
 export const SCAMS_SIGNALE = 2;
 
 function recence(createdAt, now) {
