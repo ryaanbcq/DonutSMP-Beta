@@ -194,6 +194,29 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
   return { embeds, components: [boutons] };
 }
 
+/**
+ * Copie de la carte de reputation gardee en DERNIER message du fil (la carte
+ * de depart reste en tete : c est l apercu du forum). Deja en bas = simple
+ * edition ; sinon l ancienne copie est supprimee et une neuve est postee.
+ */
+async function panelEnBas(fil, link) {
+  const cle = `panel:${link.discord_id}`;
+  const ancienId = store.kvGet(cle);
+  // Fil vide d avis : la carte de depart est deja le dernier message.
+  if (!store.vouchAll(link.discord_id).some((v) => v.message_id)) {
+    if (ancienId) await fil.messages.delete(ancienId).catch(() => {});
+    if (ancienId) store.kvSet(cle, '');
+    return;
+  }
+  if (ancienId && fil.lastMessageId === ancienId) {
+    const m = await fil.messages.fetch(ancienId).catch(() => null);
+    if (m && await m.edit(carteReputation(link)).then(() => true).catch(() => false)) return;
+  }
+  if (ancienId) await fil.messages.delete(ancienId).catch(() => {});
+  const m = await fil.send(carteReputation(link)).catch((e) => { console.warn('[vouch] panel :', e.message); return null; });
+  store.kvSet(cle, m ? m.id : '');
+}
+
 /** Reecrit la carte de reputation et pose ou retire le role Trusted. */
 export async function rafraichir(client, discordId) {
   const link = store.getLink(discordId);
@@ -203,6 +226,7 @@ export async function rafraichir(client, discordId) {
     await reveiller(fil);
     const carte = await fil.fetchStarterMessage().catch(() => null);
     if (carte) await carte.edit(carteReputation(link)).catch((e) => console.warn('[vouch] carte :', e.message));
+    await panelEnBas(fil, link);
     const forum = await salonVouch(client);
     if (forum) await fil.setAppliedTags(await tagDe(forum, trustDe(discordId).palier)).catch(() => {});
   }
