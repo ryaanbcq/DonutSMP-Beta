@@ -38,7 +38,7 @@ import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTi
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { estAdmin } from './lib/admin.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
-import { assurerFils, rafraichir } from './vouch/fils.js';
+import { assurerFils, rafraichir, reveillerFils } from './vouch/fils.js';
 import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -120,6 +120,7 @@ client.once('clientReady', async (c) => {
   await startWatcher(c);
   const fils = await assurerFils(c).catch((e) => { console.error('[vouch] fils :', e.message); return 0; });
   if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
+  setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();
 });
 
 // Coupures de la passerelle Discord : discord.js reprend seul, on annonce la

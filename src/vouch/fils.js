@@ -7,7 +7,7 @@ import { embed, FR } from '../lib/brand.js';
 import { calculerTrust, etoiles, ligneScore } from './trust.js';
 
 // Un post par joueur link dans le FORUM des vouches, nomme « ⭐ Pseudo » pour
-// que la barre de recherche le trouve. Verrouille : le bot seul y ecrit. Le
+// que la barre de recherche le trouve. Lecture seule : le bot seul y ecrit. Le
 // message de depart du post est la carte de reputation, editee a chaque
 // avis ; chaque avis est une carte en dessous. Le tag du post = son palier.
 
@@ -50,9 +50,36 @@ async function fetchFil(client, id) {
   return fil?.isThread?.() ? fil : null;
 }
 
-/** Un fil archive ne recoit rien : on le rouvre avant d ecrire, sans le deverrouiller. */
+/**
+ * Lecture seule par les PERMISSIONS du forum, jamais par le verrou du fil :
+ * Discord grise les boutons d un fil verrouille pour tout non-modérateur
+ * (vecu 11/10 : « Donner un avis » inclicable pour les joueurs, cliquable
+ * pour le staff). Les membres lisent et cliquent, seul le bot ecrit.
+ */
+export async function lectureSeule(forum) {
+  const everyone = forum.guild.roles.everyone;
+  const moi = forum.guild.members.me;
+  try {
+    await forum.permissionOverwrites.edit(everyone,
+      { SendMessagesInThreads: false, CreatePublicThreads: false, CreatePrivateThreads: false },
+      { reason: 'Forum des vouches : seul le bot écrit' });
+    if (moi) {
+      await forum.permissionOverwrites.edit(moi,
+        { ViewChannel: true, SendMessages: true, SendMessagesInThreads: true, CreatePublicThreads: true,
+          ManageThreads: true, EmbedLinks: true, AttachFiles: true, ReadMessageHistory: true },
+        { reason: 'Forum des vouches : le bot écrit' });
+    }
+    return true;
+  } catch (e) {
+    console.warn('[vouch] lecture seule du forum :', e.message);
+    return false;
+  }
+}
+
+/** Un fil archive ou verrouille a ses boutons grises : on le rouvre. */
 async function reveiller(fil) {
-  if (fil.archived) await fil.setArchived(false, 'Nouvel avis').catch(() => {});
+  if (fil.archived) await fil.setArchived(false, 'Boutons actifs').catch(() => {});
+  if (fil.locked) await fil.setLocked(false, 'Lecture seule par permissions').catch(() => {});
   return fil;
 }
 
@@ -96,7 +123,6 @@ export async function filDe(client, link) {
     autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
     reason: `Post de réputation de ${link.mc_name}`,
   });
-  await fil.setLocked(true, 'Seul le bot écrit ici').catch(() => {});
   // Dans un forum, le message de depart porte l id du post.
   store.setThread(link.discord_id, fil.id, fil.id, link.mc_name);
   console.log(`[vouch] fil ouvert pour ${link.mc_name}`);
@@ -301,6 +327,8 @@ async function majRoleTrusted(client, discordId) {
 /** Au demarrage et a chaque link : chaque compte verifie a son post. */
 export async function assurerFils(client) {
   if (!settings.salonVouch()) return 0;
+  const forum = await salonVouch(client);
+  if (forum) await lectureSeule(forum);
   let n = 0;
   for (const link of store.allLinks()) {
     const avant = store.getThread(link.discord_id);
@@ -312,3 +340,28 @@ export async function assurerFils(client) {
   }
   return n;
 }
+
+/**
+ * Un post sans activite s archive au bout d une semaine, et ses boutons se
+ * grisent : toutes les 6 h, on rouvre les posts archives du forum.
+ */
+export async function reveillerFils(client) {
+  const forum = await salonVouch(client);
+  if (!forum) return 0;
+  let n = 0;
+  let avant;
+  for (let page = 0; page < 20; page++) {
+    const r = await forum.threads.fetchArchived({ before: avant, limit: 100 }).catch(() => null);
+    if (!r?.threads.size) break;
+    for (const fil of r.threads.values()) {
+      if (fil.ownerId !== client.user.id) continue;
+      await reveiller(fil);
+      n += 1;
+    }
+    if (!r.hasMore) break;
+    avant = r.threads.last();
+  }
+  if (n) console.log(`[vouch] ${n} post(s) archivé(s) rouvert(s)`);
+  return n;
+}
+
