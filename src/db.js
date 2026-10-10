@@ -133,6 +133,7 @@ const q = {
   vouchTargets: db.prepare('SELECT DISTINCT to_id FROM vouches'),
   vouchSetMessage: db.prepare('UPDATE vouches SET message_id = ?, preuves = COALESCE(?, preuves) WHERE from_id = ? AND to_id = ?'),
   vouchCountFrom: db.prepare('SELECT COUNT(*) AS n FROM vouches WHERE from_id = ?'),
+  vouchCountFromSince: db.prepare('SELECT COUNT(*) AS n FROM vouches WHERE from_id = ? AND created_at >= ?'),
   allLinks: db.prepare('SELECT * FROM links ORDER BY linked_at'),
 
   threadGet: db.prepare('SELECT * FROM vouch_threads WHERE discord_id = ?'),
@@ -212,6 +213,7 @@ export const store = {
   setVouchMessage: (fromId, toId, messageId, preuves = null) =>
     q.vouchSetMessage.run(messageId ? String(messageId) : null, preuves ? JSON.stringify(preuves) : null, String(fromId), String(toId)),
   vouchCountFrom: (fromId) => q.vouchCountFrom.get(String(fromId)).n,
+  vouchCountFromSince: (fromId, depuis) => q.vouchCountFromSince.get(String(fromId), depuis).n,
   allLinks: () => q.allLinks.all(),
 
   getThread: (discordId) => q.threadGet.get(String(discordId)) ?? null,

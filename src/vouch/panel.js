@@ -21,6 +21,11 @@ const MIN_ANCIENNETE_MS = 24 * 3_600_000;
 const MIN_SCAM = 20;
 const MAX_PREUVES = 5;
 const MAX_OCTETS = 8 * 1024 * 1024;
+// Anti-farm : au-dela, un membre attend avant de publier un NOUVEL avis
+// (modifier un avis existant reste libre).
+const MAX_AVIS_JOUR = 10;
+// Deux vouches croises en moins de 48 h : signale au staff (farm d alts).
+const CROISE_MS = 48 * 3_600_000;
 
 const brouillons = new Map();
 const brouillon = (id) => brouillons.get(String(id)) ?? { cible: null, verdict: null, etoiles: null, message: '', preuves: [] };
@@ -100,7 +105,7 @@ export function rendre(b, note = '') {
     [1, 2, 3, 4, 5].map((n) => new ButtonBuilder().setCustomId(`vouch:etoile:${n}`)
       .setLabel(n <= (b.etoiles ?? 0) ? '★' : '☆')
       .setStyle(n <= (b.etoiles ?? 0) ? ButtonStyle.Primary : ButtonStyle.Secondary)
-      .setDisabled(scam || !b.verdict)),
+      .setDisabled(scam)),
   );
   const actions = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('vouch:message').setLabel(b.message ? 'Modifier le message' : 'Écrire un message')
@@ -313,7 +318,8 @@ export async function onBouton(interaction) {
     return interaction.update(rendre(poser(interaction.user.id, { verdict, etoiles: verdict === 'neg' ? null : b.etoiles })));
   }
   if (id.startsWith('vouch:etoile:')) {
-    return interaction.update(rendre(poser(interaction.user.id, { etoiles: Number(id.slice('vouch:etoile:'.length)) })));
+    // Une etoile vaut un vouch : pas besoin de cliquer « Vouch » avant.
+    return interaction.update(rendre(poser(interaction.user.id, { verdict: 'pos', etoiles: Number(id.slice('vouch:etoile:'.length)) })));
   }
   if (id === 'vouch:message') {
     const scam = b.verdict === 'neg';
@@ -379,6 +385,11 @@ async function publier(interaction, b) {
   if (scam && !(b.preuves?.length)) return interaction.update(rendre(b, '❌ Un signalement demande au moins une capture ou vidéo du trade.'));
   if (!scam && !b.etoiles) return interaction.update(rendre(b, '❌ Choisissez une note.'));
 
+  const nouveau = !store.getVouch(interaction.user.id, cible.discord_id);
+  if (nouveau && !bypass(interaction.member, config) && store.vouchCountFromSince(interaction.user.id, Date.now() - 86_400_000) >= MAX_AVIS_JOUR) {
+    return interaction.update(rendre(b, `⏳ ${MAX_AVIS_JOUR} avis en 24 h, c'est le maximum. Réessayez demain, votre brouillon reste ici 30 min.`));
+  }
+
   await interaction.deferUpdate();
   store.setVouch(interaction.user.id, cible.discord_id, scam ? -1 : 1, b.message || null, scam ? null : b.etoiles);
   const fil = await posterAvis(interaction.client, interaction.user.id, cible.discord_id, { fichiers: b.preuves ?? [] })
@@ -388,6 +399,17 @@ async function publier(interaction, b) {
   const t = trustDe(cible.discord_id);
   const auteur = store.getLink(interaction.user.id)?.mc_name ?? interaction.user.tag;
   if (scam) prevenirSignale(interaction, cible, auteur, b.message, fil).catch((e) => console.warn('[vouch] MP :', e.message));
+  else if (nouveau) prevenirVouch(interaction.client, cible, auteur, b.etoiles, t, fil).catch(() => {});
+  const retour = !scam && store.getVouch(cible.discord_id, interaction.user.id);
+  if (retour && retour.value > 0 && Date.now() - retour.created_at < CROISE_MS) {
+    journal({
+      niveau: 'warn',
+      titre: 'Vouches croisés',
+      texte: `**${auteur}** et **${cible.mc_name}** se sont vouch mutuellement en moins de 48 h : vérifier que ce ne sont pas des alts.`,
+      champs: { A: auteur, B: cible.mc_name },
+      joueur: cible.mc_name,
+    });
+  }
   console.log(`[vouch] ${auteur} ${scam ? 'signale' : `vouch ${b.etoiles}★`} ${cible.mc_name} (score ${t.score})`);
   journal(scam
     ? {
@@ -411,7 +433,10 @@ async function publier(interaction, b) {
       description: `Votre avis sur **${cible.mc_name}** est publié${fil ? ` dans ${fil}` : ''}.\n`
         + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t)}`,
     })],
-    components: [],
+    components: fil ? [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel(`Voir le profil de ${cible.mc_name}`).setEmoji('👀').setStyle(ButtonStyle.Link)
+        .setURL(`https://discord.com/channels/${fil.guildId}/${fil.id}`),
+    )] : [],
     attachments: [], // les apercus du brouillon disparaissent avec lui
   });
 }
@@ -434,6 +459,18 @@ async function supprimer(interaction) {
 async function prevenirSignale(interaction, cible, auteur, message, fil) {
   const vouch = store.getVouch(interaction.user.id, cible.discord_id);
   return envoyerMpSignale(interaction.client, { guildId: interaction.guildId, cible, vouch, auteur, fil });
+}
+
+/** MP discret a la personne vouch : elle sait que son profil monte. */
+async function prevenirVouch(client, cible, auteur, nb, t, fil) {
+  const user = await client.users.fetch(cible.discord_id);
+  const lien = fil ? `\n[Voir mon profil](https://discord.com/channels/${fil.guildId}/${fil.id})` : '';
+  await user.send({ embeds: [embed('⭐・NOUVEAU VOUCH', {
+    couleur: FR.vert,
+    image: cible.mc_name,
+    description: `**${auteur}** vous a laissé ${etoiles(nb)} sur **${cible.mc_name}**.\n`
+      + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t)} · ${t.n} avis${lien}`,
+  })] });
 }
 
 /** Le MP de signalement, reutilisable par les scripts admin. */

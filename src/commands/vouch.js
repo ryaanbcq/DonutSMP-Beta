@@ -5,10 +5,11 @@ import { ouvrir } from '../vouch/panel.js';
 // etoiles, message), rien ne part avant « Publier ».
 export const data = new SlashCommandBuilder()
   .setName('vouch')
-  .setDescription('Notez un membre avec qui vous avez tradé : vouch ou signalement, étoiles, message');
+  .setDescription('Notez un membre avec qui vous avez tradé : vouch ou signalement, étoiles, message')
+  .addUserOption((o) => o.setName('membre').setDescription('Le membre à noter (sinon, à choisir dans le panneau)'));
 
 export const requiresLink = true;
 
 export async function execute(interaction) {
-  return ouvrir(interaction);
+  return ouvrir(interaction, interaction.options.getUser('membre')?.id ?? null);
 }
