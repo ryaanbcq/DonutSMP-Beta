@@ -15,7 +15,7 @@ test('un motif de kick JSON est lu en texte brut', () => {
 
 test('les kicks connus sont reconnus', () => {
   const cas = {
-    'You are permanently banned from this server. Ban ID: #A1B2': 'Bot banni de DonutSMP',
+    'You are permanently banned from this server. Ban ID: #A1B2': 'Bot banni définitivement',
     'You are already connected to this proxy!': 'Session fantôme',
     'Server is restarting': 'DonutSMP en maintenance',
     'Connection throttled! Please wait before reconnecting.': 'Reconnexion trop rapide',
@@ -97,12 +97,9 @@ test('compte bloque et kick staff reconnus', () => {
   assert.equal(diagnostiquerKick('Kicked for flying').titre, 'Kick par l\'anticheat');
 });
 
-test('sanctions du chat : warn, mute, freeze ; jamais une ligne de joueur', async () => {
-  const { diagnostiquerChat } = await import('../ingame/diagnostic.js');
-  assert.equal(diagnostiquerChat('§cYou have been warned by Mod for: spam').titre, 'Bot averti par DonutSMP');
-  assert.equal(diagnostiquerChat('[!] You are muted for 1h').titre, 'Bot muet sur DonutSMP');
-  assert.equal(diagnostiquerChat('You have been frozen. Do not log out!').titre, 'Bot gelé par le staff');
-  assert.equal(diagnostiquerChat('Steve: you have been warned lol'), null);
-  assert.equal(diagnostiquerChat('Steve -> me: you are muted'), null);
-  assert.equal(diagnostiquerChat('You received $5 from Steve'), null);
+test('ban temporaire, ban definitif et compte bloque se distinguent', () => {
+  assert.equal(diagnostiquerKick('You are banned for 7d. Reason: alt. Ban ID: #1').titre, 'Bot banni temporairement');
+  assert.equal(diagnostiquerKick('You are temporarily banned. Expires in 2 days').titre, 'Bot banni temporairement');
+  assert.equal(diagnostiquerKick('You are permanently banned from DonutSMP. Ban ID: #2').titre, 'Bot banni définitivement');
+  assert.equal(diagnostiquerKick('Blocked account. Ban ID: #3').titre, 'Compte du bot bloqué par DonutSMP');
 });

@@ -41,12 +41,21 @@ const KICKS = [
       + ' Lis le motif, fais appel auprès de DonutSMP ou change de compte (`MC_LINK_ACCOUNT` + `donut auth`).',
   },
   {
+    // Ban temporaire : une duree ou une date de fin dans le motif.
+    re: /(\bbann?(ed)?\b|ban id).*(temporar|\bfor \d|\d+\s*(s|m|h|d|w|mo|y|sec|min|hour|day|week|month|year)s?\b|expire|until|remaining|unbanned in)|temp ?ban/i,
+    niveau: 'err',
+    titre: 'Bot banni temporairement',
+    actions: ['relink'],
+    texte: 'Le compte du bot est banni pour une durée limitée : aucune vérification ne passe jusqu\'à la fin du ban.'
+      + ' Le bot réessaie seul et reviendra à l\'expiration. Pour reprendre plus tôt : autre compte (`MC_LINK_ACCOUNT` + `donut auth`).',
+  },
+  {
     re: /\bbann?(ed)?\b|ban id|blacklist/i,
     niveau: 'err',
-    titre: 'Bot banni de DonutSMP',
+    titre: 'Bot banni définitivement',
     actions: ['relink'],
-    texte: 'Le compte du bot est banni : plus aucune vérification ne passera.'
-      + ' Lis le motif, fais appel auprès de DonutSMP ou change de compte (`MC_LINK_ACCOUNT` + `donut auth`).',
+    texte: 'Le compte du bot est banni à vie : plus aucune vérification ne passera.'
+      + ' Fais appel auprès de DonutSMP ou change de compte (`MC_LINK_ACCOUNT` + `donut auth`).',
   },
   {
     re: /already (online|connected|logged|playing)|logged in from another location|duplicate login/i,
@@ -105,39 +114,6 @@ export function diagnostiquerKick(motif) {
   return {
     niveau: base.niveau, titre: base.titre, texte: base.texte, motif: texte || '(aucun motif)', actions: base.actions ?? null,
   };
-}
-
-// Messages SYSTEME du chat qui visent le bot : avertissement, mute, freeze
-// (screenshare). Jamais une ligne de joueur : elles portent « Pseudo: » ou
-// « -> » (MP), et un joueur qui ecrit « you have been warned » ne doit pas
-// declencher d alerte.
-const CHAT = [
-  {
-    re: /^you (have been|were|got) warned\b|^warn(ing)?\s*[:!»>]|^you (have|now have) \d+ warn(ing)?s?\b/i,
-    niveau: 'warn',
-    titre: 'Bot averti par DonutSMP',
-    texte: 'Le staff de DonutSMP a donné un avertissement au compte du bot. Les avertissements mènent au ban : lis le motif.',
-  },
-  {
-    re: /^you (have been|were|are( now)?) muted\b|^you('| a)re muted\b|^you cannot (speak|talk|chat)/i,
-    niveau: 'err',
-    titre: 'Bot muet sur DonutSMP',
-    texte: 'Le compte du bot est mute : il ne peut plus envoyer de MP aux joueurs. Les vérifications et remboursements continuent, mais les messages ne partent plus.',
-  },
-  {
-    re: /^you (have been|were|are( now)?) (frozen|jailed)\b|screen ?shar(e|ing)|^do not log ?out/i,
-    niveau: 'err',
-    titre: 'Bot gelé par le staff',
-    texte: 'Le staff DonutSMP a gelé le bot (vérification anti-triche). Un humain doit répondre vite, sinon c\'est souvent un ban : connecte-toi sur le compte du bot.',
-  },
-];
-
-/** Rend un diagnostic si la ligne de chat est une sanction visant le bot, sinon null. */
-export function diagnostiquerChat(ligne) {
-  const texte = nettoyer(String(ligne ?? '')).replace(/^[^A-Za-z0-9]+/, '');
-  if (!texte || /->|»\s*\w+\s*:|^\[?[\w.]{3,16}\]?\s*:/.test(texte.slice(0, 40))) return null;
-  const cas = CHAT.find((c) => c.re.test(texte));
-  return cas ? { niveau: cas.niveau, titre: cas.titre, texte: cas.texte, motif: texte.slice(0, 300) } : null;
 }
 
 const ERREURS = [

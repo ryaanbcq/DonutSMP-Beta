@@ -8,8 +8,7 @@
 import mineflayer from 'mineflayer';
 import { creerSuperviseur } from './superviseur.js';
 import { note, noteSync, deposerCodeMsa, effacerCodeMsa } from './journal.js';
-import { diagnostiquerKick, diagnostiquerErreur, diagnostiquerChat, duree } from './diagnostic.js';
-const sanctionsVues = new Map();
+import { diagnostiquerKick, diagnostiquerErreur, duree } from './diagnostic.js';
 import { shortMoney } from '../src/lib/format.js';
 import { appendFile, writeFile, readFile, mkdir, stat, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -331,15 +330,6 @@ function connect() {
     if (process.env.DEBUG_CHAT === 'true') {
       const sur = line.replace(/[A-Za-z0-9_\-]{24,}/g, (k) => `<${k.length} car. masques>`);
       if (sur.trim()) console.log(`[chat] ${sur}`);
-    }
-
-    // Sanction visant le bot (avertissement, mute, freeze) : alerte staff,
-    // une fois par type toutes les 10 min.
-    const sanction = diagnostiquerChat(line);
-    if (sanction && Date.now() - (sanctionsVues.get(sanction.titre) ?? 0) > 10 * 60_000) {
-      sanctionsVues.set(sanction.titre, Date.now());
-      console.warn(`[mc] sanction : ${sanction.motif}`);
-      note(sanction.niveau, sanction.titre, sanction.texte, { champs: { Message: `\`${sanction.motif}\`` } });
     }
 
     // Paiement RECU. On ecrit la ligne brute pour le bot Discord, qui la
