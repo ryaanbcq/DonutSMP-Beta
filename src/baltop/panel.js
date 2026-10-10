@@ -23,7 +23,12 @@ export function texteCadence() {
     + 'et ce classement se met à jour dès qu\'une position change';
 }
 
-export function rendre() {
+/**
+ * presents : ids des membres encore sur le serveur. Une mention d un membre
+ * parti s affiche en ID brut (<@1395…>) : pour eux, le pseudo seul.
+ * null = on ne sait pas, tout le monde est mentionne.
+ */
+export function rendre(presents = null) {
   const top = balances.classement('money', 10);
 
   const intro = '**Découvrez les plus grandes fortunes de DonutSMP FR ! '
@@ -33,7 +38,8 @@ export function rendre() {
       : '');
 
   const lignes = top.length
-    ? top.map((r, i) => `${rang(i)} <@${r.discordId}> · **${escapeMarkdown(r.name)}** : \`\`${shortMoney(r.value)}\`\``).join('\n')
+    ? top.map((r, i) => `${rang(i)} ${!presents || presents.has(String(r.discordId)) ? `<@${r.discordId}> · ` : ''}`
+      + `**${escapeMarkdown(r.name)}** : \`\`${shortMoney(r.value)}\`\``).join('\n')
     : '*Aucun solde relevé pour le moment.*';
 
   const salonLink = settings.salonLink();
@@ -52,6 +58,19 @@ export function rendre() {
   });
 }
 
+/** Ids du top 10 encore membres du serveur, ou null si Discord ne repond pas. */
+async function membresPresents(guild) {
+  const ids = balances.classement('money', 10).map((r) => String(r.discordId)).filter(Boolean);
+  if (!guild || !ids.length) return null;
+  try {
+    const membres = await guild.members.fetch({ user: ids });
+    return new Set(membres.keys());
+  } catch (e) {
+    console.warn('[baltop] membres :', e.message);
+    return null;
+  }
+}
+
 /** Publie ou reecrit le panneau. Rend le message, ou null. */
 export async function publier(client, salonForce = null) {
   const salonId = salonForce ?? settings.salonBaltop();
@@ -64,7 +83,7 @@ export async function publier(client, salonForce = null) {
   }
 
   // components vide : retire le bouton donateurs des panneaux deja postes.
-  const contenu = { embeds: [rendre()], components: [] };
+  const contenu = { embeds: [rendre(await membresPresents(salon.guild))], components: [] };
   const connu = store.kvGet(CLE_MESSAGE);
 
   if (connu) {
