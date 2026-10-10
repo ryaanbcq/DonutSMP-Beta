@@ -230,7 +230,12 @@ export async function ouvrir(interaction, cibleId = null) {
   if (cibleId) {
     if (cibleId === interaction.user.id) return interaction.reply({ content: '❌ On ne se note pas soi-même.', ...EPH });
     const cible = store.getLink(cibleId);
-    if (!cible) return interaction.reply({ content: '❌ Ce membre n\'est plus vérifié.', ...EPH });
+    if (!cible) {
+      return interaction.reply({
+        content: `❌ <@${cibleId}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (\`/link\`) ont une réputation et peuvent être notés.`,
+        ...EPH,
+      });
+    }
     const existant = store.getVouch(interaction.user.id, cibleId);
     poser(interaction.user.id, { cible: cibleId });
     return interaction.reply({ ...(existant ? vueExistant(existant, cible) : rendre(brouillon(interaction.user.id))), ...EPH });
