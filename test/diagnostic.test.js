@@ -89,3 +89,20 @@ test('l ordre de relink est depose, date et signe', async () => {
   assert.equal(o.par, 'ryan#0001');
   assert.ok(Date.now() - o.at < 5_000);
 });
+
+test('compte bloque et kick staff reconnus', () => {
+  assert.equal(diagnostiquerKick('Blocked account. Ban ID: #X9 Appeal at donutsmp.net').titre, 'Compte du bot bloqué par DonutSMP');
+  assert.equal(diagnostiquerKick('Your account has been suspended').titre, 'Compte du bot bloqué par DonutSMP');
+  assert.equal(diagnostiquerKick('You have been kicked by a staff member: spam').titre, 'Expulsé par le staff');
+  assert.equal(diagnostiquerKick('Kicked for flying').titre, 'Kick par l\'anticheat');
+});
+
+test('sanctions du chat : warn, mute, freeze ; jamais une ligne de joueur', async () => {
+  const { diagnostiquerChat } = await import('../ingame/diagnostic.js');
+  assert.equal(diagnostiquerChat('§cYou have been warned by Mod for: spam').titre, 'Bot averti par DonutSMP');
+  assert.equal(diagnostiquerChat('[!] You are muted for 1h').titre, 'Bot muet sur DonutSMP');
+  assert.equal(diagnostiquerChat('You have been frozen. Do not log out!').titre, 'Bot gelé par le staff');
+  assert.equal(diagnostiquerChat('Steve: you have been warned lol'), null);
+  assert.equal(diagnostiquerChat('Steve -> me: you are muted'), null);
+  assert.equal(diagnostiquerChat('You received $5 from Steve'), null);
+});
