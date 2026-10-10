@@ -47,6 +47,21 @@ export function permissionsManquantes(guild) {
   return manque;
 }
 
+/**
+ * Ou ranger le ticket : le dossier de sa categorie, sinon le dossier general,
+ * sinon la racine. Un dossier supprime ou plein (50 salons, limite Discord) est
+ * saute, pour qu'un ticket naisse toujours.
+ */
+export function parentPour(guild, categorie) {
+  for (const id of [categorie?.dossier, reglagesTickets.dossier()]) {
+    const d = id && guild.channels.cache.get(id);
+    if (d?.type !== ChannelType.GuildCategory) continue;
+    const pleins = guild.channels.cache.filter((c) => c.parentId === d.id).size;
+    if (pleins < 50) return d.id;
+  }
+  return null;
+}
+
 // pseudo-categorie-001 : le membre, la categorie en court, le numero du ticket.
 function nomSalon(pseudo, categorie, id) {
   const propre = String(pseudo ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20) || 'membre';
@@ -129,8 +144,7 @@ export async function onFormulaireOuverture(interaction) {
     ...roles.map((id) => ({ id, allow: PERMS_STAFF })),
   ];
 
-  const dossier = reglagesTickets.dossier();
-  const parent = dossier && guild.channels.cache.get(dossier)?.type === ChannelType.GuildCategory ? dossier : null;
+  const parent = parentPour(guild, categorie);
 
   // Le numero vient de la base : on reserve la ligne avec un identifiant
   // provisoire, puis on la fait pointer sur le vrai salon une fois cree.

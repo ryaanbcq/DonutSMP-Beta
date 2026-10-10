@@ -32,7 +32,7 @@ export function rendreSetup(guild, note = '') {
       + `**Dossier des tickets** · ${r.dossier() ? `<#${r.dossier()}>` : 'à la racine du serveur'}\n`
       + `**Logs** · ${r.salonLogs() ? `<#${r.salonLogs()}>` : 'aucun'}\n`
       + `**Rôles helpers** (tickets seulement) · ${roles.length ? roles.map((id) => `<@&${id}>`).join(' ') : 'aucun : seuls les admins du bot voient les tickets'}\n`
-      + `**Catégories (${cats.length})** · ${cats.map((c) => `${c.emoji} ${c.nom} \`${slugCategorie(c)}\``).join(' · ') || 'aucune'}`
+      + `**Catégories (${cats.length})** · ${cats.map((c) => `${c.emoji} ${c.nom} \`${slugCategorie(c)}\`${c.dossier ? ` → <#${c.dossier}>` : ''}`).join(' · ') || 'aucune'}`
       + (manque.length ? `\n\n⚠️ Il me manque **${manque.join('** et **')}** pour créer les salons de ticket.` : '')
       + (note ? `\n\n${note}` : ''),
   });
@@ -68,6 +68,8 @@ export function rendreSetup(guild, note = '') {
     new ButtonBuilder().setCustomId('tsetup:cat:add').setLabel('Ajouter une catégorie').setEmoji('➕').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('tsetup:cat:rm').setLabel('Retirer une catégorie').setEmoji('➖')
       .setStyle(ButtonStyle.Secondary).setDisabled(!cats.length),
+    new ButtonBuilder().setCustomId('tsetup:dos').setLabel('Dossiers par catégorie').setEmoji('📁')
+      .setStyle(ButtonStyle.Secondary).setDisabled(!cats.length),
     new ButtonBuilder().setCustomId('tsetup:republier').setLabel('Republier le panneau').setEmoji('🔄')
       .setStyle(ButtonStyle.Secondary).setDisabled(!r.salonPanneau()),
   );
@@ -75,6 +77,41 @@ export function rendreSetup(guild, note = '') {
   return {
     embeds: [contenu],
     components: [salon, dossier, logs, staff].map((m) => new ActionRowBuilder().addComponents(m)).concat(boutons),
+  };
+}
+
+/** Un dossier Discord par categorie de ticket (Support, Signalement...). */
+function vueDossiers(guild, cle = null, note = '') {
+  const r = reglagesTickets;
+  const cats = r.categories();
+  const choisie = cats.find((c) => c.cle === cle) ?? null;
+  const general = r.dossier() ? `<#${r.dossier()}>` : 'la racine du serveur';
+  const lignes = cats.map((c) => `${c.emoji} **${c.nom}** → ${c.dossier ? `<#${c.dossier}>` : `*dossier général (${general})*`}`);
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('tsetup:dos:cat')
+    .setPlaceholder('1️⃣ Choisissez une catégorie de ticket')
+    .addOptions(cats.slice(0, 25).map((c) => ({ label: c.nom.slice(0, 100), value: c.cle, emoji: c.emoji || undefined, default: c.cle === choisie?.cle })));
+  const lignesComp = [new ActionRowBuilder().addComponents(menu)];
+  if (choisie) {
+    const dossier = new ChannelSelectMenuBuilder()
+      .setCustomId(`tsetup:dos:pose:${choisie.cle}`)
+      .setPlaceholder(`2️⃣ Dossier Discord pour « ${choisie.nom} » (vide = dossier général)`.slice(0, 150))
+      .setChannelTypes(ChannelType.GuildCategory)
+      .setMinValues(0);
+    if (choisie.dossier && guild.channels.cache.has(choisie.dossier)) dossier.setDefaultChannels(choisie.dossier);
+    lignesComp.push(new ActionRowBuilder().addComponents(dossier));
+  }
+  lignesComp.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('tsetup:retour').setLabel('Retour').setStyle(ButtonStyle.Secondary),
+  ));
+  return {
+    embeds: [embed('📁・DOSSIERS PAR CATÉGORIE', {
+      couleur: COULEUR_TICKET,
+      description: 'Chaque type de ticket peut naître dans son propre dossier Discord. '
+        + `Sans dossier propre, il va dans le dossier général (${general}). Un dossier plein (50 salons) ou supprimé renvoie au dossier général.\n\n`
+        + lignes.join('\n') + (note ? `\n\n${note}` : ''),
+    })],
+    components: lignesComp,
   };
 }
 
@@ -167,6 +204,16 @@ export async function onSetupSelect(interaction) {
     }
     return interaction.editReply(rendreSetup(guild, note));
   }
+  if (id === 'tsetup:dos:cat') return interaction.update(vueDossiers(guild, interaction.values[0]));
+  if (id.startsWith('tsetup:dos:pose:')) {
+    const cle = id.slice('tsetup:dos:pose:'.length);
+    const dossierId = interaction.values[0] ?? '';
+    r.poserDossierCategorie(cle, dossierId);
+    const c = r.categorie(cle);
+    return interaction.update(vueDossiers(guild, cle, dossierId
+      ? `✅ Les tickets « ${c?.nom} » naîtront dans <#${dossierId}>.`
+      : `✅ « ${c?.nom} » revient au dossier général.`));
+  }
   if (id === 'tsetup:dossier') {
     r.poserDossier(interaction.values[0] ?? '');
     note = interaction.values[0] ? '✅ Les prochains tickets naîtront dans ce dossier.' : '✅ Dossier retiré, tickets à la racine.';
@@ -219,6 +266,7 @@ export async function onSetupBouton(interaction) {
     return interaction.showModal(modal);
   }
   if (id === 'tsetup:cat:rm') return interaction.update(vueRetrait(guild));
+  if (id === 'tsetup:dos') return interaction.update(vueDossiers(guild));
   if (id === 'tsetup:retour') return interaction.update(rendreSetup(guild));
   if (id === 'tsetup:republier') {
     await interaction.deferUpdate();

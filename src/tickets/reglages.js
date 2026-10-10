@@ -7,7 +7,8 @@ import { store } from '../db.js';
 //   ticket.dossier    categorie Discord ou naitront les salons de ticket
 //   ticket.logs       salon staff qui recoit les transcripts
 //   ticket.roles      roles staff qui voient les tickets, separes par |
-//   ticket.categories JSON [{ cle, emoji, nom, description, slug }]
+//   ticket.categories JSON [{ cle, emoji, nom, description, slug, dossier? }]
+//                     dossier = categorie Discord propre (sinon ticket.dossier)
 //                     slug = identifiant court dans le nom du salon de ticket
 //                     (pseudo-slug-001), a-z0-9 uniquement
 
@@ -98,12 +99,23 @@ export const reglagesTickets = {
   poserCategorie({ emoji, nom, description, slug }) {
     const cle = cleDe(nom);
     if (!cle) throw new Error('nom de catégorie vide');
+    const avant = lireCategories().find((c) => c.cle === cle);
     const liste = lireCategories().filter((c) => c.cle !== cle);
     if (liste.length >= 25) throw new Error('25 catégories au maximum, la limite du menu Discord');
     const court = slugDe(slug) || slugDe(String(nom).split(/\s+/)[0]);
-    liste.push({ cle, emoji: emoji || '📩', nom: String(nom).trim(), description: String(description ?? '').trim(), slug: court });
+    // Modifier une categorie garde son dossier.
+    liste.push({ cle, emoji: emoji || '📩', nom: String(nom).trim(), description: String(description ?? '').trim(), slug: court, ...(avant?.dossier ? { dossier: avant.dossier } : {}) });
     store.kvSet('ticket.categories', JSON.stringify(liste));
     return cle;
+  },
+  /** Dossier Discord propre a une categorie ; id vide = revient au dossier general. */
+  poserDossierCategorie(cle, id) {
+    const liste = lireCategories();
+    const c = liste.find((x) => x.cle === cle);
+    if (!c) return false;
+    if (id) c.dossier = String(id); else delete c.dossier;
+    store.kvSet('ticket.categories', JSON.stringify(liste));
+    return true;
   },
   retirerCategorie(nomOuCle) {
     const cle = cleDe(nomOuCle);
