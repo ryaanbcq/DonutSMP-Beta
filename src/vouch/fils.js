@@ -5,6 +5,7 @@ import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { calculerTrust, etoiles, ligneScore } from './trust.js';
+import { journal } from '../ops/journal.js';
 
 // Un post par joueur link dans le FORUM des vouches, nomme « ⭐ Pseudo » pour
 // que la barre de recherche le trouve. Lecture seule : le bot seul y ecrit. Le
@@ -72,6 +73,13 @@ export async function lectureSeule(forum) {
     return true;
   } catch (e) {
     console.warn('[vouch] lecture seule du forum :', e.message);
+    journal({
+      niveau: 'err',
+      titre: 'Forum des vouches : permission manquante',
+      texte: `Le bot ne peut pas mettre <#${forum.id}> en lecture seule : il lui faut **Gérer les permissions** sur ce forum`
+        + ' (ou Administrateur). En attendant, les joueurs peuvent écrire dans les profils. Le bot réessaie à chaque redémarrage.',
+      champs: { Erreur: e.message.slice(0, 200) },
+    });
     return false;
   }
 }
