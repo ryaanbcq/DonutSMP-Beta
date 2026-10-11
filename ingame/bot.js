@@ -14,7 +14,7 @@ import { appendFile, writeFile, readFile, mkdir, stat, rename, rm } from 'node:f
 import { dirname } from 'node:path';
 import 'dotenv/config';
 import { parsePayment, parsePaymentSent, parseBalance } from '../src/minecraft/payments.js';
-import { RefundLedger } from './refunds.js';
+import { RefundLedger, dayKey } from './refunds.js';
 import { Reversements } from './dons.js';
 import { creerVerificateur } from './verifications.js';
 import nbt from 'prismarine-nbt';
@@ -346,6 +346,15 @@ function connect() {
       if (dons?.estUnDon(recu.amount)) {
         if (dons.ajouterDon({ from: reel ?? recu.from, amount: recu.amount, at })) {
           console.log(`[don] ${recu.amount} de ${recu.from}, cumul a reverser ${dons.etat.cumul}`);
+          // Vecu au passage sur le VPS (11/10) : .env neuf sans DONATION_RECIPIENT,
+          // les dons s accumulaient en silence. Une alerte par jour suffit.
+          if (!dons.beneficiaire && alerteSansBeneficiaire !== dayKey()) {
+            alerteSansBeneficiaire = dayKey();
+            note('err', 'Dons sans bénéficiaire',
+              'Des dons arrivent mais aucun bénéficiaire n\'est réglé : rien ne sera reversé à minuit.'
+              + ' Règle-le dans `/setup general` (Dons), ou `DONATION_RECIPIENT` dans le .env. Le cumul est gardé et partira au prochain reversement.',
+              { champs: { 'Cumul en attente': shortMoney(dons.etat.cumul) }, canal: 'dons' });
+          }
           dons.save().catch((e) => console.error('[don] ecriture impossible :', e.message));
         }
         return;
@@ -851,6 +860,7 @@ setInterval(() => {
 // Reversement quotidien des dons. Passe apres les remboursements (jamais deux
 // /pay en vol en meme temps) et n est JAMAIS renvoye sans confirmation.
 let dons = null;
+let alerteSansBeneficiaire = null;
 setInterval(() => {
   if (!dons || !bot?.player) return;
   const enVol = dons.enVol();
