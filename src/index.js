@@ -198,7 +198,9 @@ client.on('interactionCreate', async (interaction) => {
       texte: `\`\`\`\n${err.message}\n\`\`\``,
       champs: { Membre: qui, Action: interaction.commandName ?? interaction.customId ?? 'inconnue' },
     });
-    const payload = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
+    // Les admins voient la cause tout de suite ; les autres le message sobre.
+    const detail = estAdmin(interaction.member) ? `\n\`\`\`\n${String(err.message ?? err).slice(0, 1500)}\n\`\`\`` : '';
+    const payload = { content: `❌ Une erreur est survenue.${detail}`, flags: MessageFlags.Ephemeral };
     if (interaction.isRepliable()) {
       if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => {});
       else await interaction.reply(payload).catch(() => {});
