@@ -67,15 +67,19 @@ try { db.exec('ALTER TABLE reclamations ADD COLUMN partie TEXT'); } catch { /* d
  * relances). Rend des candidats tries par date.
  *   messages : [{ id, auteurId, auteurNom, bot, texte, pieces, date, lien }]
  */
-export function selectionnerCandidats(messages, exclusIds, dejaImportes = new Set()) {
+export function selectionnerCandidats(messages, exclusIds, dejaImportes = new Set(), bilan = null) {
   const ignores = new Set([exclusIds].flat());
   const parAuteur = new Map();
+  const b = bilan ?? {};
+  Object.assign(b, { lus: messages.length, bots: 0, auteur: 0, importes: 0, vides: 0, doublons: 0 });
   for (const m of messages) {
-    if (m.bot || ignores.has(m.auteurId)) continue;
-    if (dejaImportes.has(m.id)) continue;
+    if (m.bot) { b.bots += 1; continue; }
+    if (ignores.has(m.auteurId)) { b.auteur += 1; continue; }
+    if (dejaImportes.has(m.id)) { b.importes += 1; continue; }
     const texte = String(m.texte ?? '').trim();
-    if (!texte && !m.pieces) continue;
+    if (!texte && !m.pieces) { b.vides += 1; continue; }
     const actuel = parAuteur.get(m.auteurId);
+    if (actuel) b.doublons += 1;
     if (!actuel || m.date < actuel.date) {
       parAuteur.set(m.auteurId, {
         messageId: m.id,
@@ -204,6 +208,18 @@ export function idDuFil(texte) {
   return /^\d{15,25}$/.test(s) ? s : null;
 }
 
+/** « 137 réponses lues : 74 vouches retenus, 40 relances du même membre, … » */
+export function resumeBilan(b, retenus) {
+  const ecarts = [
+    [b.doublons, 'relance(s) d\'un membre déjà compté (une réponse par personne)'],
+    [b.auteur, 'du membre lui-même'],
+    [b.importes, 'déjà importé(s)'],
+    [b.vides, 'sans texte ni capture'],
+    [b.bots, 'de bots'],
+  ].filter(([n]) => n > 0).map(([n, quoi]) => `${n} ${quoi}`);
+  return `📊 **${b.lus}** réponse(s) lue(s) : **${retenus}** vouch(es) retenu(s)${ecarts.length ? `, ${ecarts.join(', ')}` : ''}.`;
+}
+
 export async function scannerFil(interaction, texteLien, membreForce = null) {
   if (!estStaff(interaction.member)) return interaction.reply({ content: '🔒 Réservé au staff.', ...EPH });
   const filId = idDuFil(texteLien);
@@ -218,7 +234,8 @@ export async function scannerFil(interaction, texteLien, membreForce = null) {
   if (!membreId) return interaction.editReply('❌ Auteur du post introuvable : précisez le membre avec l\'option `membre`.');
 
   const messages = await messagesDuFil(fil);
-  const tous = selectionnerCandidats(messages, [membreId, fil.ownerId], importesDeja());
+  const bilan = {};
+  const tous = selectionnerCandidats(messages, [membreId, fil.ownerId], importesDeja(), bilan);
   if (!tous.length) {
     return interaction.editReply(`Aucune réponse d'un autre membre à importer dans [${fil.name}](${fil.url}) (ou tout est déjà importé).`);
   }
@@ -238,7 +255,7 @@ export async function scannerFil(interaction, texteLien, membreForce = null) {
       'INSERT INTO reclamations (discord_id, fil_id, posts, candidats, partie, cree_at) VALUES (?, ?, ?, ?, ?, ?)',
     ).run(membreId, fil.id, JSON.stringify(posts), JSON.stringify(candidats), partie, Date.now());
     const rec = lireRec(lastInsertRowid);
-    const envoyer = (fiche) => (i === 0 ? interaction.editReply(fiche) : interaction.followUp(fiche));
+    const envoyer = (fiche) => (i === 0 ? interaction.editReply({ ...fiche, content: resumeBilan(bilan, tous.length) }) : interaction.followUp(fiche));
     const reponse = await envoyer(rendreFiche(rec)).catch(async (e) => {
       // Discord refuse parfois la fiche complete (500). On retente allegee.
       console.warn(`[reclamation] fiche ${rec.id} refusee (${e.message}), envoi allege`);
@@ -282,6 +299,7 @@ export function importer(rec, maintenant = Date.now()) {
     'INSERT OR IGNORE INTO vouch_imports (message_id, to_id, from_id, importe_at) VALUES (?, ?, ?, ?)',
   );
   let n = 0;
+  let dejaNotes = 0;
   db.exec('BEGIN');
   try {
     for (const c of JSON.parse(rec.candidats)) {
@@ -289,13 +307,16 @@ export function importer(rec, maintenant = Date.now()) {
       const trace = tracer.run(c.messageId, rec.discord_id, c.auteurId, maintenant);
       if (!trace.changes) continue; // deja importe par ailleurs
       const texte = `[Ancien vouch] ${c.texte || '(capture)'}`.slice(0, 280);
-      n += inserer.run(c.auteurId, rec.discord_id, texte, c.date).changes;
+      const ajout = inserer.run(c.auteurId, rec.discord_id, texte, c.date).changes;
+      n += ajout;
+      if (!ajout) dejaNotes += 1; // l auteur a deja un avis recent sur ce membre : il gagne
     }
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
   }
+  importer.dernierBilan = { importes: n, dejaNotes };
   return n;
 }
 
@@ -313,8 +334,12 @@ export async function onReclamationBouton(interaction) {
 
   if (action === 'ok') {
     const n = importer(rec);
+    const { dejaNotes } = importer.dernierBilan;
     db.prepare("UPDATE reclamations SET etat = 'acceptee', traite_par = ?, traite_at = ?, importes = ? WHERE id = ?")
       .run(staff, Date.now(), n, rec.id);
+    if (dejaNotes) {
+      await interaction.followUp({ content: `ℹ️ ${dejaNotes} vouch(es) non importé(s) : leur auteur a déjà noté ce membre dans le nouveau système, et son avis récent compte à la place.`, ...EPH }).catch(() => {});
+    }
     await rafraichir(client, rec.discord_id).catch((e) => console.error('[reclamation] carte :', e.message));
     if (lien && n) {
       const fil = await filDe(client, lien).catch(() => null);

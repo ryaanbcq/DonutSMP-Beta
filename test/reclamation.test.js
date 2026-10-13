@@ -81,3 +81,20 @@ test('la fiche annonce sa partie quand le post depasse 100 vouches', () => {
   assert.match(f.embeds[0].data.description, /Fiche 2\/2/);
   assert.equal(rendreFiche(creerRec('M4', [cand('z2', 'U2', 2)])).embeds[0].data.description.includes('Fiche'), false);
 });
+
+test('le bilan du scan explique chaque ecart', async () => {
+  const { resumeBilan } = await import('../src/vouch/reclamation.js');
+  const b = {};
+  const messages = [
+    msg('a1', 'A', 'vouch', 1), msg('a2', 'A', 'encore', 2), msg('a3', 'A', 'et encore', 3),
+    msg('p1', 'PROPRIO', 'merci', 4), msg('b1', 'BOT', 'x', 5, { bot: true }),
+    msg('v1', 'V', '   ', 6), msg('i1', 'I', 'vouch', 7), msg('c1', 'C', 'vouch', 8),
+  ];
+  const r = selectionnerCandidats(messages, ['PROPRIO'], new Set(['i1']), b);
+  assert.equal(r.length, 2);
+  assert.deepEqual(b, { lus: 8, bots: 1, auteur: 1, importes: 1, vides: 1, doublons: 2 });
+  const texte = resumeBilan(b, r.length);
+  assert.match(texte, /8\*\* réponse/);
+  assert.match(texte, /2 relance/);
+  assert.match(texte, /1 de bots/);
+});
