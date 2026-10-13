@@ -23,6 +23,9 @@ npm ci --no-audit --no-fund
 etape "Nouvelles cles du .env"
 node scripts/sync-env.js
 
+etape "Acces SSH a travers WARP"
+bash scripts/warp.sh
+
 etape "Slash commands"
 npm run deploy
 

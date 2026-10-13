@@ -5,6 +5,7 @@
 #   donut setup      installe ou reinstalle (idempotent)
 #   donut config     menu de configuration (token, roles, salons, admins)
 #   donut update     met a jour et redemarre
+#   donut warp       sort les IP admin du tunnel Cloudflare WARP (SSH)
 #   donut doctor     diagnostic complet
 #   donut status     etat des deux process
 #   donut logs       logs en direct
@@ -59,6 +60,7 @@ donut - bot DonutSMP FR
   donut token              saisit un nouveau token Discord
   donut auth               refait la connexion Microsoft du compte en jeu
   donut deploy             reenregistre les slash commands
+  donut warp               sort les IP de WARP_EXCLUDED_IPS du tunnel WARP (SSH)
   donut admin ...          outil staff (list, link, unlink, pending, payments)
   donut test               la suite de tests
 
@@ -164,6 +166,10 @@ case "$cmd" in
 
   deploy)
     npm run deploy
+    ;;
+
+  warp)
+    bash scripts/warp.sh
     ;;
 
   admin)

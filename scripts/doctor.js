@@ -61,6 +61,19 @@ titre('Machine');
   } catch {
     warn('pm2 introuvable', 'npm i -g pm2 (facultatif en dev)');
   }
+
+  // Cloudflare WARP : les IP admin doivent etre hors du tunnel, sinon SSH
+  // n aboutit jamais. Pas de warp-cli = pas de WARP, rien a dire.
+  try {
+    const { stdout } = await run('warp-cli', ['--accept-tos', 'tunnel', 'ip', 'list'], { timeout: 10_000 });
+    const voulues = (process.env.WARP_EXCLUDED_IPS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (voulues.length === 0) warn('WARP actif, WARP_EXCLUDED_IPS vide', 'ton IP publique dans .env puis donut warp, sinon SSH casse');
+    for (const ip of voulues) {
+      const base = ip.split('/')[0].replace(/\./g, '\\.');
+      const dedans = new RegExp(`(^|[^0-9.])${base}([^0-9]|$)`, 'm').test(stdout);
+      (dedans ? ok : warn)(`WARP exclut ${ip}`, dedans ? '' : 'donut warp');
+    }
+  } catch { /* pas de WARP sur cette machine */ }
 }
 
 // -------------------------------------------------------------------- .env

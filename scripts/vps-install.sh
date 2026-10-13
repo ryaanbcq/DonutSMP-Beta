@@ -108,6 +108,9 @@ else
   node scripts/sync-env.js
 fi
 
+etape "Acces SSH a travers WARP"
+bash scripts/warp.sh
+
 # Token, serveur, droits, intent, roles et salons. Relancable : setup.js
 # saute ce qui est deja pose et ne cree jamais en double.
 etape "Discord"

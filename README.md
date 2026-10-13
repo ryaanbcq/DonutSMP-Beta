@@ -213,6 +213,21 @@ les deux process recrees (un `pm2 restart` ne relit ni `ecosystem.config.cjs`
 ni le `.env`), puis diagnostic. Le script refuse de tourner si des
 modifications locales trainent.
 
+## VPS derriere Cloudflare WARP
+
+Si WARP tourne sur le VPS, une connexion SSH entrante n aboutit jamais : la
+reponse repart par le tunnel. `donut update` (et `donut setup`) sortent du
+tunnel les IP listees dans `WARP_EXCLUDED_IPS` du `.env` (IP publiques des
+admins, separees par des virgules). Pour l appliquer a la main :
+
+```bash
+donut warp
+```
+
+Sans `warp-cli` sur la machine, l etape ne fait rien. Les deux syntaxes de
+warp-cli sont gerees (`tunnel ip add` depuis 2023.7, `add-excluded-route`
+avant). Une IP deja exclue est sautee, rien n est jamais retire.
+
 ## Diagnostic
 
 ```bash
