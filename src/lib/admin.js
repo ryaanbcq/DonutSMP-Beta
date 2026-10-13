@@ -8,6 +8,7 @@ import { config } from '../config.js';
  * qui designe deja les responsables du serveur, et la retirer enfermerait
  * dehors le proprietaire le jour ou ADMIN_ROLE_ID pointe un role supprime.
  * Le role et les ids du .env s ajoutent a elle, ils ne la remplacent pas.
+ * Les developpeurs (DEV_USER_IDS) passent toujours, sur tout serveur.
  *
  * Le membre peut arriver sous deux formes : un GuildMember de discord.js
  * (permissions et roles sont des objets) ou le membre brut de l interaction
@@ -40,11 +41,13 @@ function aLeRole(membre, id) {
 
 export function estAdmin(membre, reglages = null) {
   if (!membre) return false;
+  const id = membre.id ?? membre.user?.id;
+  const regl = reglages ?? config.discord;
+  if (Boolean(id) && (regl.devUserIds ?? []).includes(id)) return true;
   if (gereLeServeur(membre)) return true;
   const roles = reglages ? liste(reglages.adminRoleId) : rolesAdminLus();
   if (roles.some((r) => aLeRole(membre, r))) return true;
-  const id = membre.id ?? membre.user?.id;
-  if (Boolean(id) && ((reglages ?? config.discord).adminUserIds ?? []).includes(id)) return true;
+  if (Boolean(id) && (regl.adminUserIds ?? []).includes(id)) return true;
   // Trace du refus dans donut logs discord : on voit tout de suite si c est
   // un role manquant ou une forme de membre inattendue.
   if (!reglages) {

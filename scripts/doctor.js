@@ -170,6 +170,8 @@ if (!token) {
       }
       const admins = (process.env.ADMIN_USER_IDS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
       if (admins.length) ok(`${admins.length} membre(s) admin par id`);
+      const devs = (process.env.DEV_USER_IDS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+      if (devs.length) ok(`${devs.length} developpeur(s) du bot (DEV_USER_IDS)`);
       if (!rolesAdmin.length && !admins.length) warn('aucun role admin du bot', 'seuls « Gerer le serveur » et le proprietaire ont les commandes staff : /setup general > Roles admin du bot');
       sousLeBot(process.env.BALTOP_TOP_ROLE_ID, 'BALTOP_TOP_ROLE_ID');
 

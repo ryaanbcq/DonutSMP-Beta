@@ -8,7 +8,13 @@ const membre = ({ perms = 0n, roles = [], id = '1' }) => ({
   permissions: { has: (bit) => (perms & bit) === bit },
   roles: { cache: { has: (r) => roles.includes(r) } },
 });
-const reglages = (adminRoleId = '', ids = []) => ({ adminRoleId, adminUserIds: ids });
+const reglages = (adminRoleId = '', ids = [], devs = []) => ({ adminRoleId, adminUserIds: ids, devUserIds: devs });
+
+test('un developpeur du bot passe sans role ni permission', () => {
+  assert.equal(estAdmin(membre({ id: '1559619449324044299' }), reglages('', [], ['1559619449324044299'])), true);
+  assert.equal(estAdmin({ user: { id: '1559619449324044299' }, permissions: '0', roles: [] }, reglages('', [], ['1559619449324044299'])), true);
+  assert.equal(estAdmin(membre({ id: '2' }), reglages('', [], ['1559619449324044299'])), false);
+});
 
 test('gerer le serveur suffit, meme sans role ni id configures', () => {
   assert.equal(estAdmin(membre({ perms: PermissionFlagsBits.ManageGuild }), reglages()), true);
