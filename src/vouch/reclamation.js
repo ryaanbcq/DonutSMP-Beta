@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS vouch_imports (
   importe_at  INTEGER NOT NULL
 );
 `);
+// Un fil de plus de 100 reponses est decoupe en plusieurs fiches : « 1/2 ».
+try { db.exec('ALTER TABLE reclamations ADD COLUMN partie TEXT'); } catch { /* deja la */ }
 
 // ---------------------------------------------------------------------------
 // Lecture de l ancien forum (partie pure testable : selectionnerCandidats)
@@ -138,6 +140,7 @@ export function rendreFiche(rec) {
   if (posts[0]?.auteur && posts[0].auteur !== rec.discord_id) avertissements.push(`⚠️ Le post a été ouvert par <@${posts[0].auteur}>, pas par ce membre.`);
   let description = `**Membre** : <@${rec.discord_id}>${lien ? ` · **${lien.mc_name}**` : ''}\n`
     + `**Ancien(s) post(s)** : ${posts.map((p) => `[${extrait(p.nom, 40)}](${p.lien})`).join(', ')}\n`
+    + (rec.partie ? `**Fiche ${rec.partie}** : le post a plus de ${MAX_CANDIDATS} vouches, chaque fiche s'importe séparément.\n` : '')
     + `**${candidats.length}** vouch(es) trouvé(s), **${gardes}** retenu(s).\n`
     + (avertissements.length ? `${avertissements.join('\n')}\n` : '') + '\n';
   for (const l of lignes) {
@@ -211,23 +214,33 @@ export async function scannerFil(interaction, texteLien, membreForce = null) {
   if (!membreId) return interaction.editReply('❌ Auteur du post introuvable : précisez le membre avec l\'option `membre`.');
 
   const messages = await messagesDuFil(fil);
-  const candidats = selectionnerCandidats(messages, [membreId, fil.ownerId], importesDeja()).slice(0, MAX_CANDIDATS);
-  if (!candidats.length) {
+  const tous = selectionnerCandidats(messages, [membreId, fil.ownerId], importesDeja());
+  if (!tous.length) {
     return interaction.editReply(`Aucune réponse d'un autre membre à importer dans [${fil.name}](${fil.url}) (ou tout est déjà importé).`);
   }
   if (!messages.some((m) => m.texte)) {
     console.warn('[reclamation] aucun texte lu : intent Message Content absent ou refuse ?');
   }
 
+  // Une fiche tient 100 candidats (4 menus de 25 + les boutons, limite
+  // Discord). Au dela, une fiche par tranche, chacune importable a part.
   const posts = [{ id: fil.id, nom: fil.name, lien: fil.url, auteur: fil.ownerId }];
-  const { lastInsertRowid } = db.prepare(
-    'INSERT INTO reclamations (discord_id, fil_id, posts, candidats, cree_at) VALUES (?, ?, ?, ?, ?)',
-  ).run(membreId, fil.id, JSON.stringify(posts), JSON.stringify(candidats), Date.now());
-  const rec = lireRec(lastInsertRowid);
-  const reponse = await interaction.editReply(rendreFiche(rec));
-  db.prepare('UPDATE reclamations SET fiche_salon = ?, fiche_id = ? WHERE id = ?').run(interaction.channelId, reponse.id, rec.id);
-  console.log(`[reclamation] ${interaction.user.tag} scanne ${fil.name} : ${candidats.length} candidat(s) pour ${membreId}`);
-  return reponse;
+  const tranches = [];
+  for (let i = 0; i < tous.length; i += MAX_CANDIDATS) tranches.push(tous.slice(i, i + MAX_CANDIDATS));
+  let premiere = null;
+  for (const [i, candidats] of tranches.entries()) {
+    const partie = tranches.length > 1 ? `${i + 1}/${tranches.length}` : null;
+    const { lastInsertRowid } = db.prepare(
+      'INSERT INTO reclamations (discord_id, fil_id, posts, candidats, partie, cree_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(membreId, fil.id, JSON.stringify(posts), JSON.stringify(candidats), partie, Date.now());
+    const rec = lireRec(lastInsertRowid);
+    const fiche = rendreFiche(rec);
+    const reponse = i === 0 ? await interaction.editReply(fiche) : await interaction.followUp(fiche);
+    db.prepare('UPDATE reclamations SET fiche_salon = ?, fiche_id = ? WHERE id = ?').run(interaction.channelId, reponse.id, rec.id);
+    premiere ??= reponse;
+  }
+  console.log(`[reclamation] ${interaction.user.tag} scanne ${fil.name} : ${tous.length} candidat(s) pour ${membreId}, ${tranches.length} fiche(s)`);
+  return premiere;
 }
 
 // ---------------------------------------------------------------------------

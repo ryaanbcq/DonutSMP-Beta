@@ -64,3 +64,10 @@ test('la fiche respecte les limites Discord, meme a 100 candidats', () => {
   for (const rangee of f.components.slice(0, -1)) assert.ok(rangee.components[0].options.length <= 25);
   assert.ok(f.embeds[0].data.description.length <= 4096);
 });
+
+test('la fiche annonce sa partie quand le post depasse 100 vouches', () => {
+  const rec = { ...creerRec('M3', [cand('z1', 'U1', 1)]), partie: '2/2' };
+  const f = rendreFiche(rec);
+  assert.match(f.embeds[0].data.description, /Fiche 2\/2/);
+  assert.equal(rendreFiche(creerRec('M4', [cand('z2', 'U2', 2)])).embeds[0].data.description.includes('Fiche'), false);
+});
