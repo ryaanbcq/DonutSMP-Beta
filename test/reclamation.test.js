@@ -63,6 +63,16 @@ test('la fiche respecte les limites Discord, meme a 100 candidats', () => {
   assert.ok(f.components.length <= 5);
   for (const rangee of f.components.slice(0, -1)) assert.ok(rangee.components[0].options.length <= 25);
   assert.ok(f.embeds[0].data.description.length <= 4096);
+  for (const rangee of f.components.slice(0, -1)) {
+    for (const o of rangee.components[0].options) {
+      assert.ok(o.data.label.length <= 50);
+      assert.ok(o.data.description.length <= 60);
+    }
+  }
+  const l = rendreFiche(creerRec('M2b', beaucoup), { leger: true });
+  assert.equal(l.components[0].components[0].options[0].data.description, undefined);
+  assert.ok(!l.embeds[0].data.description.includes('[↗]'));
+  assert.ok(JSON.stringify(l).length < JSON.stringify(f).length * 0.7);
 });
 
 test('la fiche annonce sa partie quand le post depasse 100 vouches', () => {

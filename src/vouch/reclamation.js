@@ -25,7 +25,10 @@ import { journal } from '../ops/journal.js';
 import { rafraichir, filDe } from './fils.js';
 
 const PAR_MENU = 25;
-const MAX_CANDIDATS = PAR_MENU * 4; // 4 menus + 1 rangee de boutons = limite Discord
+// 4 menus + 1 rangee de boutons est la limite Discord, mais a 100 candidats
+// (options avec descriptions, 100 liens dans l embed) Discord repond 500
+// Internal Server Error. 50 par fiche passe ; au dela, plusieurs fiches.
+const MAX_CANDIDATS = PAR_MENU * 2;
 const MAX_PAGES_MESSAGES = 10; // 1000 reponses par post, largement assez
 const EPH = { flags: MessageFlags.Ephemeral };
 
@@ -122,7 +125,8 @@ function importesDeja() {
 const lireRec = (id) => db.prepare('SELECT * FROM reclamations WHERE id = ?').get(Number(id)) ?? null;
 const extrait = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-export function rendreFiche(rec) {
+/** `leger` : sans descriptions d options ni liens, si Discord refuse la fiche complete. */
+export function rendreFiche(rec, { leger = false } = {}) {
   const candidats = JSON.parse(rec.candidats);
   const exclus = new Set(JSON.parse(rec.exclus));
   const posts = JSON.parse(rec.posts);
@@ -130,9 +134,9 @@ export function rendreFiche(rec) {
   const gardes = candidats.filter((c) => !exclus.has(c.messageId)).length;
 
   const lignes = candidats.map((c, i) => {
-    const texte = c.texte ? `« ${extrait(c.texte.replace(/\s+/g, ' '), 70)} »` : '*(capture seule)*';
+    const texte = c.texte ? `« ${extrait(c.texte.replace(/\s+/g, ' '), leger ? 40 : 70)} »` : '*(capture seule)*';
     const ligne = `\`${i + 1}.\` <@${c.auteurId}> · <t:${Math.floor(c.date / 1000)}:d> · ${texte}`
-      + `${c.pieces ? ` 📎${c.pieces}` : ''} [↗](${c.lien})`;
+      + `${c.pieces ? ` 📎${c.pieces}` : ''}${leger ? '' : ` [↗](${c.lien})`}`;
     return exclus.has(c.messageId) ? `~~${ligne}~~` : ligne;
   });
   const avertissements = [];
@@ -173,8 +177,8 @@ export function rendreFiche(rec) {
       .setMinValues(0)
       .setMaxValues(tranche.length)
       .addOptions(tranche.map((c, i) => ({
-        label: extrait(`${debut + i + 1}. ${c.auteurNom}`, 100),
-        description: extrait(c.texte || '(capture seule)', 100),
+        label: extrait(`${debut + i + 1}. ${c.auteurNom}`, 50),
+        ...(leger ? {} : { description: extrait((c.texte || '(capture seule)').replace(/\s+/g, ' '), 60) }),
         value: c.messageId,
         default: exclus.has(c.messageId),
       })));
@@ -234,8 +238,12 @@ export async function scannerFil(interaction, texteLien, membreForce = null) {
       'INSERT INTO reclamations (discord_id, fil_id, posts, candidats, partie, cree_at) VALUES (?, ?, ?, ?, ?, ?)',
     ).run(membreId, fil.id, JSON.stringify(posts), JSON.stringify(candidats), partie, Date.now());
     const rec = lireRec(lastInsertRowid);
-    const fiche = rendreFiche(rec);
-    const reponse = i === 0 ? await interaction.editReply(fiche) : await interaction.followUp(fiche);
+    const envoyer = (fiche) => (i === 0 ? interaction.editReply(fiche) : interaction.followUp(fiche));
+    const reponse = await envoyer(rendreFiche(rec)).catch(async (e) => {
+      // Discord refuse parfois la fiche complete (500). On retente allegee.
+      console.warn(`[reclamation] fiche ${rec.id} refusee (${e.message}), envoi allege`);
+      return envoyer(rendreFiche(rec, { leger: true }));
+    });
     db.prepare('UPDATE reclamations SET fiche_salon = ?, fiche_id = ? WHERE id = ?').run(interaction.channelId, reponse.id, rec.id);
     premiere ??= reponse;
   }
@@ -258,7 +266,7 @@ export async function onReclamationSelect(interaction) {
   const tranche = new Set(candidats.slice(Number(page) * PAR_MENU, (Number(page) + 1) * PAR_MENU).map((c) => c.messageId));
   const exclus = JSON.parse(rec.exclus).filter((m) => !tranche.has(m)).concat(interaction.values);
   db.prepare('UPDATE reclamations SET exclus = ? WHERE id = ?').run(JSON.stringify(exclus), rec.id);
-  return interaction.update(rendreFiche(lireRec(id)));
+  return interaction.update(rendreFiche(lireRec(id))).catch(() => interaction.editReply(rendreFiche(lireRec(id), { leger: true })));
 }
 
 /**
