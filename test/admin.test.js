@@ -43,3 +43,14 @@ test('plusieurs roles staff : un seul suffit', () => {
   assert.equal(estAdmin(membre({ roles: ['30', '99'] }), r), true);
   assert.equal(estAdmin(membre({ roles: ['99'] }), r), false);
 });
+
+test('membre brut de l interaction (guilde hors cache) : permissions en chaine, roles en tableau', () => {
+  const r = reglages('42', ['8']);
+  const brut = (o) => ({ user: { id: '9' }, permissions: '0', roles: [], ...o });
+  assert.equal(estAdmin(brut({ permissions: String(PermissionFlagsBits.ManageGuild) }), r), true);
+  assert.equal(estAdmin(brut({ permissions: String(PermissionFlagsBits.Administrator) }), r), true);
+  assert.equal(estAdmin(brut({ roles: ['42'] }), r), true);
+  assert.equal(estAdmin(brut({ user: { id: '8' } }), r), true);
+  assert.equal(estAdmin(brut({ roles: ['41'] }), r), false);
+  assert.equal(estAdmin(brut({ permissions: 'nimporte' }), r), false);
+});

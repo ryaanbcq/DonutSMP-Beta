@@ -156,14 +156,21 @@ if (!token) {
         else ok(`${quoi} donnable`, r.name);
       };
       sousLeBot(process.env.VERIFIED_ROLE_ID, 'VERIFIED_ROLE_ID');
-      if (process.env.ADMIN_ROLE_ID) {
-        const r = roles.find((x) => x.id === process.env.ADMIN_ROLE_ID);
+      // Les roles admin du bot vivent en base depuis /setup general ; le .env
+      // n est que la valeur de depart. On lit ce que le bot lit vraiment.
+      let rolesAdmin = (process.env.ADMIN_ROLE_ID ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+      try {
+        const { settings } = await import('../src/settings.js');
+        rolesAdmin = settings.rolesAdmin();
+      } catch { /* base illisible : on reste sur le .env */ }
+      for (const id of rolesAdmin) {
+        const r = roles.find((x) => x.id === id);
         // Pas besoin d etre sous le bot : ce role n est jamais donne, seulement lu.
-        (r ? ok : ko)('ADMIN_ROLE_ID', r ? r.name : `introuvable : ${process.env.ADMIN_ROLE_ID}`);
+        (r ? ok : ko)('role admin du bot', r ? r.name : `introuvable : ${id} (a refaire dans /setup general)`);
       }
       const admins = (process.env.ADMIN_USER_IDS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
       if (admins.length) ok(`${admins.length} membre(s) admin par id`);
-      if (!process.env.ADMIN_ROLE_ID && !admins.length) warn('aucun admin configure', 'seuls les « Gerer le serveur » ont les commandes staff');
+      if (!rolesAdmin.length && !admins.length) warn('aucun role admin du bot', 'seuls « Gerer le serveur » et le proprietaire ont les commandes staff : /setup general > Roles admin du bot');
       sousLeBot(process.env.BALTOP_TOP_ROLE_ID, 'BALTOP_TOP_ROLE_ID');
 
       for (const [cle, quoi] of [['LOG_CHANNEL_ID', 'salon de logs'], ['BALTOP_CHANNEL_ID', 'salon du classement'], ['LINK_CHANNEL_ID', 'salon de connexion'], ['OPS_CHANNEL_ID', 'salon du journal'], ['DONATION_LOG_CHANNEL_ID', 'salon des dons'], ['DONATION_CHANNEL_ID', 'salon donations']]) {
