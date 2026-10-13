@@ -229,26 +229,17 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
 }
 
 /**
- * Copie de la carte de reputation gardee en DERNIER message du fil (la carte
- * de depart reste en tete : c est l apercu du forum). Deja en bas = simple
- * edition ; sinon l ancienne copie est supprimee et une neuve est postee.
+ * Il y a eu une copie de la carte de reputation en dernier message du fil
+ * (avec son bouton « Donner un avis »). Retiree le 13/10 : deux cartes
+ * identiques dans le post. Seule la carte de depart reste ; la copie encore
+ * en place dans les anciens fils est supprimee au passage.
  */
-async function panelEnBas(fil, link) {
+async function retirerPanelEnBas(fil, link) {
   const cle = `panel:${link.discord_id}`;
   const ancienId = store.kvGet(cle);
-  // Fil vide d avis : la carte de depart est deja le dernier message.
-  if (!store.vouchAll(link.discord_id).some((v) => v.message_id)) {
-    if (ancienId) await fil.messages.delete(ancienId).catch(() => {});
-    if (ancienId) store.kvSet(cle, '');
-    return;
-  }
-  if (ancienId && fil.lastMessageId === ancienId) {
-    const m = await fil.messages.fetch(ancienId).catch(() => null);
-    if (m && await m.edit(carteReputation(link)).then(() => true).catch(() => false)) return;
-  }
-  if (ancienId) await fil.messages.delete(ancienId).catch(() => {});
-  const m = await fil.send(carteReputation(link)).catch((e) => { console.warn('[vouch] panel :', e.message); return null; });
-  store.kvSet(cle, m ? m.id : '');
+  if (!ancienId) return;
+  await fil.messages.delete(ancienId).catch(() => {});
+  store.kvSet(cle, '');
 }
 
 /** Reecrit la carte de reputation et pose ou retire le role Trusted. */
@@ -260,7 +251,7 @@ export async function rafraichir(client, discordId) {
     await reveiller(fil);
     const carte = await fil.fetchStarterMessage().catch(() => null);
     if (carte) await carte.edit(carteReputation(link)).catch((e) => console.warn('[vouch] carte :', e.message));
-    await panelEnBas(fil, link);
+    await retirerPanelEnBas(fil, link);
     const forum = await salonVouch(client);
     if (forum) await fil.setAppliedTags(await tagDe(forum, trustDe(discordId).palier)).catch(() => {});
   }
