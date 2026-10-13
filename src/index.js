@@ -37,6 +37,7 @@ import { demarrerLogDons, logDon, salonDonsActif } from './dons/log.js';
 import { onSelectionCategorie, onFormulaireOuverture, onBoutonTicket, onSelectTicket } from './tickets/manager.js';
 import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { estAdmin } from './lib/admin.js';
+import { appliquerPresence } from './commands/statut.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
 import { assurerFils, rafraichir, reveillerFils } from './vouch/fils.js';
 import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
@@ -73,6 +74,8 @@ client.once('clientReady', async (c) => {
     champs: { Commandes: client.commands.size, 'Comptes liés': store.countLinks() },
   });
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
+  // Statut et statut personnalise choisis par /statut, retenus en base.
+  try { const p = appliquerPresence(c); console.log(`[statut] ${p.statut} « ${p.texte} »`); } catch (e) { console.warn('[statut] :', e.message); }
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
   console.log(`[link] compte receveur : ${compteBot()}`);
 

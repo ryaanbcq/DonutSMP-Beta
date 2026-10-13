@@ -372,6 +372,7 @@ joueur qui s'est trompe de montant.
 | `/vouches retirer <membre>` | verifie | Retire son avis |
 | `/baltop [categorie]` | verifie | Classement DonutSMP |
 | `/stats [pseudo]` | verifie | Stats d'un joueur |
+| `/statut voir`, `changer`, `effacer` | staff | Statut du bot (en ligne, inactif, ne pas deranger, invisible) et statut personnalise, retenus au redemarrage |
 
 ## Dev
 
