@@ -36,6 +36,8 @@ import { compteBot, changementEnCours } from '../ingame/compte.js';
 import { lireCodeMsa, demanderRelink } from '../ops/actions.js';
 import { journal as noterJournal } from '../ops/journal.js';
 import { duree } from '../../ingame/diagnostic.js';
+import { pageTags, onTagsSelect, onTagsBouton, onTagsModal } from '../tags/setup.js';
+import { reglagesTags } from '../tags/surveillance.js';
 
 const ok = (v) => (v ? '✅' : '⚠️');
 const salon = (id) => (id ? `<#${id}>` : '*à choisir*');
@@ -93,6 +95,10 @@ export async function rendreSetupGeneral(guild, note = '') {
         new ButtonBuilder().setCustomId('gsetup:page:dons').setLabel('Dons').setEmoji('💝').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:logs').setLabel('Logs').setEmoji('📋').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:bot').setLabel('Bot en jeu').setEmoji('🤖').setStyle(ButtonStyle.Secondary),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('gsetup:page:tags').setLabel(`Tags interdits (${reglagesTags.regles().length})`)
+          .setEmoji('🏷️').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -345,6 +351,7 @@ export async function onGsetupSelect(interaction) {
   const { guild, client } = interaction;
   const id = interaction.customId.slice('gsetup:'.length);
   const valeur = interaction.values[0] ?? '';
+  if (id.startsWith('tags:')) return onTagsSelect(interaction, id);
 
   if (id === 'admin') {
     const avant = settings.rolesAdmin();
@@ -431,6 +438,8 @@ export async function onGsetupBouton(interaction) {
   const { guild } = interaction;
   const id = interaction.customId.slice('gsetup:'.length);
 
+  if (id.startsWith('tags:')) return onTagsBouton(interaction, id);
+  if (id === 'page:tags') return interaction.update(pageTags());
   if (id === 'beneficiaire') {
     return interaction.showModal(new ModalBuilder().setCustomId('gsetup:beneficiaire').setTitle('Bénéficiaire des dons')
       .addComponents(new ActionRowBuilder().addComponents(
@@ -487,6 +496,8 @@ export async function onGsetupBouton(interaction) {
 
 export async function onGsetupModal(interaction) {
   const { guild, client } = interaction;
+  const id = interaction.customId.slice('gsetup:'.length);
+  if (id.startsWith('tags:')) return onTagsModal(interaction, id);
   const pseudo = interaction.fields.getTextInputValue('pseudo').trim();
   if (pseudo && !/^\.?[A-Za-z0-9_]{1,24}$/.test(pseudo)) {
     return interaction.update(pageDons(`❌ « ${pseudo} » n'est pas un pseudo Minecraft.`));

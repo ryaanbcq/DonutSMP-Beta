@@ -41,6 +41,8 @@ import { appliquerPresence } from './commands/statut.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
 import { assurerFils, rafraichir, reveillerFils } from './vouch/fils.js';
 import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
+import { demarrerSurveillanceTags } from './tags/surveillance.js';
+import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +61,9 @@ async function loadCommands() {
 const intents = [GatewayIntentBits.Guilds];
 // Sans cet intent les transcripts de tickets n ont pas le texte des messages.
 if (config.discord.messageContent) intents.push(GatewayIntentBits.MessageContent);
+// Tags interdits : il faut la liste des membres. L intent n est demande que
+// s il est coche dans le portail, sinon Discord refuserait la connexion.
+if (await intentMembresCoche(config.discord.token)) intents.push(GatewayIntentBits.GuildMembers);
 const client = new Client({ intents });
 client.commands = await loadCommands();
 
@@ -124,6 +129,7 @@ client.once('clientReady', async (c) => {
   const fils = await assurerFils(c).catch((e) => { console.error('[vouch] fils :', e.message); return 0; });
   if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
   setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();
+  demarrerSurveillanceTags(c);
 });
 
 // Coupures de la passerelle Discord : discord.js reprend seul, on annonce la
