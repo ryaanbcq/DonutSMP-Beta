@@ -1,5 +1,6 @@
-// /warn, /kick, /mute, /unmute, /ban, /unban : moderation reservee aux admins
-// du bot (role choisi dans /setup general, ou « Gerer le serveur »).
+// /warn, /kick, /mute, /unmute, /ban, /unban : moderation reservee aux ids de
+// mod.autorises si la liste est posee, sinon aux admins du bot (role choisi
+// dans /setup general, ou « Gerer le serveur »).
 //
 // Garde-fous, verifies cote serveur a chaque commande :
 //   - jamais soi-meme, jamais le proprietaire, jamais un bot ;
@@ -104,9 +105,20 @@ export function refusHierarchie({ moderateur, cible, guild }) {
 
 // ------------------------------------------------------------------ execution
 
+/**
+ * Qui peut sanctionner. Si une liste d ids est posee en base (mod.autorises,
+ * ids separes par des virgules), elle seule fait foi, admins du bot compris ;
+ * sinon les admins du bot.
+ */
+export function peutSanctionner(membre, autorises = String(store.kvGet('mod.autorises') ?? '')) {
+  const liste = autorises.split(',').map((x) => x.trim()).filter(Boolean);
+  if (liste.length) return liste.includes(membre?.id ?? membre?.user?.id);
+  return estAdmin(membre);
+}
+
 async function executer(nom, interaction) {
-  if (!estAdmin(interaction.member)) {
-    return interaction.reply({ content: '🔒 Réservé aux admins du bot (rôle choisi dans /setup general).', ...EPH });
+  if (!peutSanctionner(interaction.member)) {
+    return interaction.reply({ content: '🔒 Tu n\'as pas la permission de sanctionner.', ...EPH });
   }
   const { guild } = interaction;
   const raison = interaction.options.getString('raison', true).trim();

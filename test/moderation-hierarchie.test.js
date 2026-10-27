@@ -34,3 +34,12 @@ test('registre : avertissements comptes, ban temporaire pose puis retire', () =>
   registre.poserBanTemp('u2', null);
   assert.equal(registre.bansTemp().u2, undefined);
 });
+
+test('permission de sanctionner : la liste d ids posee fait seule foi', async () => {
+  const { peutSanctionner } = await import('../src/moderation/actions.js');
+  const liste = '689896112383066156, 777943506458247198,1544749036823646341';
+  assert.equal(peutSanctionner({ id: '777943506458247198' }, liste), true);
+  assert.equal(peutSanctionner({ user: { id: '1544749036823646341' } }, liste), true);
+  // Meme avec « Gerer le serveur », hors liste = refus.
+  assert.equal(peutSanctionner({ id: '1', permissions: { has: () => true } }, liste), false);
+});
