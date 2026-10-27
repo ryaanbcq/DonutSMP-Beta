@@ -1,9 +1,13 @@
 // Surveillance des tags de serveur : un membre qui affiche un tag interdit
-// (reglages dans /setup general > Tags) est signale au staff et sanctionne.
+// (reglages dans /setup general > Tags interdits) est signale au staff et
+// sanctionne selon la regle du tag (escalade progressive ou sanction directe,
+// voir regles.js).
 //
-// Trois moments de controle :
-//   - a l arrivee d un membre ;
+// Moments de controle :
+//   - a l arrivee d un membre (un banni temporaire qui revient compris) ;
 //   - quand Discord pousse une mise a jour de son profil (userUpdate) ;
+//   - toutes les 5 minutes, les echeances : etapes dont le delai est ecoule,
+//     bans temporaires a lever ;
 //   - un balayage complet de tous les membres, au demarrage puis toutes les
 //     heures : Discord ne garantit pas de prevenir quand quelqu un change de
 //     tag, le balayage est le filet.
@@ -12,9 +16,9 @@
 // developpeur) : sans lui, Discord ne donne ni la liste des membres ni leurs
 // arrivees, et la surveillance reste a l arret (signale au journal).
 //
-// On retient en base qui a deja ete sanctionne, et pour quelle regle : un
-// balayage ne realerte pas, ne resanctionne pas. Le staff (admins du bot,
-// « Gerer le serveur »), le proprietaire et les bots ne sont jamais touches.
+// Le casier de chaque membre vit en base (tags.vus) : un balayage ne
+// realerte pas et ne resanctionne pas. Le staff (admins du bot, « Gerer le
+// serveur »), le proprietaire et les bots ne sont jamais touches.
 
 import { GatewayIntentBits } from 'discord.js';
 import { config } from '../config.js';
@@ -23,31 +27,51 @@ import { settings } from '../settings.js';
 import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
 import {
-  SANCTIONS, SANCTION_DEFAUT, decision, libelle, cleRegle,
+  SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE,
 } from './regles.js';
 
 const BALAYAGE_MS = 60 * 60_000;
+const ECHEANCES_MS = 5 * 60_000;
 // Au dela, un balayage poste un recapitulatif au lieu d un message par membre
 // (une regle ajoutee peut viser des dizaines de membres d un coup).
 const DETAIL_MAX = 5;
+const H = 3_600_000;
+const J = 24 * H;
 
 // ------------------------------------------------------------------ reglages
 
 const json = (cle, defaut) => {
   try { return JSON.parse(store.kvGet(cle) ?? '') ?? defaut; } catch { return defaut; }
 };
+const nombre = (cle, defaut, max) => {
+  const v = Number(store.kvGet(cle));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, max) : defaut;
+};
 
 export const reglagesTags = {
   regles: () => json('tags.regles', []),
   poserRegles: (liste) => store.kvSet('tags.regles', JSON.stringify(liste)),
-  sanction: () => (SANCTIONS[store.kvGet('tags.sanction')] ? store.kvGet('tags.sanction') : SANCTION_DEFAUT),
-  poserSanction: (s) => store.kvSet('tags.sanction', SANCTIONS[s] ? s : SANCTION_DEFAUT),
-  heuresExclusion: () => {
-    const h = Number(store.kvGet('tags.exclusionHeures'));
-    return Number.isFinite(h) && h > 0 ? Math.min(h, 24 * 28) : 24;
+  // Delais en heures / jours, comme on les saisit.
+  delaiHeures: () => nombre('tags.delaiHeures', 24, 24 * 30),
+  muteHeures: () => nombre('tags.exclusionHeures', 24, 24 * 28), // plafond Discord : 28 jours
+  banTempJours: () => nombre('tags.banTempJours', 7, 365),
+  oubliJours: () => nombre('tags.oubliJours', 30, 3650),
+  poserDelais: ({ delai, mute, banTemp, oubli }) => {
+    store.kvSet('tags.delaiHeures', String(delai));
+    store.kvSet('tags.exclusionHeures', String(mute));
+    store.kvSet('tags.banTempJours', String(banTemp));
+    store.kvSet('tags.oubliJours', String(oubli));
   },
-  poserHeuresExclusion: (h) => store.kvSet('tags.exclusionHeures', String(h)),
-  // userId -> cle de la regle deja sanctionnee
+  // Salon ou les avertissements sont annonces (#chat-fr). Vide = MP seulement.
+  salonPublic: () => store.kvGet('tags.salonPublic') || null,
+  poserSalonPublic: (id) => store.kvSet('tags.salonPublic', id ? String(id) : ''),
+  params: () => ({
+    delaiMs: reglagesTags.delaiHeures() * H,
+    muteMs: reglagesTags.muteHeures() * H,
+    banTempMs: reglagesTags.banTempJours() * J,
+    oubliMs: reglagesTags.oubliJours() * J,
+  }),
+  // userId -> casier (voir evaluer dans regles.js)
   vus: () => json('tags.vus', {}),
   poserVus: (v) => store.kvSet('tags.vus', JSON.stringify(v)),
 };
@@ -71,132 +95,225 @@ function exempt(membre) {
   return estAdmin(membre, { ...config.discord, adminRoleId: settings.rolesAdmin() });
 }
 
-// ------------------------------------------------------------------ sanctions
+const heures = (ms) => (ms % J === 0 ? `${ms / J} jour${ms / J > 1 ? 's' : ''}` : `${Math.round(ms / H)} h`);
+const quand = (ts) => `<t:${Math.floor(ts / 1000)}:R>`;
 
-async function prevenir(membre, regle, sanction) {
-  const tag = membre.user.primaryGuild?.tag ?? regle.valeur.toUpperCase();
-  const suite = {
-    role: 'Ton rôle **Vérifié** t\'a été retiré. Il te sera rendu dès que tu retires ce tag.',
-    exclure: `Tu es réduit au silence pour ${reglagesTags.heuresExclusion()} h.`,
-    expulser: 'Tu as été expulsé du serveur.',
-    bannir: 'Tu as été banni du serveur.',
-  }[sanction];
-  if (!suite) return;
-  await membre.send(`⚠️ Le tag de serveur **${tag}** n'est pas autorisé sur **${membre.guild.name}**.\n${suite}`)
-    .catch(() => {});
+// ------------------------------------------------------------------ messages
+
+/**
+ * Textes d une etape : MP au membre, annonce publique. `tag` est le tag tel
+ * qu il s affiche, `prochaine` l echeance de l etape suivante.
+ */
+function textes(etape, { id, nom, tag, prochaine, p }) {
+  const t = `**${tag}**`;
+  switch (etape) {
+    case 'avertissement': return {
+      mp: `⚠️ Le tag de serveur ${t} n'est pas autorisé sur **${nom}**. Retire-le ${quand(prochaine)}, sinon tu seras mute ${heures(p.muteMs)}. (avertissement 1/3)`,
+      public: `⚠️ <@${id}>, le tag ${t} n'est pas autorisé ici. Retire-le ${quand(prochaine)}, sinon mute ${heures(p.muteMs)}. (avertissement 1/3)`,
+    };
+    case 'mute': return {
+      mp: `🔇 Tu es mute ${heures(p.muteMs)} sur **${nom}** : tag ${t} toujours affiché. Retire-le ${quand(prochaine)}, sinon ban de ${heures(p.banTempMs)}. (avertissement 2/3)`,
+      public: `🔇 <@${id}> est mute ${heures(p.muteMs)} : tag ${t} toujours affiché. Prochaine étape ${quand(prochaine)} : ban de ${heures(p.banTempMs)}. (avertissement 2/3)`,
+    };
+    case 'ban_temp': return {
+      mp: `⛔ Tu es banni ${heures(p.banTempMs)} de **${nom}** : tag ${t} toujours affiché. Si tu reviens avec ce tag, tu auras un dernier avertissement avant le ban définitif.`,
+      public: `⛔ <@${id}> est banni ${heures(p.banTempMs)} : tag ${t} toujours affiché.`,
+    };
+    case 'dernier_avertissement': return {
+      mp: `⚠️ **Dernier avertissement** : retire le tag ${t} ${quand(prochaine)}, sinon tu seras banni définitivement de **${nom}**. (avertissement 3/3)`,
+      public: `⚠️ <@${id}>, **dernier avertissement** : retire le tag ${t} ${quand(prochaine)}, sinon ban définitif. (avertissement 3/3)`,
+    };
+    case 'ban_def': return {
+      mp: `⛔ Tu es banni définitivement de **${nom}** : tag ${t} toujours affiché après trois avertissements.`,
+      public: `⛔ <@${id}> est banni définitivement : tag ${t} toujours affiché après trois avertissements.`,
+    };
+    // Sanctions directes : MP seulement.
+    case 'role': return { mp: `⚠️ Le tag ${t} n'est pas autorisé sur **${nom}**. Ton rôle **Vérifié** t'a été retiré, il te sera rendu dès que tu retires ce tag.` };
+    case 'exclure': return { mp: `🔇 Tu es mute ${heures(p.muteMs)} sur **${nom}** : le tag ${t} n'y est pas autorisé.` };
+    case 'expulser': return { mp: `⛔ Tu as été expulsé de **${nom}** : le tag ${t} n'y est pas autorisé.` };
+    case 'bannir': return { mp: `⛔ Tu as été banni de **${nom}** : le tag ${t} n'y est pas autorisé.` };
+    default: return {};
+  }
 }
 
-/** Applique la sanction. Rend le resultat lisible pour le journal. */
-async function sanctionner(membre, regle, sanction) {
-  const raison = `Tag de serveur interdit (${libelle(regle).replace(/`/g, '')})`;
-  if (sanction === 'alerte') return 'aucune action, alerte seulement';
-  if (sanction === 'role') {
-    const role = settings.roleVerifie();
-    if (!role) return '❌ aucun rôle Vérifié configuré';
-    if (!membre.roles.cache.has(role)) return 'pas de rôle Vérifié à retirer';
-    if (!membre.manageable) return '❌ son rôle est au-dessus du mien';
-    await prevenir(membre, regle, sanction);
-    await membre.roles.remove(role, raison);
-    return 'rôle Vérifié retiré';
+async function annoncer(guild, texte, id) {
+  const salonId = reglagesTags.salonPublic();
+  if (!salonId || !texte) return;
+  const salon = await guild.channels.fetch(salonId).catch(() => null);
+  await salon?.send({ content: texte, allowedMentions: { users: [id] } })
+    .catch((e) => console.warn('[tags] annonce publique :', e.message));
+}
+
+// ------------------------------------------------------------------ sanctions
+
+/** Applique une sanction (etape ou directe). Rend { resultat, ok, etat? }. */
+async function appliquer(membre, { sanction, regle, etat }) {
+  const p = reglagesTags.params();
+  const raison = `Tag de serveur interdit : ${libelle(regle).replace(/[`*]/g, '')}`;
+  const tag = membre.user.primaryGuild?.tag ?? regle.valeur.toUpperCase();
+  const msg = textes(sanction, {
+    id: membre.id, nom: membre.guild.name, tag, prochaine: etat.prochaine, p,
+  });
+  const mp = () => (msg.mp ? membre.send(msg.mp).catch(() => {}) : null);
+  const echec = (r) => ({ ok: false, resultat: `❌ ${r}` });
+
+  switch (sanction) {
+    case 'alerte':
+      return { ok: true, resultat: 'aucune action, alerte seulement' };
+    case 'avertissement':
+    case 'dernier_avertissement':
+      await mp();
+      await annoncer(membre.guild, msg.public, membre.id);
+      return { ok: true, resultat: sanction === 'avertissement' ? 'averti (1/3)' : 'dernier avertissement (3/3)' };
+    case 'mute':
+    case 'exclure':
+      if (!membre.moderatable) return echec('je ne peux pas le mute (droit « Exclure temporairement » ou hiérarchie)');
+      await membre.timeout(p.muteMs, raison);
+      await mp();
+      await annoncer(membre.guild, msg.public, membre.id);
+      return { ok: true, resultat: `mute ${heures(p.muteMs)}${sanction === 'mute' ? ' (2/3)' : ''}` };
+    case 'role': {
+      const role = settings.roleVerifie();
+      if (!role) return echec('aucun rôle Vérifié configuré');
+      if (!membre.roles.cache.has(role)) return { ok: true, resultat: 'pas de rôle Vérifié à retirer' };
+      if (!membre.manageable) return echec('son rôle est au-dessus du mien');
+      await mp();
+      await membre.roles.remove(role, raison);
+      return { ok: true, resultat: 'rôle Vérifié retiré' };
+    }
+    case 'expulser':
+      if (!membre.kickable) return echec('je ne peux pas l\'expulser (droit « Expulser » ou hiérarchie)');
+      await mp(); // avant : apres le depart, plus de serveur commun pour le MP
+      await membre.kick(raison);
+      return { ok: true, resultat: 'expulsé' };
+    case 'ban_temp':
+    case 'ban_def':
+    case 'bannir': {
+      if (!membre.bannable) return echec('je ne peux pas le bannir (droit « Bannir » ou hiérarchie)');
+      await mp();
+      await membre.ban({ reason: sanction === 'ban_temp' ? `${raison} (${heures(p.banTempMs)})` : raison });
+      await annoncer(membre.guild, msg.public, membre.id);
+      if (sanction === 'ban_temp') {
+        return { ok: true, resultat: `banni ${heures(p.banTempMs)}`, etat: { ...etat, banJusqua: Date.now() + p.banTempMs } };
+      }
+      return { ok: true, resultat: sanction === 'ban_def' ? 'banni définitivement' : 'banni' };
+    }
+    default:
+      return echec(`sanction inconnue : ${sanction}`);
   }
-  if (sanction === 'exclure') {
-    if (!membre.moderatable) return '❌ je ne peux pas l\'exclure (droit « Exclure temporairement » ou hiérarchie)';
-    const h = reglagesTags.heuresExclusion();
-    await prevenir(membre, regle, sanction);
-    await membre.timeout(h * 3_600_000, raison);
-    return `exclu ${h} h`;
-  }
-  if (sanction === 'expulser') {
-    if (!membre.kickable) return '❌ je ne peux pas l\'expulser (droit « Expulser » ou hiérarchie)';
-    await prevenir(membre, regle, sanction);
-    await membre.kick(raison);
-    return 'expulsé';
-  }
-  if (sanction === 'bannir') {
-    if (!membre.bannable) return '❌ je ne peux pas le bannir (droit « Bannir » ou hiérarchie)';
-    await prevenir(membre, regle, sanction);
-    await membre.ban({ reason: raison });
-    return 'banni';
-  }
-  return 'sanction inconnue';
 }
 
 /** Le tag n est plus porte : on rend le role Verifie s il lui revient. */
-async function lever(membre) {
+async function rendreRole(membre, casier) {
   const role = settings.roleVerifie();
-  if (reglagesTags.sanction() !== 'role' || !role || !store.getLink(membre.id)) return null;
+  if (casier?.mode !== 'role' || !role || !store.getLink(membre.id)) return null;
   if (membre.roles.cache.has(role) || !membre.manageable) return null;
   await membre.roles.add(role, 'Tag de serveur interdit retiré').catch(() => {});
   return 'rôle Vérifié rendu';
 }
 
+const TITRES = {
+  avertissement: 'Tag interdit : avertissement 1/3',
+  mute: 'Tag interdit : mute (avertissement 2/3)',
+  ban_temp: 'Tag interdit : ban temporaire',
+  dernier_avertissement: 'Tag interdit : dernier avertissement',
+  ban_def: 'Tag interdit : ban définitif',
+};
+
 /**
- * Controle un membre. Rend un compte rendu si quelque chose a ete fait, sinon
- * null. `muet` : le balayage regroupe lui meme les messages.
+ * Controle un membre. Rend un compte rendu si une sanction a ete appliquee,
+ * sinon null. `muet` : le balayage regroupe lui meme les messages.
  */
 async function controler(membre, { muet = false } = {}) {
   const vus = reglagesTags.vus();
-  const d = decision({
+  const avant = lireEtat(vus[membre.id]);
+  const d = evaluer({
     primaryGuild: membre.user?.primaryGuild,
     regles: reglagesTags.regles(),
-    deja: vus[membre.id],
+    etat: avant,
     exempt: exempt(membre),
+    params: reglagesTags.params(),
   });
+
+  const enregistrer = (etat) => {
+    const v = reglagesTags.vus();
+    if (etat) v[membre.id] = etat; else delete v[membre.id];
+    reglagesTags.poserVus(v);
+  };
+
+  if (d.action === 'oublier') { enregistrer(null); return null; }
+
   if (d.action === 'rien') {
-    // Deja sanctionne mais le role Verifie est revenu (relink, staff) : on le
-    // retire de nouveau, sans realerter.
+    // Sanction « role » deja appliquee mais le role est revenu (relink, staff) :
+    // on le retire de nouveau, sans realerter.
     const role = settings.roleVerifie();
-    if (d.regle && reglagesTags.sanction() === 'role' && role && membre.roles.cache.has(role) && membre.manageable) {
+    if (d.regle && avant?.mode === 'role' && role && membre.roles.cache.has(role) && membre.manageable) {
       await membre.roles.remove(role, 'Tag de serveur interdit toujours affiché').catch(() => {});
     }
     return null;
   }
 
   if (d.action === 'leve') {
-    delete vus[membre.id];
-    reglagesTags.poserVus(vus);
-    const rendu = await lever(membre).catch(() => null);
+    // Sanction directe : rien a retenir. Progressif : le casier reste le temps de l oubli.
+    enregistrer(avant.mode === 'progressif' ? d.etat : null);
+    const rendu = await rendreRole(membre, avant).catch(() => null);
     console.log(`[tags] ${membre.user.tag} ne porte plus de tag interdit${rendu ? ` (${rendu})` : ''}`);
     if (!muet) {
       journal({
         niveau: 'info',
         titre: 'Tag interdit retiré',
-        texte: `<@${membre.id}> n'affiche plus de tag interdit.${rendu ? ` ${rendu[0].toUpperCase()}${rendu.slice(1)}.` : ''}`,
+        texte: `<@${membre.id}> n'affiche plus de tag interdit.`
+          + (rendu ? ` Rôle Vérifié rendu.` : '')
+          + (avant.mode === 'progressif'
+            ? ` Son casier (étape ${avant.etape}/${DERNIERE_ETAPE}) est gardé ${reglagesTags.oubliJours()} jours : s'il remet le tag, il passe à l'étape suivante sans délai.`
+            : ''),
       });
     }
     return null;
   }
 
-  const sanction = reglagesTags.sanction();
-  const resultat = await sanctionner(membre, d.regle, sanction).catch((e) => `❌ ${e.message}`);
-  // Un echec n est pas retenu : le prochain balayage reessaie (droit ajoute entre temps).
-  if (!resultat.startsWith('❌')) {
-    vus[membre.id] = cleRegle(d.regle);
-    reglagesTags.poserVus(vus);
-  }
+  // appliquer
+  const r = await appliquer(membre, d).catch((e) => ({ ok: false, resultat: `❌ ${e.message}` }));
+  // Un echec n est pas retenu : la prochaine echeance reessaie (droit ajoute entre temps).
+  if (r.ok) enregistrer(r.etat ?? d.etat);
   const tag = membre.user.primaryGuild?.tag ?? '?';
-  console.log(`[tags] ${membre.user.tag} affiche ${tag} (${libelle(d.regle)}) : ${resultat}`);
-  const serveur = membre.user.primaryGuild?.identityGuildId ?? null;
-  const rapport = { id: membre.id, nom: membre.user.tag, tag, serveur, regle: d.regle, resultat };
-  if (!muet) noterSanction(rapport, sanction);
+  console.log(`[tags] ${membre.user.tag} affiche ${tag} (${libelle(d.regle)}) : ${d.sanction} -> ${r.resultat}`);
+  const rapport = {
+    id: membre.id,
+    nom: membre.user.tag,
+    tag,
+    serveur: membre.user.primaryGuild?.identityGuildId ?? null,
+    regle: d.regle,
+    sanction: d.sanction,
+    prochaine: r.ok ? (r.etat ?? d.etat).prochaine : null,
+    resultat: r.resultat,
+  };
+  if (!muet) noterSanction(rapport);
   return rapport;
 }
 
-function noterSanction(r, sanction) {
+function noterSanction(r) {
+  const etapeSuivante = r.prochaine && r.sanction !== 'ban_temp' ? quand(r.prochaine) : null;
   journal({
     niveau: r.resultat.startsWith('❌') ? 'err' : 'warn',
-    titre: 'Tag de serveur interdit',
+    titre: TITRES[r.sanction] ?? 'Tag de serveur interdit',
     texte: `<@${r.id}> (**${r.nom}**) affiche le tag **${r.tag}**.`,
     champs: {
       Règle: libelle(r.regle),
       'Serveur du tag': r.serveur ? `\`${r.serveur}\`` : null,
-      Sanction: SANCTIONS[sanction],
+      Sanction: SANCTIONS[r.sanction] ?? r.sanction,
       Résultat: r.resultat,
+      'Étape suivante': etapeSuivante,
     },
   });
 }
 
 // ------------------------------------------------------------------ balayage
+
+async function serveur() {
+  if (!client || !config.discord.guildId) return null;
+  return client.guilds.fetch(config.discord.guildId).catch(() => null);
+}
 
 /** Controle tous les membres. Rend { membres, signales } ou { erreur }. */
 export function balayer() {
@@ -206,7 +323,7 @@ export function balayer() {
       dernierBalayage = { at: Date.now(), membres: 0, signales: 0 };
       return dernierBalayage;
     }
-    const guild = await client.guilds.fetch(config.discord.guildId).catch(() => null);
+    const guild = await serveur();
     if (!guild) return { erreur: 'serveur introuvable' };
     let membres;
     try {
@@ -223,28 +340,55 @@ export function balayer() {
       });
       if (r) rapports.push(r);
     }
-    // Un membre parti du serveur n est plus a suivre.
+    // Membre parti depuis plus longtemps que l oubli (et pas en ban temporaire) : casier efface.
     const vus = reglagesTags.vus();
+    const oubli = reglagesTags.params().oubliMs;
     let menage = false;
-    for (const id of Object.keys(vus)) if (!membres.has(id)) { delete vus[id]; menage = true; }
+    for (const [id, v] of Object.entries(vus)) {
+      const c = lireEtat(v);
+      if (!membres.has(id) && !c.banJusqua && Date.now() - (c.maj ?? 0) > oubli) { delete vus[id]; menage = true; }
+    }
     if (menage) reglagesTags.poserVus(vus);
 
-    const sanction = reglagesTags.sanction();
-    if (rapports.length <= DETAIL_MAX) rapports.forEach((r) => noterSanction(r, sanction));
+    if (rapports.length <= DETAIL_MAX) rapports.forEach(noterSanction);
     else {
       const lignes = rapports.map((r) => `${r.resultat.startsWith('❌') ? '❌' : '•'} <@${r.id}> **${r.tag}** : ${r.resultat}`);
       let texte = lignes.join('\n');
       if (texte.length > 3800) texte = `${texte.slice(0, 3800)}\n… et d'autres (voir \`donut logs discord\`)`;
-      journal({
-        niveau: 'warn',
-        titre: `Tags interdits : ${rapports.length} membres`,
-        texte,
-        champs: { Sanction: SANCTIONS[sanction] },
-      });
+      journal({ niveau: 'warn', titre: `Tags interdits : ${rapports.length} membres`, texte });
     }
     dernierBalayage = { at: Date.now(), membres: membres.size, signales: rapports.length };
-    console.log(`[tags] balayage : ${membres.size} membres, ${rapports.length} signale(s)`);
+    console.log(`[tags] balayage : ${membres.size} membres, ${rapports.length} sanction(s)`);
     return dernierBalayage;
+  });
+}
+
+/** Etapes dont le delai est ecoule, bans temporaires arrives a terme. */
+export function echeances() {
+  return enFile(async () => {
+    const guild = await serveur();
+    if (!guild) return;
+    const now = Date.now();
+    for (const [id, v] of Object.entries(reglagesTags.vus())) {
+      const c = lireEtat(v);
+      if (c.banJusqua && now >= c.banJusqua) {
+        const ok = await guild.bans.remove(id, 'Fin du ban temporaire (tag interdit)').then(() => true)
+          .catch((e) => (e.code === 10026 ? true : (console.warn(`[tags] deban ${id} :`, e.message), false))); // 10026 : deja debanni
+        if (!ok) continue;
+        const vus = reglagesTags.vus();
+        if (vus[id]) { delete vus[id].banJusqua; reglagesTags.poserVus(vus); }
+        journal({
+          niveau: 'info',
+          titre: 'Tag interdit : fin du ban temporaire',
+          texte: `<@${id}> est débanni. S'il revient avec le tag, il reçoit son dernier avertissement.`,
+        });
+        continue;
+      }
+      if (c.prochaine != null && now >= c.prochaine && !c.banJusqua) {
+        const m = await guild.members.fetch(id).catch(() => null);
+        if (m) await controler(m).catch((e) => console.warn(`[tags] ${id} :`, e.message));
+      }
+    }
   });
 }
 
@@ -279,5 +423,7 @@ export function demarrerSurveillanceTags(c) {
   });
   balayer().catch((e) => console.warn('[tags] balayage :', e.message));
   setInterval(() => balayer().catch((e) => console.warn('[tags] balayage :', e.message)), BALAYAGE_MS).unref();
-  console.log(`[tags] surveillance active, ${reglagesTags.regles().length} regle(s), sanction ${reglagesTags.sanction()}`);
+  setInterval(() => echeances().catch((e) => console.warn('[tags] echeances :', e.message)), ECHEANCES_MS).unref();
+  console.log(`[tags] surveillance active, ${reglagesTags.regles().length} regle(s)`);
 }
+
