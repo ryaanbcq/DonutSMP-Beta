@@ -212,6 +212,10 @@ function connect() {
     username: cfg.username,
     auth: cfg.auth,
     version: cfg.version,
+    // Commandes NON signees, comme le bot Outmind qui marche sur DonutSMP :
+    // avec la signature 1.21+, /balance et /pay partaient sans aucune reponse
+    // depuis le 2026-10-20 (constate le 2026-10-27).
+    disableChatSigning: true,
     profilesFolder: cfg.profilesFolder,
     hideErrors: false,
     // Si le jeton en cache a expire, le code s affiche dans les logs pm2
@@ -277,6 +281,15 @@ function connect() {
   });
 
   ceBot._client.on('show_dialog', traiterDialogue);
+
+  // Les clients 1.21.2+ envoient client_tick_end a chaque tick ; mineflayer 4.39
+  // ne le fait pas (PR #3948). L anticheat de DonutSMP (GrimAC) s en sert pour
+  // decouper les ticks : le bot Outmind, qui marche, l envoie lui-meme a chaque
+  // tick physique. On fait pareil.
+  ceBot.on('physicsTick', () => {
+    if (!ceBot.registry?.version?.['>=']?.('1.21.2')) return;
+    try { ceBot._client.write('tick_end', {}); } catch { /* version sans ce paquet */ }
+  });
 
   // A chaque connexion DonutSMP ouvre l editeur d un panneau sur la position du
   // bot (open_sign_entity, 18 fois de suite). Un vrai client renvoie le texte
