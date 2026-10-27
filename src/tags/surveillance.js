@@ -26,6 +26,7 @@ import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
+import { tousLesMembres } from '../lib/membres.js';
 import {
   SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE,
 } from './regles.js';
@@ -327,7 +328,8 @@ export function balayer() {
     if (!guild) return { erreur: 'serveur introuvable' };
     let membres;
     try {
-      membres = await guild.members.fetch();
+      // Liste partagee avec le reste du bot : pas de nouvelle demande a Discord.
+      membres = await tousLesMembres(guild);
     } catch (e) {
       dernierBalayage = { at: Date.now(), erreur: e.message };
       return dernierBalayage;

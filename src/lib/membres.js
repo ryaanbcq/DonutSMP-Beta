@@ -1,13 +1,18 @@
-// Qui, parmi les comptes lies, a quitte le serveur Discord ?
+// Qui, parmi les comptes lies, a quitte le serveur Discord ? Et la liste des
+// membres pour tout le bot (classements, tags interdits).
 //
-// Sert au classement des fortunes : un membre parti n y figure plus (son
-// compte reste lie, il retrouve sa place s il revient).
-//
-// Toutes les 15 minutes on demande a Discord lesquels des comptes lies sont
-// encore membres (par paquets de 100 ids, ce qui marche avec ou sans l intent
-// « Server Members »). Avec l intent, les departs et les retours sont en plus
-// suivis en direct. Si Discord ne repond pas, on garde la liste precedente :
-// une panne ne doit jamais vider ni gonfler le classement.
+// Discord limite durement les demandes de membres par la passerelle (opcode 8,
+// vecu le 28/10 : « Request with opcode 8 was rate limited » des que le suivi
+// des departs, les noms du classement et le balayage des tags tombaient
+// ensemble). Donc :
+//   - avec l intent « Server Members » : UNE demande de la liste complete au
+//     demarrage puis toutes les 6 h, et entre deux le cache de discord.js,
+//     tenu a jour par les arrivees, departs et mises a jour ; tout le monde lit
+//     ce cache, plus aucune demande en rafale ;
+//   - sans l intent : demandes par paquets de 100 ids, une a la fois.
+// Une limite atteinte attend le delai indique par Discord puis reessaie. Si
+// Discord ne repond pas, on garde la liste precedente : une panne ne doit
+// jamais vider ni gonfler le classement.
 
 import { GatewayIntentBits } from 'discord.js';
 import { config } from '../config.js';
@@ -15,7 +20,60 @@ import { db } from '../db.js';
 import { brancherDeparts } from '../donut/balances.js';
 
 const CONTROLE_MS = 15 * 60_000;
+const LISTE_COMPLETE_MS = 6 * 3_600_000;
 const PAQUET = 100; // maximum de user_ids par requete Discord
+const attendre = (ms) => new Promise((r) => { setTimeout(r, ms).unref?.(); });
+
+// Une demande de membres a la fois, pour tout le bot.
+let file = Promise.resolve();
+const enFile = (fn) => { const p = file.then(fn, fn); file = p.catch(() => {}); return p; };
+
+/** Rejoue une demande refusee pour limite de debit, apres le delai indique. */
+async function avecReessai(fn, essais = 3) {
+  for (let i = 1; ; i += 1) {
+    try { return await fn(); } catch (e) {
+      const apres = /retry after ([\d.]+)/i.exec(e.message ?? '');
+      if (!apres || i >= essais) throw e;
+      console.warn(`[membres] limite Discord, nouvel essai dans ${Math.ceil(Number(apres[1]))} s`);
+      await attendre((Number(apres[1]) + 1) * 1000);
+    }
+  }
+}
+
+const aIntent = (guild) => guild.client.options.intents.has(GatewayIntentBits.GuildMembers);
+let listeChargeeA = 0;
+
+/**
+ * Tous les membres du serveur (intent requis). Une seule vraie demande par
+ * `ageMax`, le cache sinon : il est tenu a jour par les evenements.
+ */
+export function tousLesMembres(guild, { ageMax = LISTE_COMPLETE_MS } = {}) {
+  if (listeChargeeA && Date.now() - listeChargeeA < ageMax) return Promise.resolve(guild.members.cache);
+  return enFile(async () => {
+    if (listeChargeeA && Date.now() - listeChargeeA < ageMax) return guild.members.cache;
+    const membres = await avecReessai(() => guild.members.fetch({ time: 120_000 }));
+    listeChargeeA = Date.now();
+    console.log(`[membres] liste complete chargee : ${membres.size} membres`);
+    return membres;
+  });
+}
+
+/** Les membres parmi `ids` : cache complet si on l a, sinon paquets de 100. */
+async function membresParmi(guild, ids) {
+  if (aIntent(guild)) {
+    const tous = await tousLesMembres(guild);
+    return new Map(ids.filter((id) => tous.has(id)).map((id) => [id, tous.get(id)]));
+  }
+  return enFile(async () => {
+    const trouves = new Map();
+    for (let i = 0; i < ids.length; i += PAQUET) {
+      const paquet = ids.slice(i, i + PAQUET);
+      const m = await avecReessai(() => guild.members.fetch({ user: paquet, time: 30_000 }));
+      for (const [id, membre] of m) trouves.set(id, membre);
+    }
+    return trouves;
+  });
+}
 
 let partis = new Set();
 let pret = false;
@@ -39,13 +97,8 @@ function poser(nouveaux) {
 
 async function controler(guild) {
   const lies = [...new Set(db.prepare('SELECT discord_id FROM links').all().map((r) => String(r.discord_id)))];
-  const presents = new Set();
-  for (let i = 0; i < lies.length; i += PAQUET) {
-    const paquet = lies.slice(i, i + PAQUET);
-    const membres = await guild.members.fetch({ user: paquet, time: 30_000 });
-    for (const id of membres.keys()) presents.add(id);
-  }
-  const p = calculerPartis(lies, presents);
+  const presents = await membresParmi(guild, lies);
+  const p = calculerPartis(lies, new Set(presents.keys()));
   poser(p);
   return { lies: lies.length, partis: p.size };
 }
@@ -98,12 +151,8 @@ export async function nomsAffiches(guild, ids) {
   const voulus = [...new Set(ids.filter(Boolean).map(String))];
   if (!guild || !voulus.length) return voulus.length ? null : new Map();
   try {
-    const noms = new Map();
-    for (let i = 0; i < voulus.length; i += PAQUET) {
-      const membres = await guild.members.fetch({ user: voulus.slice(i, i + PAQUET), time: 30_000 });
-      for (const [id, m] of membres) noms.set(id, m.displayName);
-    }
-    return noms;
+    const membres = await membresParmi(guild, voulus);
+    return new Map([...membres].map(([id, m]) => [id, m.displayName]));
   } catch (e) {
     console.warn('[membres] noms affiches :', e.message);
     return null;
