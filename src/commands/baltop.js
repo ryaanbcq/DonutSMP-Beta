@@ -1,6 +1,7 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, escapeMarkdown } from 'discord.js';
 import { donut, LEADERBOARDS, MONEY_BOARDS } from '../donut/api.js';
 import { balances } from '../donut/balances.js';
+import { nomsAffiches, qui } from '../lib/membres.js';
 import { embed, TITRES } from '../lib/brand.js';
 import { shortMoney, duration, MEDALS } from '../lib/format.js';
 
@@ -36,10 +37,11 @@ const formateur = (categorie) =>
     : categorie === 'playtime' ? duration
     : (v) => Number(v).toLocaleString('fr-FR');
 
-function ligne(r, i, fmt, avecMention) {
+// Nom Discord en texte, pas en mention : une mention dans un embed s affiche
+// en id brut chez qui n a pas charge le membre.
+function ligne(r, i, fmt, noms = null) {
   const rang = MEDALS[i] ?? `\`${String(r.rank).padStart(2, ' ')}\``;
-  const mention = avecMention && r.discordId ? ` <@${r.discordId}>` : '';
-  return `${rang} **${r.name}** · ${fmt(r.value)}${mention}`;
+  return `${rang} ${qui(r.name, noms?.get(String(r.discordId)), escapeMarkdown)} · ${fmt(r.value)}`;
 }
 
 function depuis(ms) {
@@ -66,7 +68,7 @@ export async function execute(interaction) {
     const label = LEADERBOARDS.find((l) => l.value === categorie)?.name ?? categorie;
     const classement = embed(TITRES.classement, {
       description: `**${label}** · tout DonutSMP\n\n`
-        + (rows.map((r, i) => ligne(r, i, fmt, false)).join('\n') || 'Classement vide.'),
+        + (rows.map((r, i) => ligne(r, i, fmt)).join('\n') || 'Classement vide.'),
     });
     if (rows[0]?.mock) classement.setFooter({ text: 'Données de test : aucune clé API DonutSMP configurée.' });
     return interaction.editReply({ embeds: [classement] });
@@ -95,9 +97,10 @@ export async function execute(interaction) {
     });
   }
 
+  const noms = await nomsAffiches(interaction.guild, rows.map((r) => r.discordId));
   const classement = embed(TITRES.classement, {
     description: `**${label}** · commu DonutSMP FR\n\n`
-      + rows.map((r, i) => ligne(r, i, fmt, true)).join('\n'),
+      + rows.map((r, i) => ligne(r, i, fmt, noms)).join('\n'),
   }).setFooter({
     text: `${balances.membres()} membres vérifiés · relevés mis à jour ${depuis(balances.fraicheur())}`,
   });

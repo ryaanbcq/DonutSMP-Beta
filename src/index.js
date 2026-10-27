@@ -42,6 +42,7 @@ import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouc
 import { assurerFils, rafraichir, reveillerFils } from './vouch/fils.js';
 import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
 import { demarrerSurveillanceTags } from './tags/surveillance.js';
+import { suivreMembres } from './lib/membres.js';
 import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -94,6 +95,8 @@ client.once('clientReady', async (c) => {
   // Toujours branche : le salon du panneau peut etre choisi plus tard par
   // /panel baltop, sans redemarrage.
   const onUpdate = surveillerClassement(c);
+  // Les membres partis du serveur sortent du classement (et y reviennent).
+  suivreMembres(c, () => rafraichirSiBesoin(c, { force: true }).catch((e) => console.error('[baltop]', e.message)));
 
   if (donut.live) {
     // Une cle API existe : on releve par l API, c est plus precis.

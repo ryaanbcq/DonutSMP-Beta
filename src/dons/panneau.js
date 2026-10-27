@@ -16,6 +16,7 @@ import { verrouiller, peutVerrouiller } from '../lib/salon.js';
 import { presence } from '../ingame/presence.js';
 import { escapeMarkdown } from 'discord.js';
 import { rang } from '../baltop/panel.js';
+import { nomsAffiches, qui } from '../lib/membres.js';
 import { paliers, roleDuPalier, nomRole, lireMontant, totalDe, palierPour, classementDons } from './dons.js';
 
 const CLE = 'dons.panneau';
@@ -37,7 +38,7 @@ function boutons(enLigne) {
 }
 
 /** Top 10 des donateurs, par compte Minecraft (lies ou non). */
-export function rendreDonateurs() {
+export function rendreDonateurs(noms = null) {
   const liste = paliers();
   const top = classementDons(10);
   const lignes = top.length
@@ -45,8 +46,8 @@ export function rendreDonateurs() {
       const p = palierPour(r.total, liste);
       const id = p >= 0 ? roleDuPalier(liste[p]) : null;
       const role = p >= 0 ? ` · ${id ? `<@&${id}>` : nomRole(liste[p])}` : '';
-      const qui = r.discordId ? `<@${r.discordId}> · **${escapeMarkdown(r.name)}**` : `**${escapeMarkdown(r.name)}**`;
-      return `${rang(i)} ${qui} : \`\`${shortMoney(r.total)}\`\`${role}`;
+      const nom = qui(r.name, r.discordId ? noms?.get(String(r.discordId)) : null, escapeMarkdown);
+      return `${rang(i)} ${nom} : \`\`${shortMoney(r.total)}\`\`${role}`;
     }).join('\n')
     : '*Aucun don pour le moment : soyez le premier !*';
   return embed('🏆・PLUS GROS DONATEURS', {
@@ -94,7 +95,10 @@ export async function publierPanneauDons(client, guild) {
   }
   const contenu = {
     // Le classement d abord, l explication et le bouton ensuite.
-    embeds: [rendreDonateurs(), rendrePanneauDons(guild ?? salon.guild)],
+    embeds: [
+      rendreDonateurs(await nomsAffiches(guild ?? salon.guild, classementDons(10).map((r) => r.discordId))),
+      rendrePanneauDons(guild ?? salon.guild),
+    ],
     components: boutons(enLigneAffiche),
     allowedMentions: { parse: [] },
   };

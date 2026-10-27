@@ -18,6 +18,12 @@ import { settings } from '../settings.js';
 // son solde n a pas sa place dans le classement des fortunes.
 const horsClassement = () => normName(settings.beneficiaire()) || '\u0000';
 
+// Membres partis du serveur Discord : leur compte reste lie (ils retrouvent
+// leur place s ils reviennent) mais ils ne figurent plus au classement.
+// Branche par src/lib/membres.js ; sans lui personne n est exclu.
+let estParti = () => false;
+export function brancherDeparts(fn) { estParti = fn; }
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS balances (
   mc_name_norm TEXT PRIMARY KEY,
@@ -114,20 +120,25 @@ export const balances = {
 
   classement(categorie = 'money', limite = 10) {
     const col = COLONNES[categorie] ?? 'money';
+    // Tous les comptes puis le filtre des partis : un LIMIT en SQL rendrait
+    // un top 10 a trous des qu un des dix a quitte le serveur.
     return db.prepare(`
       SELECT b.*, l.discord_id AS lie_a, l.mc_name AS pseudo_lie FROM balances b
       JOIN links l ON l.mc_name_norm = b.mc_name_norm
       WHERE b.updated_at > 0 AND b.${col} > 0 AND b.mc_name_norm != ?
-      ORDER BY b.${col} DESC LIMIT ?
-    `).all(horsClassement(), limite).map((r, i) => ({
-      rank: i + 1,
-      // Le lien fait foi : la ligne de solde peut garder le Discord d un
-      // ancien proprietaire du pseudo.
-      name: r.pseudo_lie ?? r.mc_name,
-      discordId: r.lie_a ?? r.discord_id,
-      value: r[col],
-      updatedAt: r.updated_at,
-    }));
+      ORDER BY b.${col} DESC
+    `).all(horsClassement())
+      .map((r) => ({
+        // Le lien fait foi : la ligne de solde peut garder le Discord d un
+        // ancien proprietaire du pseudo.
+        name: r.pseudo_lie ?? r.mc_name,
+        discordId: r.lie_a ?? r.discord_id,
+        value: r[col],
+        updatedAt: r.updated_at,
+      }))
+      .filter((r) => !estParti(String(r.discordId)))
+      .slice(0, limite)
+      .map((r, i) => ({ rank: i + 1, ...r }));
   },
 
   /** Age du plus ancien solde du classement, pour l afficher en pied d embed. */

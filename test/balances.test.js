@@ -86,3 +86,34 @@ test('une donnee de test ne peut jamais entrer dans le classement', () => {
   );
   assert.equal(balances.classement('money', 10).length, 0);
 });
+
+test('un membre parti du serveur sort du classement, le suivant remonte', async () => {
+  const { brancherDeparts } = await import('../src/donut/balances.js');
+  const { calculerPartis } = await import('../src/lib/membres.js');
+  for (const [id, nom, argent] of [['p1', 'Riche', 900], ['p2', 'Moyen', 500], ['p3', 'Petit', 100]]) {
+    store.createLink(id, nom, 10);
+    balances.ecrire({ mc_name_norm: nom.toLowerCase(), mc_name: nom, discord_id: id },
+      { name: nom, money: argent, kills: 0, deaths: 0 });
+  }
+  const noms = () => balances.classement('money', 2).map((r) => r.name);
+  brancherDeparts(() => false);
+  assert.deepEqual(noms(), ['Riche', 'Moyen']);
+
+  const partis = calculerPartis(['p1', 'p2', 'p3'], new Set(['p2', 'p3']));
+  assert.deepEqual([...partis], ['p1']);
+  brancherDeparts((id) => partis.has(id));
+  assert.deepEqual(noms(), ['Moyen', 'Petit']);
+  assert.equal(balances.classement('money', 2)[0].rank, 1);
+  brancherDeparts(() => false);
+});
+
+test('classement : nom Discord en texte, pas de mention brute', async () => {
+  const { qui } = await import('../src/lib/membres.js');
+  assert.equal(qui('Alienlegoat', 'Alien'), 'Alien · **Alienlegoat**');
+  assert.equal(qui('ZKR5', 'zkr5'), '**ZKR5**');           // meme nom : une seule fois
+  assert.equal(qui('.Bedrock', 'bedrock'), '**.Bedrock**');
+  assert.equal(qui('t3ph', undefined), '**t3ph**');         // nom inconnu : pseudo seul
+  const { rendre } = await import('../src/baltop/panel.js');
+  const texte = rendre(new Map([['p2', 'Moyenne']])).data.description;
+  assert.ok(!/<@\d/.test(texte), 'aucune mention <@id> dans le classement');
+});
