@@ -63,13 +63,17 @@ function construire(nom) {
   const b = new SlashCommandBuilder().setName(nom).setDescription(d.desc);
   if (nom === 'unban') {
     b.addStringOption((o) => o.setName('joueur').setDescription('ID Discord ou @mention de l\'utilisateur banni').setRequired(true));
-  } else {
-    b.addUserOption((o) => o.setName('joueur').setDescription('Le membre').setRequired(true));
   }
+  // L ordre Discord impose les options obligatoires d abord.
   if (d.duree === 'obligatoire') {
     b.addStringOption((o) => o.setName('temps').setDescription('Ex. 10m, 2h, 3j, 1sem').setRequired(true));
   }
   b.addStringOption((o) => o.setName('raison').setDescription('Raison, envoyée au membre et au journal').setRequired(true).setMaxLength(400));
+  if (nom !== 'unban') {
+    // Deux facons de designer le membre : la liste de Discord, ou son ID colle.
+    b.addUserOption((o) => o.setName('joueur').setDescription('Le membre (ou utilise l\'option id)').setRequired(false));
+    b.addStringOption((o) => o.setName('id').setDescription('ID Discord du membre, à la place de joueur').setRequired(false));
+  }
   if (d.duree === 'facultative') {
     b.addStringOption((o) => o.setName('temps').setDescription('Ex. 3j, 1sem. Vide = définitif').setRequired(false));
   }
@@ -113,7 +117,15 @@ async function executer(nom, interaction) {
 
   if (nom === 'unban') return unban(interaction, { raison, raisonAudit });
 
-  const utilisateur = interaction.options.getUser('joueur', true);
+  const idSaisi = interaction.options.getString('id');
+  let utilisateur = interaction.options.getUser('joueur');
+  if (!utilisateur && idSaisi) {
+    const id = lireIdUtilisateur(idSaisi);
+    if (!id) return interaction.reply({ content: `❌ « ${idSaisi} » n'est pas un ID Discord.`, ...EPH });
+    utilisateur = await interaction.client.users.fetch(id).catch(() => null);
+    if (!utilisateur) return interaction.reply({ content: `❌ Aucun utilisateur Discord avec l'ID \`${id}\`.`, ...EPH });
+  }
+  if (!utilisateur) return interaction.reply({ content: '❌ Indique le membre : option **joueur**, ou son ID dans l\'option **id**.', ...EPH });
   const cible = await guild.members.fetch(utilisateur.id).catch(() => null);
   // Ban d un utilisateur deja parti : possible, sans controle de role.
   if (!cible && nom !== 'ban') return interaction.reply({ content: `❌ <@${utilisateur.id}> n'est pas sur le serveur.`, ...EPH });
