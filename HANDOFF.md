@@ -38,6 +38,8 @@ Commande de gestion : `bin/donut` (`donut update`, `donut doctor`, `donut auth`,
 - Journal du bot en jeu : compte bloqué (« Blocked account … Ban ID », sans le mot « banned »), ban temporaire / ban définitif distingués, kick par le staff. DonutSMP n'a ni warn ni mute : ne pas en rajouter.
 - Rôles : « admin du bot » (/setup, /panel, /embed, import, tickets) et « helpers » (tickets seulement). Tickets rangés dans un dossier Discord par catégorie.
 
+- Migration de serveur (27/10) : `donut export` ecrit TOUTES les donnees (tables de `bot.db` lues dynamiquement + fichiers d'etat et de flux) dans un `.json.gz` (bureau du Mac, sinon `./exports`), `donut import <fichier>` restaure (arrete/relance pm2, ancien etat dans `data/avant-import-*`), `/sauvegarde` (admin) l'envoie en piece jointe. Secrets (`.env`, session Microsoft) seulement avec `--avec-secrets`. Code : `src/lib/sauvegarde.js`. Sous-agent `.claude/agents/donutfr.md` (acces SSH `ssh -p 2222 donutfr@100.97.128.117`, le bot n'y a pas ete localise).
+
 ## En cours / à faire
 
 1. **Commit local non poussé** : `783c41e` (alerte #logs « Dons sans bénéficiaire »). À pousser quand Ryan le dit.
