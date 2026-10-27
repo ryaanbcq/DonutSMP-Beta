@@ -179,12 +179,18 @@ function textes(etape, {
   }
 }
 
-async function annoncer(guild, texte, id) {
+// Un avertissement dans le salon public seulement si le MP n a pas pu partir
+// (MP fermes), et efface au bout de 2 minutes : sinon des dizaines de membres
+// avertis noieraient #chat-fr. Les mutes et bans, plus rares, restent affiches.
+const AVERTISSEMENT_PUBLIC_MS = 2 * 60_000;
+
+async function annoncer(guild, texte, id, { effacerApresMs = 0 } = {}) {
   const salonId = reglagesTags.salonPublic();
   if (!salonId || !texte) return;
   const salon = await guild.channels.fetch(salonId).catch(() => null);
-  await salon?.send({ content: texte, allowedMentions: { users: [id] } })
+  const message = await salon?.send({ content: texte, allowedMentions: { users: [id] } })
     .catch((e) => console.warn('[tags] annonce publique :', e.message));
+  if (message && effacerApresMs) setTimeout(() => message.delete().catch(() => {}), effacerApresMs).unref?.();
 }
 
 // ------------------------------------------------------------------ sanctions
@@ -200,14 +206,18 @@ async function appliquer(membre, {
   const msg = textes(sanction, {
     id: membre.id, nom: membre.guild.name, tag, prochaine: etat.prochaine, p, avert, nb, muteR,
   });
-  const mp = () => (msg.mp ? membre.send(msg.mp).catch(() => {}) : null);
+  // Rend true si le MP est parti.
+  const mp = () => (msg.mp ? membre.send(msg.mp).then(() => true, () => false) : Promise.resolve(false));
+  const avertir = async () => {
+    if (await mp()) return '';
+    await annoncer(membre.guild, msg.public, membre.id, { effacerApresMs: AVERTISSEMENT_PUBLIC_MS });
+    return ', MP fermés : averti dans le salon public';
+  };
   const echec = (r) => ({ ok: false, resultat: `❌ ${r}` });
 
   switch (sanction) {
     case 'avertir':
-      await mp();
-      await annoncer(membre.guild, msg.public, membre.id);
-      return { ok: true, resultat: `averti (${avert}/${nb})` };
+      return { ok: true, resultat: `averti (${avert}/${nb})${await avertir()}` };
     case 'mute_avertir':
       if (!membre.moderatable) return echec('je ne peux pas le mute (droit « Exclure temporairement » ou hiérarchie)');
       await membre.timeout(muteR, raison);
@@ -217,10 +227,10 @@ async function appliquer(membre, {
     case 'alerte':
       return { ok: true, resultat: 'aucune action, alerte seulement' };
     case 'avertissement':
-    case 'dernier_avertissement':
-      await mp();
-      await annoncer(membre.guild, msg.public, membre.id);
-      return { ok: true, resultat: sanction === 'avertissement' ? 'averti (1/3)' : 'dernier avertissement (3/3)' };
+    case 'dernier_avertissement': {
+      const ou = await avertir();
+      return { ok: true, resultat: `${sanction === 'avertissement' ? 'averti (1/3)' : 'dernier avertissement (3/3)'}${ou}` };
+    }
     case 'mute':
     case 'exclure':
       if (!membre.moderatable) return echec('je ne peux pas le mute (droit « Exclure temporairement » ou hiérarchie)');

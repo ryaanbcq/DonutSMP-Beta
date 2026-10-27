@@ -48,7 +48,7 @@ function lignesEtat() {
 }
 
 function escalade() {
-  return `1. avertissement en MP${reglagesTags.salonPublic() ? ' et dans le salon public' : ''}\n`
+  return `1. avertissement en MP${reglagesTags.salonPublic() ? ' (salon public si ses MP sont fermés)' : ''}\n`
     + `2. après **${reglagesTags.delaiHeures()} h** : mute **${reglagesTags.muteHeures()} h**, 2e avertissement\n`
     + `3. après **${reglagesTags.delaiHeures()} h** : ban de **${reglagesTags.banTempJours()} jours**\n`
     + '4. à son retour, tag toujours là : dernier avertissement\n'
@@ -65,7 +65,7 @@ export function pageTags(note = '') {
     description: 'Un membre qui affiche un de ces **tags de serveur** à côté de son pseudo est signalé dans le journal du bot,'
       + ' puis sanctionné selon le tag. Le staff, le propriétaire et les bots ne sont jamais touchés.\n\n'
       + `${lignesEtat()}\n`
-      + `📢 **Avertissements publics** · ${salon ? `<#${salon}>` : '*aucun salon : MP seulement*'}\n`
+      + `📢 **Salon public** · ${salon ? `<#${salon}> : mutes et bans, et les avertissements des membres aux MP fermés (effacés après 2 min)` : '*aucun : MP seulement*'}\n`
       + '### Interdits\n'
       + (regles.length ? regles.map((r) => `• ${libelle(r)} · ${resume(r)}`).join('\n') : '*aucun*')
       + '\n### Sanction progressive\n'
@@ -113,7 +113,7 @@ export function pageFiche(cle, note = '') {
       description: `${libelle(r)}\n\n⚖️ **Sanction** · ${SANCTIONS[sanction]}`
         + (sanction === 'exclure' ? ` (${reglagesTags.muteHeures()} h)` : '')
         + (sanction === 'avertir'
-          ? `\n\n1 avertissement (MP${reglagesTags.salonPublic() ? ' + salon public' : ''}) toutes les **${reglagesTags.delaiHeures()} h** tant que le tag est là ;`
+          ? `\n\n1 avertissement en MP${reglagesTags.salonPublic() ? ' (salon public si ses MP sont fermés)' : ''} toutes les **${reglagesTags.delaiHeures()} h** tant que le tag est là ;`
             + ` au bout de **${nbAvertissements(r)}**, mute **${duree(muteHeuresRegle(r))}**, puis un nouveau cycle à la fin du mute.`
           : '')
         + (sanction === 'progressif' ? `\n\n${escalade()}` : '')
