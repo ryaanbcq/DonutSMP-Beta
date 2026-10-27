@@ -29,6 +29,8 @@ let username = emailArg ?? process.env.MC_EMAIL ?? '';
 let askedForEmail = false;
 
 if (!username) {
+  // --check tourne sans sortie visible (vps-install.sh) : ne jamais poser de question.
+  if (check) process.exit(2);
   if (!stdin.isTTY) {
     console.error('Aucun compte. Renseigne MC_EMAIL dans .env ou passe le en argument :');
     console.error('  node scripts/auth.js mail@exemple.com');

@@ -41,6 +41,11 @@ elif command -v dnf >/dev/null 2>&1; then
   GESTIONNAIRE=dnf
   $SUDO dnf install -y -q curl ca-certificates git >/dev/null
   info "curl, git, ca-certificates (dnf)"
+elif command -v apk >/dev/null 2>&1; then
+  # Alpine (conteneurs Docker) : node 22+ vient des depots du systeme.
+  GESTIONNAIRE=apk
+  $SUDO apk add --no-cache curl ca-certificates git >/dev/null
+  info "curl, git, ca-certificates (apk)"
 else
   GESTIONNAIRE=aucun
   info "ni apt ni dnf : installe curl, git et node 22 toi meme"
@@ -80,6 +85,8 @@ if [ "$besoin_node" -eq 1 ]; then
     # Le module nodejs d Oracle Linux est trop vieux : depot NodeSource.
     curl -fsSL https://rpm.nodesource.com/setup_22.x | $SUDO -E bash - >/dev/null
     $SUDO dnf install -y -q nodejs >/dev/null
+  elif [ "$GESTIONNAIRE" = apk ]; then
+    $SUDO apk add --no-cache nodejs npm >/dev/null
   else
     echo "Installe node 22.5+ puis relance ce script." >&2
     exit 1
@@ -161,7 +168,9 @@ fi
 pm2 save
 # Au boot (redemarrage de maintenance chez l hebergeur) les deux process
 # repartent seuls. Utilisateur non root (ubuntu, opc sur Oracle) : via sudo.
-if [ "$(id -u)" -eq 0 ]; then
+if [ ! -d /run/systemd/system ]; then
+  info "pas de systemd (conteneur) : pas de demarrage au boot, lance donut start apres un redemarrage"
+elif [ "$(id -u)" -eq 0 ]; then
   pm2 startup systemd -u root --hp /root >/dev/null
   info "demarrage automatique au boot arme"
 elif $SUDO env PATH="$PATH:$(dirname "$(command -v node)")" "$(command -v pm2)" startup systemd -u "$USER" --hp "$HOME" >/dev/null 2>&1; then
