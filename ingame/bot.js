@@ -278,6 +278,25 @@ function connect() {
 
   ceBot._client.on('show_dialog', traiterDialogue);
 
+  // A chaque connexion DonutSMP ouvre l editeur d un panneau sur la position du
+  // bot (open_sign_entity, 18 fois de suite). Un vrai client renvoie le texte
+  // du panneau en refermant l editeur (update_sign) ; sans cette reponse le
+  // serveur semble ignorer en silence toutes les commandes du bot (constate le
+  // 2026-10-27 : /balance et /pay sans la moindre reponse). On renvoie donc le
+  // texte tel quel, sans rien modifier.
+  let panneauxRepondus = 0;
+  ceBot.on('signOpen', (bloc) => {
+    try {
+      const [recto] = bloc?.getSignText?.() ?? [];
+      const lignes = Array.isArray(recto) ? recto.map((l) => String(l ?? '').slice(0, 45)) : [];
+      ceBot.updateSign(bloc, lignes.slice(0, 4).join('\n'));
+      panneauxRepondus += 1;
+      if (panneauxRepondus === 1) console.log('[sign] editeur de panneau ouvert par le serveur : texte renvoye tel quel');
+    } catch (e) {
+      console.warn(`[sign] reponse impossible : ${e.message}`);
+    }
+  });
+
   ceBot.once('spawn', async () => {
     superviseur.connecte();
     derniereConnexionA = Date.now();
