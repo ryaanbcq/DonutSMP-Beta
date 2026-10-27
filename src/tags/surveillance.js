@@ -28,7 +28,7 @@ import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
 import { tousLesMembres } from '../lib/membres.js';
 import {
-  SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE,
+  SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE, muteHeuresRegle,
 } from './regles.js';
 
 const BALAYAGE_MS = 60 * 60_000;
@@ -57,6 +57,9 @@ export const reglagesTags = {
   muteHeures: () => nombre('tags.exclusionHeures', 24, 24 * 28), // plafond Discord : 28 jours
   banTempJours: () => nombre('tags.banTempJours', 7, 365),
   oubliJours: () => nombre('tags.oubliJours', 30, 3650),
+  // « Actifs seulement » : a parle ou ete en vocal dans ces derniers jours.
+  activiteJours: () => nombre('tags.activiteJours', 7, 90),
+  poserActiviteJours: (j) => store.kvSet('tags.activiteJours', String(j)),
   poserDelais: ({ delai, mute, banTemp, oubli }) => {
     store.kvSet('tags.delaiHeures', String(delai));
     store.kvSet('tags.exclusionHeures', String(mute));
@@ -76,6 +79,30 @@ export const reglagesTags = {
   vus: () => json('tags.vus', {}),
   poserVus: (v) => store.kvSet('tags.vus', JSON.stringify(v)),
 };
+
+// ------------------------------------------------------------------ activite
+
+// Derniere activite (message ou vocal) de chaque membre. En memoire, et en base
+// une fois par minute au plus : un redemarrage ne remet pas tout le monde muet.
+const activite = new Map(Object.entries(json('tags.activite', {})));
+let activiteSale = false;
+function noterActivite(id, at = Date.now()) {
+  activite.set(id, at);
+  activiteSale = true;
+}
+function sauverActivite() {
+  if (!activiteSale) return;
+  const limite = Date.now() - 90 * J;
+  for (const [id, at] of activite) if (at < limite) activite.delete(id);
+  store.kvSet('tags.activite', JSON.stringify(Object.fromEntries(activite)));
+  activiteSale = false;
+}
+/** Actif = en vocal maintenant, ou message / vocal dans la fenetre reglee. */
+export function estActif(membre, now = Date.now()) {
+  if (membre?.voice?.channelId) return true;
+  const at = activite.get(membre?.id);
+  return Boolean(at && now - at <= reglagesTags.activiteJours() * J);
+}
 
 // ------------------------------------------------------------------ etat
 
@@ -105,9 +132,24 @@ const quand = (ts) => `<t:${Math.floor(ts / 1000)}:R>`;
  * Textes d une etape : MP au membre, annonce publique. `tag` est le tag tel
  * qu il s affiche, `prochaine` l echeance de l etape suivante.
  */
-function textes(etape, { id, nom, tag, prochaine, p }) {
+function textes(etape, {
+  id, nom, tag, prochaine, p, avert, nb, muteR,
+}) {
   const t = `**${tag}**`;
   switch (etape) {
+    case 'avertir': {
+      const reste = avert < nb
+        ? `Au bout de ${nb} avertissements, mute ${heures(muteR)}.`
+        : `Prochaine fois ${quand(prochaine)} : mute ${heures(muteR)}.`;
+      return {
+        mp: `⚠️ Le tag de serveur ${t} n'est pas autorisé sur **${nom}**, retire-le. ${reste} (avertissement ${avert}/${nb})`,
+        public: `⚠️ <@${id}>, le tag ${t} n'est pas autorisé ici, retire-le. ${reste} (avertissement ${avert}/${nb})`,
+      };
+    }
+    case 'mute_avertir': return {
+      mp: `🔇 Tu es mute ${heures(muteR)} sur **${nom}** : tag ${t} toujours affiché après ${nb} avertissements.`,
+      public: `🔇 <@${id}> est mute ${heures(muteR)} : tag ${t} toujours affiché après ${nb} avertissements.`,
+    };
     case 'avertissement': return {
       mp: `⚠️ Le tag de serveur ${t} n'est pas autorisé sur **${nom}**. Retire-le ${quand(prochaine)}, sinon tu seras mute ${heures(p.muteMs)}. (avertissement 1/3)`,
       public: `⚠️ <@${id}>, le tag ${t} n'est pas autorisé ici. Retire-le ${quand(prochaine)}, sinon mute ${heures(p.muteMs)}. (avertissement 1/3)`,
@@ -148,17 +190,30 @@ async function annoncer(guild, texte, id) {
 // ------------------------------------------------------------------ sanctions
 
 /** Applique une sanction (etape ou directe). Rend { resultat, ok, etat? }. */
-async function appliquer(membre, { sanction, regle, etat }) {
+async function appliquer(membre, {
+  sanction, regle, etat, avert, nb,
+}) {
   const p = reglagesTags.params();
   const raison = `Tag de serveur interdit : ${libelle(regle).replace(/[`*]/g, '')}`;
   const tag = membre.user.primaryGuild?.tag ?? regle.valeur.toUpperCase();
+  const muteR = muteHeuresRegle(regle) * H;
   const msg = textes(sanction, {
-    id: membre.id, nom: membre.guild.name, tag, prochaine: etat.prochaine, p,
+    id: membre.id, nom: membre.guild.name, tag, prochaine: etat.prochaine, p, avert, nb, muteR,
   });
   const mp = () => (msg.mp ? membre.send(msg.mp).catch(() => {}) : null);
   const echec = (r) => ({ ok: false, resultat: `❌ ${r}` });
 
   switch (sanction) {
+    case 'avertir':
+      await mp();
+      await annoncer(membre.guild, msg.public, membre.id);
+      return { ok: true, resultat: `averti (${avert}/${nb})` };
+    case 'mute_avertir':
+      if (!membre.moderatable) return echec('je ne peux pas le mute (droit « Exclure temporairement » ou hiérarchie)');
+      await membre.timeout(muteR, raison);
+      await mp();
+      await annoncer(membre.guild, msg.public, membre.id);
+      return { ok: true, resultat: `mute ${heures(muteR)} après ${nb} avertissements` };
     case 'alerte':
       return { ok: true, resultat: 'aucune action, alerte seulement' };
     case 'avertissement':
@@ -214,6 +269,8 @@ async function rendreRole(membre, casier) {
 }
 
 const TITRES = {
+  avertir: 'Tag interdit : avertissement',
+  mute_avertir: 'Tag interdit : mute après avertissements',
   avertissement: 'Tag interdit : avertissement 1/3',
   mute: 'Tag interdit : mute (avertissement 2/3)',
   ban_temp: 'Tag interdit : ban temporaire',
@@ -233,6 +290,7 @@ async function controler(membre, { muet = false } = {}) {
     regles: reglagesTags.regles(),
     etat: avant,
     exempt: exempt(membre),
+    actif: estActif(membre),
     params: reglagesTags.params(),
   });
 
@@ -414,6 +472,18 @@ export function demarrerSurveillanceTags(c) {
   c.on('guildMemberAdd', (m) => { if (garder(m)) enFile(() => controler(m)).catch(() => {}); });
   c.on('guildMemberUpdate', (_, m) => { if (garder(m)) enFile(() => controler(m)).catch(() => {}); });
   // Discord pousse les changements de profil (dont le tag) par userUpdate.
+  // Activite : un message ou une entree en vocal compte, et le membre est
+  // controle tout de suite (regles « actifs seulement » : l avertissement
+  // tombe au moment ou il parle).
+  const actifMaintenant = (m) => {
+    if (!m || m.user?.bot || !garder(m)) return;
+    const etaitActif = estActif(m);
+    noterActivite(m.id);
+    if (!etaitActif || reglagesTags.regles().some((r) => r.actifs)) enFile(() => controler(m)).catch(() => {});
+  };
+  c.on('messageCreate', (msg) => { if (msg.inGuild()) actifMaintenant(msg.member); });
+  c.on('voiceStateUpdate', (avant, apres) => { if (apres.channelId && !avant.channelId) actifMaintenant(apres.member); });
+  setInterval(sauverActivite, 60_000).unref();
   c.on('userUpdate', (avant, apres) => {
     const a = avant.primaryGuild; const b = apres.primaryGuild;
     if (a?.tag === b?.tag && a?.identityGuildId === b?.identityGuildId && a?.identityEnabled === b?.identityEnabled) return;

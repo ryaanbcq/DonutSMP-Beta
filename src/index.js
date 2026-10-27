@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import {
   Client, GatewayIntentBits, Collection, MessageFlags,
   ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder,
-  ButtonBuilder, ButtonStyle,
+  ButtonBuilder, ButtonStyle, Options,
 } from 'discord.js';
 import { config } from './config.js';
 import { store } from './db.js';
@@ -59,13 +59,21 @@ async function loadCommands() {
   return commands;
 }
 
-const intents = [GatewayIntentBits.Guilds];
+// Messages (sans leur contenu) et vocal : activite des membres, pour les
+// tags interdits « actifs seulement ». Intents non privilegies.
+const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates];
 // Sans cet intent les transcripts de tickets n ont pas le texte des messages.
 if (config.discord.messageContent) intents.push(GatewayIntentBits.MessageContent);
 // Tags interdits : il faut la liste des membres. L intent n est demande que
 // s il est coche dans le portail, sinon Discord refuserait la connexion.
 if (await intentMembresCoche(config.discord.token)) intents.push(GatewayIntentBits.GuildMembers);
-const client = new Client({ intents });
+// Les messages recus ne servent qu a dater l activite : on n en garde presque
+// aucun en memoire (sinon 200 par salon, sur un serveur de 5000 membres).
+const client = new Client({
+  intents,
+  makeCache: Options.cacheWithLimits({ ...Options.DefaultMakeCacheSettings, MessageManager: 25 }),
+  sweepers: { ...Options.DefaultSweeperSettings, messages: { interval: 900, lifetime: 1800 } },
+});
 client.commands = await loadCommands();
 
 client.once('clientReady', async (c) => {

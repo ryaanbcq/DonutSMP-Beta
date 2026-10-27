@@ -125,3 +125,39 @@ test('intent Server Members : lu dans les drapeaux de l application', async () =
   assert.equal(await intentMembresCoche('t', { fetch: async () => { throw new Error('reseau'); } }), false);
   assert.equal(await intentMembresCoche(''), false);
 });
+
+test('avertir : N avertissements espaces du delai, puis mute, puis nouveau cycle', () => {
+  const regles = [{ type: 'serveur', valeur: '111111111111111111', sanction: 'avertir', nbAvert: 3, muteH: 72 }];
+  const tag = pg('SURG');
+  let t = 0;
+  let d = evaluer({ primaryGuild: tag, regles, now: t });
+  assert.equal(d.sanction, 'avertir'); assert.equal(d.avert, 1); assert.equal(d.nb, 3);
+  let etat = d.etat;
+  assert.equal(evaluer({ primaryGuild: tag, regles, etat, now: t + D - 1 }).action, 'rien');
+  t += D; d = evaluer({ primaryGuild: tag, regles, etat, now: t }); assert.equal(d.avert, 2); etat = d.etat;
+  t += D; d = evaluer({ primaryGuild: tag, regles, etat, now: t }); assert.equal(d.avert, 3); etat = d.etat;
+  t += D; d = evaluer({ primaryGuild: tag, regles, etat, now: t });
+  assert.equal(d.sanction, 'mute_avertir'); etat = d.etat;
+  assert.equal(etat.prochaine, t + 72 * H);
+  // Pendant le mute : rien ; a la fin, un nouveau cycle commence.
+  assert.equal(evaluer({ primaryGuild: tag, regles, etat, now: t + 71 * H }).action, 'rien');
+  d = evaluer({ primaryGuild: tag, regles, etat, now: t + 72 * H });
+  assert.equal(d.sanction, 'avertir'); assert.equal(d.avert, 1);
+});
+
+test('actifs seulement : un membre muet n est ni averti ni sanctionne', () => {
+  const regles = [{ type: 'tag', valeur: 'surg', sanction: 'avertir', actifs: true }];
+  assert.equal(evaluer({ primaryGuild: pg('SURG'), regles, actif: false, now: 0 }).action, 'rien');
+  assert.equal(evaluer({ primaryGuild: pg('SURG'), regles, actif: true, now: 0 }).sanction, 'avertir');
+  // Sans l option, l activite ne compte pas.
+  const tous = [{ type: 'tag', valeur: 'surg', sanction: 'avertir' }];
+  assert.equal(evaluer({ primaryGuild: pg('SURG'), regles: tous, actif: false, now: 0 }).sanction, 'avertir');
+});
+
+test('reglages d une regle avertir : bornes respectees', () => {
+  let r = [{ type: 'tag', valeur: 'surg', sanction: 'avertir' }];
+  r = modifierRegle(r, 'tag:surg', { nbAvert: 5, muteH: 48, actifs: true });
+  assert.deepEqual(r[0], { type: 'tag', valeur: 'surg', sanction: 'avertir', nbAvert: 5, muteH: 48, actifs: true });
+  r = modifierRegle(r, 'tag:surg', { nbAvert: 99, muteH: 0, actifs: false });
+  assert.deepEqual(r[0], { type: 'tag', valeur: 'surg', sanction: 'avertir', nbAvert: 5, muteH: 48 });
+});

@@ -9,6 +9,7 @@ import {
 import { embed, FR } from '../lib/brand.js';
 import {
   SANCTIONS, lireSaisie, ajouterRegle, retirerRegle, modifierRegle, cleRegle, libelle, sanctionDe,
+  nbAvertissements, muteHeuresRegle,
 } from './regles.js';
 import {
   reglagesTags, balayer, surveillanceActive, etatBalayage,
@@ -17,6 +18,7 @@ import {
 const MAX_REGLES = 25; // un menu Discord ne propose pas plus de 25 choix
 const COURT = {
   progressif: 'progressive',
+  avertir: 'avertissements puis mute',
   alerte: 'alerte seule',
   role: 'retrait du rôle Vérifié',
   exclure: 'mute direct',
@@ -24,6 +26,13 @@ const COURT = {
   bannir: 'ban direct',
 };
 const sansMarques = (s) => s.replace(/[`*]/g, '');
+const duree = (h) => (h % 24 === 0 ? `${h / 24} jour${h / 24 > 1 ? 's' : ''}` : `${h} h`);
+/** Resume d une regle : sa sanction, ses reglages, l option actifs. */
+function resume(r) {
+  const s = sanctionDe(r);
+  const base = s === 'avertir' ? `${nbAvertissements(r)} avertissements puis mute ${duree(muteHeuresRegle(r))}` : COURT[s];
+  return `${base}${r.actifs ? ', actifs seulement' : ''}`;
+}
 
 const retourTags = () => new ButtonBuilder().setCustomId('gsetup:page:tags').setLabel('Retour').setEmoji('↩️')
   .setStyle(ButtonStyle.Secondary);
@@ -58,7 +67,7 @@ export function pageTags(note = '') {
       + `${lignesEtat()}\n`
       + `📢 **Avertissements publics** · ${salon ? `<#${salon}>` : '*aucun salon : MP seulement*'}\n`
       + '### Interdits\n'
-      + (regles.length ? regles.map((r) => `• ${libelle(r)} · ${COURT[sanctionDe(r)]}`).join('\n') : '*aucun*')
+      + (regles.length ? regles.map((r) => `• ${libelle(r)} · ${resume(r)}`).join('\n') : '*aucun*')
       + '\n### Sanction progressive\n'
       + escalade()
       + (note ? `\n\n${note}` : ''),
@@ -70,7 +79,7 @@ export function pageTags(note = '') {
       .setPlaceholder('✏️ Modifier un interdit : nom, sanction, suppression')
       .addOptions(regles.slice(0, MAX_REGLES).map((r) => ({
         label: sansMarques(libelle(r)).slice(0, 100),
-        description: COURT[sanctionDe(r)],
+        description: resume(r).slice(0, 100),
         value: cleRegle(r),
       })))));
   }
@@ -103,13 +112,24 @@ export function pageFiche(cle, note = '') {
       couleur: FR.bleu,
       description: `${libelle(r)}\n\n⚖️ **Sanction** · ${SANCTIONS[sanction]}`
         + (sanction === 'exclure' ? ` (${reglagesTags.muteHeures()} h)` : '')
+        + (sanction === 'avertir'
+          ? `\n\n1 avertissement (MP${reglagesTags.salonPublic() ? ' + salon public' : ''}) toutes les **${reglagesTags.delaiHeures()} h** tant que le tag est là ;`
+            + ` au bout de **${nbAvertissements(r)}**, mute **${duree(muteHeuresRegle(r))}**, puis un nouveau cycle à la fin du mute.`
+          : '')
         + (sanction === 'progressif' ? `\n\n${escalade()}` : '')
+        + `\n\n🗣️ **Actifs seulement** · ${r.actifs
+          ? `oui : seuls les membres qui ont parlé ou été en vocal ces **${reglagesTags.activiteJours()} derniers jours** sont visés, au moment où ils parlent.`
+          : 'non : tous les membres qui portent le tag sont visés.'}`
         + (sanction === 'alerte' ? '\n\nLe staff est prévenu dans le journal, le membre ne reçoit rien.' : '')
         + (note ? `\n\n${note}` : ''),
     })],
     components: [
       new ActionRowBuilder().addComponents(menu),
       new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`gsetup:tags:actifs:${cle}`).setLabel(r.actifs ? 'Viser tout le monde' : 'Actifs seulement')
+          .setEmoji('🗣️').setStyle(r.actifs ? ButtonStyle.Secondary : ButtonStyle.Primary),
+        ...(sanction === 'avertir' ? [new ButtonBuilder().setCustomId(`gsetup:tags:reglages:${cle}`)
+          .setLabel('Avertissements et mute').setEmoji('⚙️').setStyle(ButtonStyle.Secondary)] : []),
         new ButtonBuilder().setCustomId(`gsetup:tags:nom:${cle}`).setLabel('Renommer').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`gsetup:tags:suppr:${cle}`).setLabel('Supprimer').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
         retourTags(),
@@ -169,6 +189,22 @@ export async function onTagsBouton(interaction, id) {
           .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(40).setValue(r?.nom ?? ''),
       )));
   }
+  if (id.startsWith('tags:actifs:')) {
+    const cle = id.slice('tags:actifs:'.length);
+    const r = reglagesTags.regles().find((x) => cleRegle(x) === cle);
+    reglagesTags.poserRegles(modifierRegle(reglagesTags.regles(), cle, { actifs: !r?.actifs }));
+    recontroler();
+    return interaction.update(pageFiche(cle, r?.actifs ? '✅ Tous les membres qui portent ce tag sont visés.' : '✅ Seuls les membres actifs sont visés.'));
+  }
+  if (id.startsWith('tags:reglages:')) {
+    const cle = id.slice('tags:reglages:'.length);
+    const r = reglagesTags.regles().find((x) => cleRegle(x) === cle);
+    return interaction.showModal(new ModalBuilder().setCustomId(`gsetup:tags:reglages:${cle}`).setTitle('Avertissements et mute')
+      .addComponents(
+        champ('nb', 'Avertissements avant le mute (1 à 10)', nbAvertissements(r), 2),
+        champ('mute', 'Durée du mute (heures, 672 max)', muteHeuresRegle(r), 3),
+      ));
+  }
   if (id.startsWith('tags:suppr:')) {
     const cle = id.slice('tags:suppr:'.length);
     const r = reglagesTags.regles().find((x) => cleRegle(x) === cle);
@@ -183,6 +219,7 @@ export async function onTagsBouton(interaction, id) {
         champ('mute', 'Durée du mute (heures, 672 max)', reglagesTags.muteHeures()),
         champ('banTemp', 'Durée du ban temporaire (jours)', reglagesTags.banTempJours()),
         champ('oubli', 'Casier effacé après (jours sans le tag)', reglagesTags.oubliJours()),
+        champ('activite', 'Actif = a parlé ou vocal depuis (jours)', reglagesTags.activiteJours(), 2),
       ));
   }
   if (id === 'tags:balayer') {
@@ -207,6 +244,14 @@ export async function onTagsModal(interaction, id) {
     return interaction.update(pageFiche(cleRegle(lu), `✅ ${libelle(lu)} interdit, avec la sanction progressive par défaut.`
       + ' Changez-la ci-dessous si besoin, puis **Retour** > **Contrôler maintenant** (sinon au balayage de chaque heure).'));
   }
+  if (id.startsWith('tags:reglages:')) {
+    const cle = id.slice('tags:reglages:'.length);
+    const nb = Math.round(Number(interaction.fields.getTextInputValue('nb').trim()));
+    const mute = Math.round(Number(interaction.fields.getTextInputValue('mute').trim()));
+    if (!(nb >= 1 && nb <= 10) || !(mute >= 1 && mute <= 672)) return interaction.update(pageFiche(cle, '❌ 1 à 10 avertissements, mute de 1 à 672 heures.'));
+    reglagesTags.poserRegles(modifierRegle(reglagesTags.regles(), cle, { nbAvert: nb, muteH: mute }));
+    return interaction.update(pageFiche(cle, `✅ ${nb} avertissements, puis mute ${duree(mute)}.`));
+  }
   if (id.startsWith('tags:nom:')) {
     const cle = id.slice('tags:nom:'.length);
     reglagesTags.poserRegles(modifierRegle(reglagesTags.regles(), cle, { nom: interaction.fields.getTextInputValue('nom') }));
@@ -220,10 +265,12 @@ export async function onTagsModal(interaction, id) {
     const d = {
       delai: lire('delai', 1, 720), mute: lire('mute', 1, 672), banTemp: lire('banTemp', 1, 365), oubli: lire('oubli', 1, 3650),
     };
-    if (Object.values(d).includes(null)) {
-      return interaction.update(pageTags('❌ Valeurs hors limites : délai 1 à 720 h, mute 1 à 672 h, ban 1 à 365 jours, oubli 1 à 3650 jours.'));
+    const activite = lire('activite', 1, 90);
+    if (Object.values(d).includes(null) || activite === null) {
+      return interaction.update(pageTags('❌ Valeurs hors limites : délai 1 à 720 h, mute 1 à 672 h, ban 1 à 365 jours, oubli 1 à 3650 jours, activité 1 à 90 jours.'));
     }
     reglagesTags.poserDelais(d);
+    reglagesTags.poserActiviteJours(activite);
     return interaction.update(pageTags('✅ Délais enregistrés. Les étapes déjà programmées gardent leur échéance.'));
   }
   return null;

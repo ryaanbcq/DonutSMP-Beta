@@ -16,9 +16,18 @@
 // Un membre qui retire son tag n avance plus. S il le remet avant d avoir ete
 // oublie, il passe directement a l etape suivante (pas de nouveau delai de
 // grace : sinon retirer/remettre toutes les 24 h le protegerait a vie).
+//
+// Avertissements puis mute : un avertissement par delai tant que le tag est
+// la, et au bout de N (3 par defaut) un mute (72 h par defaut), puis le cycle
+// recommence a la fin du mute. N et la duree sont propres a chaque regle.
+//
+// Option « actifs seulement » (par regle) : on ne s occupe du membre que s il
+// a parle dans un salon ou ete en vocal recemment. Un membre muet ne recoit
+// rien et n avance pas ; il est traite des qu il se remet a parler.
 
 export const SANCTIONS = {
   progressif: 'Progressive : avertissement, mute, ban temporaire, ban',
+  avertir: 'Avertissements, puis mute au bout de N',
   alerte: 'Alerte au staff seulement',
   role: 'Retirer le rôle Vérifié',
   exclure: 'Mute (timeout)',
@@ -41,6 +50,10 @@ export const PARAMS_DEFAUT = {
 const TAG_MAX = 8;
 const NOM_MAX = 40;
 const estId = (s) => /^\d{17,20}$/.test(s);
+
+// Reglages propres a une regle « avertir ».
+export const nbAvertissements = (r) => (Number.isInteger(r?.nbAvert) && r.nbAvert >= 1 && r.nbAvert <= 10 ? r.nbAvert : 3);
+export const muteHeuresRegle = (r) => (Number.isFinite(r?.muteH) && r.muteH >= 1 && r.muteH <= 672 ? r.muteH : 72);
 
 /** Comparaison insensible a la casse, aux espaces et a la pleine chasse. */
 export function normaliserTag(tag) {
@@ -91,6 +104,9 @@ export function modifierRegle(regles, cle, changes) {
       if (nom) n.nom = nom; else delete n.nom;
     }
     if (SANCTIONS[changes.sanction]) n.sanction = changes.sanction;
+    if (Number.isInteger(changes.nbAvert) && changes.nbAvert >= 1 && changes.nbAvert <= 10) n.nbAvert = changes.nbAvert;
+    if (Number.isFinite(changes.muteH) && changes.muteH >= 1 && changes.muteH <= 672) n.muteH = Math.round(changes.muteH);
+    if (typeof changes.actifs === 'boolean') { if (changes.actifs) n.actifs = true; else delete n.actifs; }
     return n;
   });
 }
@@ -124,7 +140,9 @@ export function libelle(r) {
  *   - 'oublier'   : tag retire depuis longtemps, le casier peut etre efface
  * `etat` rendu est le nouvel etat a enregistrer (null = effacer).
  */
-export function evaluer({ primaryGuild, regles, etat, exempt = false, now = Date.now(), params = PARAMS_DEFAUT }) {
+export function evaluer({
+  primaryGuild, regles, etat, exempt = false, actif = true, now = Date.now(), params = PARAMS_DEFAUT,
+}) {
   const p = { ...PARAMS_DEFAUT, ...params };
   const r = exempt ? null : regleVisee(primaryGuild, regles);
 
@@ -137,6 +155,29 @@ export function evaluer({ primaryGuild, regles, etat, exempt = false, now = Date
 
   const cle = cleRegle(r);
   const mode = sanctionDe(r);
+  // Regle « actifs seulement » : un membre muet n est ni averti ni sanctionne.
+  if (r.actifs && !actif) return { action: 'rien', etat, regle: r };
+
+  if (mode === 'avertir') {
+    const n = nbAvertissements(r);
+    const c = etat?.mode === 'avertir' ? etat : null;
+    let avert;
+    if (!c) avert = 1;
+    else if (c.leveA != null || (c.prochaine != null && now >= c.prochaine)) avert = (c.avert ?? 0) + 1;
+    else return { action: 'rien', etat, regle: r };
+    if (avert > n) {
+      // Mute, puis un nouveau cycle d avertissements a la fin du mute.
+      const muteMs = muteHeuresRegle(r) * 3_600_000;
+      return {
+        action: 'appliquer', sanction: 'mute_avertir', regle: r, avert: n, nb: n,
+        etat: { regle: cle, mode, avert: 0, prochaine: now + muteMs, maj: now },
+      };
+    }
+    return {
+      action: 'appliquer', sanction: 'avertir', regle: r, avert, nb: n,
+      etat: { regle: cle, mode, avert, prochaine: now + p.delaiMs, maj: now },
+    };
+  }
 
   if (mode !== 'progressif') {
     if (etat && etat.regle === cle && etat.mode === mode && etat.leveA == null) return { action: 'rien', etat, regle: r };
