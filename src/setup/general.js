@@ -38,6 +38,7 @@ import { journal as noterJournal } from '../ops/journal.js';
 import { duree } from '../../ingame/diagnostic.js';
 import { pageTags, onTagsSelect, onTagsBouton, onTagsModal } from '../tags/setup.js';
 import { reglagesTags } from '../tags/surveillance.js';
+import { pageModeration, onModerationSelect } from '../moderation/setup.js';
 
 const ok = (v) => (v ? '✅' : '⚠️');
 const salon = (id) => (id ? `<#${id}>` : '*à choisir*');
@@ -99,6 +100,7 @@ export async function rendreSetupGeneral(guild, note = '') {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gsetup:page:tags').setLabel(`Tags interdits (${reglagesTags.regles().length})`)
           .setEmoji('🏷️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:page:mod').setLabel('Modération').setEmoji('🔨').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -352,6 +354,7 @@ export async function onGsetupSelect(interaction) {
   const id = interaction.customId.slice('gsetup:'.length);
   const valeur = interaction.values[0] ?? '';
   if (id.startsWith('tags:')) return onTagsSelect(interaction, id);
+  if (id.startsWith('mod:')) return onModerationSelect(interaction, id);
 
   if (id === 'admin') {
     const avant = settings.rolesAdmin();
@@ -440,6 +443,7 @@ export async function onGsetupBouton(interaction) {
 
   if (id.startsWith('tags:')) return onTagsBouton(interaction, id);
   if (id === 'page:tags') return interaction.update(pageTags());
+  if (id === 'page:mod') return interaction.update(pageModeration());
   if (id === 'beneficiaire') {
     return interaction.showModal(new ModalBuilder().setCustomId('gsetup:beneficiaire').setTitle('Bénéficiaire des dons')
       .addComponents(new ActionRowBuilder().addComponents(

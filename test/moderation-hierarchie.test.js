@@ -43,3 +43,32 @@ test('permission de sanctionner : la liste d ids posee fait seule foi', async ()
   // Meme avec « Gerer le serveur », hors liste = refus.
   assert.equal(peutSanctionner({ id: '1', permissions: { has: () => true } }, liste), false);
 });
+
+test('permission de sanctionner : par role choisi, et admins du bot quand rien n est choisi', async () => {
+  const { peutSanctionner } = await import('../src/moderation/actions.js');
+  const avecRole = { id: '5', roles: { cache: { has: (r) => r === 'modos' } }, permissions: { has: () => false } };
+  assert.equal(peutSanctionner(avecRole, { membres: [], roles: ['modos'] }), true);
+  assert.equal(peutSanctionner(avecRole, { membres: ['9'], roles: [] }), false);
+  // Rien de choisi : « Gerer le serveur » suffit (admin du bot).
+  const gerant = { id: '6', roles: { cache: { has: () => false } }, permissions: { has: () => true } };
+  assert.equal(peutSanctionner(gerant, { membres: [], roles: [] }), true);
+});
+
+test('/warns : retirer un avertissement par numero, ou tous', () => {
+  registre.ajouterWarn('w1', { at: 1, par: 'm', raison: 'a' });
+  registre.ajouterWarn('w1', { at: 2, par: 'm', raison: 'b' });
+  registre.ajouterWarn('w1', { at: 3, par: 'm', raison: 'c' });
+  assert.equal(registre.retirerWarns('w1', 2), 1);
+  assert.deepEqual(registre.warns('w1').map((w) => w.raison), ['a', 'c']);
+  assert.equal(registre.retirerWarns('w1', 9), 0);
+  assert.equal(registre.retirerWarns('w1'), 2);
+  assert.equal(registre.warns('w1').length, 0);
+});
+
+test('autorises : membres et roles enregistres separement', () => {
+  registre.poserAutorises({ membres: ['1', '2'] });
+  registre.poserAutorises({ roles: ['r'] });
+  assert.deepEqual(registre.autorises(), { membres: ['1', '2'], roles: ['r'] });
+  registre.poserAutorises({ membres: [], roles: [] });
+  assert.deepEqual(registre.autorises(), { membres: [], roles: [] });
+});

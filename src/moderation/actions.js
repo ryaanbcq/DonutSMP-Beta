@@ -40,6 +40,28 @@ export const registre = {
     store.kvSet('mod.warns', JSON.stringify(tous));
     return tous[id].length;
   },
+  /** Retire l avertissement n (1 = le plus ancien), ou tous si n est null. Rend combien sont retires. */
+  retirerWarns: (id, n = null) => {
+    const tous = json('mod.warns', {});
+    const liste = tous[id] ?? [];
+    let retires;
+    if (n == null) { retires = liste.length; delete tous[id]; } else {
+      if (n < 1 || n > liste.length) return 0;
+      liste.splice(n - 1, 1); retires = 1;
+      if (liste.length) tous[id] = liste; else delete tous[id];
+    }
+    store.kvSet('mod.warns', JSON.stringify(tous));
+    return retires;
+  },
+  // Qui peut sanctionner : membres et roles choisis dans /setup general.
+  autorises: () => ({
+    membres: String(store.kvGet('mod.autorises') ?? '').split(',').map((x) => x.trim()).filter(Boolean),
+    roles: String(store.kvGet('mod.rolesAutorises') ?? '').split(',').map((x) => x.trim()).filter(Boolean),
+  }),
+  poserAutorises: ({ membres, roles }) => {
+    if (membres) store.kvSet('mod.autorises', membres.join(','));
+    if (roles) store.kvSet('mod.rolesAutorises', roles.join(','));
+  },
   bansTemp: () => json('mod.bansTemp', {}),
   poserBanTemp: (id, ban) => {
     const tous = json('mod.bansTemp', {});
@@ -106,14 +128,20 @@ export function refusHierarchie({ moderateur, cible, guild }) {
 // ------------------------------------------------------------------ execution
 
 /**
- * Qui peut sanctionner. Si une liste d ids est posee en base (mod.autorises,
- * ids separes par des virgules), elle seule fait foi, admins du bot compris ;
- * sinon les admins du bot.
+ * Qui peut sanctionner. Si des membres ou des roles sont choisis (/setup
+ * general > Modération), eux seuls passent, admins du bot compris ; sinon les
+ * admins du bot. `autorises` : { membres, roles } (tests), ou une chaine d ids.
  */
-export function peutSanctionner(membre, autorises = String(store.kvGet('mod.autorises') ?? '')) {
-  const liste = autorises.split(',').map((x) => x.trim()).filter(Boolean);
-  if (liste.length) return liste.includes(membre?.id ?? membre?.user?.id);
-  return estAdmin(membre);
+export function peutSanctionner(membre, autorises = registre.autorises()) {
+  const a = typeof autorises === 'string'
+    ? { membres: autorises.split(',').map((x) => x.trim()).filter(Boolean), roles: [] }
+    : autorises;
+  if (!a.membres.length && !a.roles.length) return estAdmin(membre);
+  const id = membre?.id ?? membre?.user?.id;
+  if (a.membres.includes(id)) return true;
+  const r = membre?.roles;
+  const aRole = (x) => (typeof r?.cache?.has === 'function' ? r.cache.has(x) : Array.isArray(r) && r.includes(x));
+  return a.roles.some(aRole);
 }
 
 async function executer(nom, interaction) {
@@ -282,3 +310,43 @@ export function demarrerModeration(client) {
   leverBansEchus(client).catch((e) => console.warn('[mod] bans temporaires :', e.message));
   setInterval(() => leverBansEchus(client).catch((e) => console.warn('[mod] bans temporaires :', e.message)), 60_000).unref();
 }
+
+// ------------------------------------------------------------------ /warns
+
+export const commandeWarns = {
+  data: new SlashCommandBuilder().setName('warns').setDescription('Avertissements d\'un membre : les voir, en retirer')
+    .addUserOption((o) => o.setName('joueur').setDescription('Le membre').setRequired(false))
+    .addStringOption((o) => o.setName('id').setDescription('ID Discord, à la place de joueur').setRequired(false))
+    .addStringOption((o) => o.setName('retirer').setDescription('Numéro de l\'avertissement à retirer, ou « tout »').setRequired(false)),
+  requiresLink: false,
+  async execute(interaction) {
+    if (!peutSanctionner(interaction.member)) {
+      return interaction.reply({ content: '🔒 Tu n\'as pas la permission de sanctionner.', ...EPH });
+    }
+    const id = interaction.options.getUser('joueur')?.id ?? lireIdUtilisateur(interaction.options.getString('id') ?? '');
+    if (!id) return interaction.reply({ content: '❌ Indique le membre : option **joueur**, ou son ID dans l\'option **id**.', ...EPH });
+    const retirer = interaction.options.getString('retirer')?.trim().toLowerCase();
+    if (retirer) {
+      const n = retirer === 'tout' ? null : Number(retirer);
+      if (n !== null && !Number.isInteger(n)) return interaction.reply({ content: '❌ **retirer** : un numéro ou « tout ».', ...EPH });
+      const retires = registre.retirerWarns(id, n);
+      if (!retires) return interaction.reply({ content: `➖ Rien à retirer pour <@${id}>.`, ...EPH });
+      journal({
+        niveau: 'info',
+        titre: 'Modération : avertissement retiré',
+        texte: `${retires} avertissement${retires > 1 ? 's' : ''} retiré${retires > 1 ? 's' : ''} à <@${id}>.`,
+        champs: { Par: `<@${interaction.user.id}>`, Restants: String(registre.warns(id).length) },
+      });
+      return interaction.reply({ content: `✅ ${retires} avertissement${retires > 1 ? 's' : ''} retiré${retires > 1 ? 's' : ''} à <@${id}> (reste ${registre.warns(id).length}).`, ...EPH });
+    }
+    const liste = registre.warns(id);
+    const lignes = liste.map((w, i) => `\`${i + 1}.\` <t:${Math.floor(w.at / 1000)}:d> par <@${w.par}> : ${w.raison}`);
+    let texte = liste.length ? lignes.join('\n') : '*Aucun avertissement.*';
+    if (texte.length > 3800) texte = `${texte.slice(0, 3800)}\n…`;
+    return interaction.reply({
+      content: `📋 **Avertissements de <@${id}>** · ${liste.length}\n${texte}`,
+      allowedMentions: { parse: [] },
+      ...EPH,
+    });
+  },
+};
