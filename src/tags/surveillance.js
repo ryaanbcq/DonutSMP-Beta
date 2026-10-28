@@ -28,7 +28,7 @@ import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
 import { tousLesMembres } from '../lib/membres.js';
 import {
-  SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE, muteHeuresRegle,
+  SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE, muteHeuresRegle, resumeSanction, cleRegle,
 } from './regles.js';
 
 const BALAYAGE_MS = 60 * 60_000;
@@ -369,8 +369,9 @@ function noterSanction(r) {
     texte: `<@${r.id}> (**${r.nom}**) affiche le tag **${r.tag}**.`,
     champs: {
       Règle: libelle(r.regle),
-      'Serveur du tag': r.serveur ? `\`${r.serveur}\`` : null,
-      Sanction: SANCTIONS[r.sanction] ?? r.sanction,
+      // Inutile de repeter l id quand la regle vise deja ce serveur.
+      'Serveur du tag': r.serveur && cleRegle(r.regle) !== `serveur:${r.serveur}` ? `\`${r.serveur}\`` : null,
+      Sanction: ['avertir', 'mute_avertir'].includes(r.sanction) ? resumeSanction(r.regle) : (SANCTIONS[r.sanction] ?? r.sanction),
       Résultat: r.resultat,
       'Étape suivante': etapeSuivante,
     },

@@ -27,7 +27,7 @@
 
 export const SANCTIONS = {
   progressif: 'Progressive : avertissement, mute, ban temporaire, ban',
-  avertir: 'Avertissements, puis mute au bout de N',
+  avertir: 'Avertissements, puis mute (nombre et durée réglables)',
   alerte: 'Alerte au staff seulement',
   role: 'Retirer le rôle Vérifié',
   exclure: 'Mute (timeout)',
@@ -209,4 +209,26 @@ export function lireEtat(v) {
   if (!v) return null;
   if (typeof v === 'string') return { regle: v, mode: 'ancien', maj: 0 };
   return v;
+}
+
+const COURT = {
+  progressif: 'progressive (avertissement, mute, ban temporaire, ban)',
+  avertir: 'avertissements puis mute',
+  alerte: 'alerte seule',
+  role: 'retrait du rôle Vérifié',
+  exclure: 'mute direct',
+  expulser: 'expulsion directe',
+  bannir: 'ban direct',
+};
+
+/** « 3 jours », « 36 h ». */
+export const dureeHeures = (h) => (h % 24 === 0 ? `${h / 24} jour${h / 24 > 1 ? 's' : ''}` : `${h} h`);
+
+/** Resume d une regle avec ses vrais reglages : « 3 avertissements puis mute 3 jours, actifs seulement ». */
+export function resumeSanction(r) {
+  const s = sanctionDe(r);
+  const base = s === 'avertir'
+    ? `${nbAvertissements(r)} avertissements puis mute ${dureeHeures(muteHeuresRegle(r))}`
+    : COURT[s];
+  return `${base}${r.actifs ? ', actifs seulement' : ''}`;
 }

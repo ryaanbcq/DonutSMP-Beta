@@ -9,30 +9,16 @@ import {
 import { embed, FR } from '../lib/brand.js';
 import {
   SANCTIONS, lireSaisie, ajouterRegle, retirerRegle, modifierRegle, cleRegle, libelle, sanctionDe,
-  nbAvertissements, muteHeuresRegle,
+  nbAvertissements, muteHeuresRegle, dureeHeures, resumeSanction,
 } from './regles.js';
 import {
   reglagesTags, balayer, surveillanceActive, etatBalayage,
 } from './surveillance.js';
 
 const MAX_REGLES = 25; // un menu Discord ne propose pas plus de 25 choix
-const COURT = {
-  progressif: 'progressive',
-  avertir: 'avertissements puis mute',
-  alerte: 'alerte seule',
-  role: 'retrait du rôle Vérifié',
-  exclure: 'mute direct',
-  expulser: 'expulsion directe',
-  bannir: 'ban direct',
-};
 const sansMarques = (s) => s.replace(/[`*]/g, '');
-const duree = (h) => (h % 24 === 0 ? `${h / 24} jour${h / 24 > 1 ? 's' : ''}` : `${h} h`);
-/** Resume d une regle : sa sanction, ses reglages, l option actifs. */
-function resume(r) {
-  const s = sanctionDe(r);
-  const base = s === 'avertir' ? `${nbAvertissements(r)} avertissements puis mute ${duree(muteHeuresRegle(r))}` : COURT[s];
-  return `${base}${r.actifs ? ', actifs seulement' : ''}`;
-}
+const duree = dureeHeures;
+const resume = resumeSanction;
 
 const retourTags = () => new ButtonBuilder().setCustomId('gsetup:page:tags').setLabel('Retour').setEmoji('↩️')
   .setStyle(ButtonStyle.Secondary);
