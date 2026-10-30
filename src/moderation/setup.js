@@ -4,11 +4,11 @@
 
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, RoleSelectMenuBuilder,
-  ChannelSelectMenuBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ChannelSelectMenuBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder,
 } from 'discord.js';
 import { embed, FR } from '../lib/brand.js';
 import { registre } from './actions.js';
-import { reglagesAntipub } from './antipub.js';
+import { reglagesAntipub, statsModele } from './antipub.js';
 
 export function pageModeration(note = '') {
   const { membres, roles } = registre.autorises();
@@ -62,21 +62,35 @@ export function pageAntipub(note = '') {
     .setPlaceholder('🛡️ Rôles autorisés à faire de la pub').setMinValues(0).setMaxValues(25);
   if (roles.length) menuRoles.setDefaultRoles(...roles.slice(0, 25));
   const seuil = r.avantMute();
+  const mode = r.phrases();
+  const s = statsModele();
+  const MODES = {
+    off: 'Pub sans lien : ignorée',
+    alerte: 'Pub sans lien : alerte au staff (rien supprimé)',
+    supprimer: 'Pub sans lien : supprimée et avertie',
+  };
+  const menuMode = new StringSelectMenuBuilder().setCustomId('gsetup:antipub:phrases').setPlaceholder('🧠 Pub sans lien')
+    .addOptions(Object.entries(MODES).map(([value, label]) => ({ label, value, default: value === mode })));
   return {
     embeds: [embed('🚫・ANTI-PUB', {
       couleur: FR.bleu,
       description: 'Un message qui contient une **invitation vers un autre serveur Discord** est supprimé, et son auteur reçoit un avertissement'
         + ' (visible dans **/warns**), en MP, ou dans le salon 8 secondes si ses MP sont fermés. Les invitations vers ce serveur restent permises.\n\n'
         + `${actif ? '🟢 **Actif**' : '🔴 **Inactif**'}\n`
+        + `🧠 **Pub sans lien** · ${MODES[mode].split(' : ')[1]}, au-dessus de **${Math.round(r.seuil() * 100)} %**`
+        + ` · le détecteur a appris **${s.pub}** exemples de pub et **${s.normal}** normaux\n`
         + `⚖️ **Sanction** · ${seuil ? `mute **${r.muteHeures()} h** au ${seuil}e avertissement de pub en 24 h` : 'avertissement seul, jamais de mute'}\n`
         + `📢 **Salons exemptés** · ${salons.length ? salons.map((id) => `<#${id}>`).join(' ') : '*aucun*'}\n`
         + `🛡️ **Rôles exemptés** · ${roles.length ? roles.map((id) => `<@&${id}>`).join(' ') : '*aucun*'}\n\n`
-        + 'Le staff (admins du bot, membres autorisés à sanctionner) et les bots ne sont jamais touchés.'
+        + 'Le staff (admins du bot, membres autorisés à sanctionner) et les bots ne sont jamais touchés.\n\n'
+        + '🧠 **Il apprend** : clic droit sur un message > Applications > **Signaler comme pub**, et les boutons'
+        + ' **C\'est de la pub** / **Pas de la pub** du journal. Laissez-le en alerte le temps qu\'il apprenne, puis passez en suppression.'
         + (note ? `\n\n${note}` : ''),
     })],
     components: [
       new ActionRowBuilder().addComponents(menuSalons),
       new ActionRowBuilder().addComponents(menuRoles),
+      new ActionRowBuilder().addComponents(menuMode),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gsetup:antipub:basculer').setLabel(actif ? 'Désactiver' : 'Activer')
           .setEmoji(actif ? '⏸️' : '▶️').setStyle(actif ? ButtonStyle.Danger : ButtonStyle.Success),
@@ -90,6 +104,7 @@ export function pageAntipub(note = '') {
 export async function onAntipubSelect(interaction, id) {
   if (id === 'antipub:salons') reglagesAntipub.poserSalonsExemptes(interaction.values);
   else if (id === 'antipub:roles') reglagesAntipub.poserRolesExemptes(interaction.values);
+  else if (id === 'antipub:phrases') reglagesAntipub.poserPhrases(interaction.values[0]);
   else return null;
   return interaction.update(pageAntipub('✅ Enregistré.'));
 }
@@ -106,6 +121,7 @@ export async function onAntipubBouton(interaction, id) {
       .addComponents(
         champ('nb', 'Mute au combientième avertissement en 24 h (0 = jamais)', reglagesAntipub.avantMute()),
         champ('h', 'Durée du mute (heures, 672 max)', reglagesAntipub.muteHeures()),
+        champ('seuil', 'Pub sans lien : probabilité minimale en % (50 à 99)', Math.round(reglagesAntipub.seuil() * 100)),
       ));
   }
   return null;
@@ -115,7 +131,11 @@ export async function onAntipubModal(interaction, id) {
   if (id !== 'antipub:sanction') return null;
   const nb = Math.round(Number(interaction.fields.getTextInputValue('nb').trim()));
   const h = Math.round(Number(interaction.fields.getTextInputValue('h').trim()));
-  if (!(nb >= 0 && nb <= 10) || !(h >= 1 && h <= 672)) return interaction.update(pageAntipub('❌ De 0 à 10 avertissements, mute de 1 à 672 heures.'));
+  const pct = Math.round(Number(interaction.fields.getTextInputValue('seuil').trim()));
+  if (!(nb >= 0 && nb <= 10) || !(h >= 1 && h <= 672) || !(pct >= 50 && pct <= 99)) {
+    return interaction.update(pageAntipub('❌ De 0 à 10 avertissements, mute de 1 à 672 heures, probabilité de 50 à 99 %.'));
+  }
   reglagesAntipub.poserSanction(nb, h);
+  reglagesAntipub.poserSeuil(pct);
   return interaction.update(pageAntipub(nb ? `✅ Mute ${h} h au ${nb}e avertissement en 24 h.` : '✅ Avertissement seul, jamais de mute.'));
 }

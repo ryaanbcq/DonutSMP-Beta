@@ -36,8 +36,8 @@ const BOUTONS = {
     .setCustomId('ops:relink').setLabel('Relink le compte').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
 };
 
-function composants(actions) {
-  const boutons = (actions ?? []).map((a) => BOUTONS[a]?.()).filter(Boolean);
+function composants(actions, bruts = []) {
+  const boutons = [...(actions ?? []).map((a) => BOUTONS[a]?.()), ...(bruts ?? [])].filter(Boolean);
   return boutons.length ? [new ActionRowBuilder().addComponents(boutons.slice(0, 5))] : [];
 }
 
@@ -107,13 +107,13 @@ async function envoyer(evenement) {
     vu.fois += 1;
     vu.at = maintenant;
     const embed = construire(evenement).setFooter({ text: `🔁 Répété ${vu.fois} fois en moins d'une minute` });
-    await vu.message?.edit({ embeds: [embed], components: composants(evenement.actions) }).catch(() => {});
+    await vu.message?.edit({ embeds: [embed], components: composants(evenement.actions, evenement.boutons) }).catch(() => {});
     return;
   }
 
   const message = await salon.send({
     embeds: [construire(evenement)],
-    components: composants(evenement.actions),
+    components: composants(evenement.actions, evenement.boutons),
   }).catch((e) => {
     console.error('[journal] envoi impossible :', e.message);
     return null;

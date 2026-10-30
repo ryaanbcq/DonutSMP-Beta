@@ -44,7 +44,7 @@ import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
 import { demarrerSurveillanceTags } from './tags/surveillance.js';
 import { suivreMembres } from './lib/membres.js';
 import { demarrerModeration } from './moderation/actions.js';
-import { demarrerAntipub } from './moderation/antipub.js';
+import { demarrerAntipub, onBoutonAntipub } from './moderation/antipub.js';
 import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -210,6 +210,10 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId.startsWith('gsetup:')) return await onGsetupSelect(interaction);
       return;
     }
+    if (interaction.isMessageContextMenuCommand()) {
+      console.log(`[ui] menu « ${interaction.commandName} » par ${qui}`);
+      return await client.commands.get(interaction.commandName)?.execute(interaction);
+    }
     if (interaction.isChatInputCommand()) {
       console.log(`[ui] /${interaction.commandName} par ${qui}`);
       return await onCommande(interaction);
@@ -263,6 +267,7 @@ function refusSetup(interaction) {
 
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
+  if (interaction.customId.startsWith('antipub:')) return onBoutonAntipub(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
   if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('ticket:')) return onBoutonTicket(interaction);
