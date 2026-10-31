@@ -344,7 +344,8 @@ export async function onBouton(interaction) {
           .setTextInputComponent(new TextInputBuilder().setCustomId('video').setStyle(TextInputStyle.Short).setRequired(false)
             .setMaxLength(300).setPlaceholder('https://medal.tv/games/minecraft/clips/...')
             .setValue(b.video ?? '')),
-        new LabelBuilder().setLabel(scam ? 'Preuves (obligatoires : captures, vidéos ou clip Medal)' : 'Preuves (captures, vidéos)')
+        // Discord refuse un libelle de plus de 45 caracteres (vecu le 31/10).
+        new LabelBuilder().setLabel(scam ? 'Preuves (obligatoires, ou un clip Medal)' : 'Preuves (captures, vidéos)')
           .setDescription(`Images ou vidéos, jusqu'à ${MAX_PREUVES} fichiers de 8 Mo. ${b.preuves?.length ? 'Un nouvel envoi remplace les précédentes.' : ''}`.trim())
           .setFileUploadComponent(new FileUploadBuilder().setCustomId('preuves').setMinValues(0).setMaxValues(MAX_PREUVES).setRequired(false)),
       );
@@ -363,7 +364,9 @@ export async function onModal(interaction) {
   if (interaction.customId === 'vouch:chercher:modal') return chercherParTexte(interaction);
   if (interaction.customId !== 'vouch:modal') return;
   const message = interaction.fields.getTextInputValue('message').trim();
-  const videoSaisie = interaction.fields.getTextInputValue('video')?.trim() ?? '';
+  // Champ absent d un formulaire ouvert avant la mise a jour : pas d erreur.
+  let videoSaisie = '';
+  try { videoSaisie = interaction.fields.getTextInputValue('video')?.trim() ?? ''; } catch { /* ancien formulaire */ }
   const video = lireLienMedal(videoSaisie);
   const noteVideo = videoSaisie && !video ? '\n⚠️ Le lien vidéo doit être un clip Medal (medal.tv/.../clips/...), ignoré.' : '';
 
