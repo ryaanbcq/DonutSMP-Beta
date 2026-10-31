@@ -28,7 +28,7 @@ import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
 import { tousLesMembres } from '../lib/membres.js';
 import {
-  SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE, muteHeuresRegle, resumeSanction, cleRegle,
+  SANCTIONS, evaluer, libelle, lireEtat, DERNIERE_ETAPE, muteHeuresRegle, resumeSanction, cleRegle, regleVisee,
 } from './regles.js';
 
 const BALAYAGE_MS = 60 * 60_000;
@@ -323,8 +323,15 @@ async function controler(membre, { muet = false } = {}) {
   }
 
   if (d.action === 'leve') {
-    // Sanction directe : rien a retenir. Progressif : le casier reste le temps de l oubli.
-    enregistrer(avant.mode === 'progressif' ? d.etat : null);
+    // Discord envoie parfois un profil sans le tag (mise a jour partielle) :
+    // vecu le 28-30/10, « ne porte plus » puis « affiche » 12 s apres, en
+    // boucle, et le compteur ne depassait jamais 1/3. On redemande le profil
+    // a Discord avant de croire au retrait.
+    const frais = await membre.client.users.fetch(membre.id, { force: true }).catch(() => null);
+    if (!frais || regleVisee(frais.primaryGuild, reglagesTags.regles())) return null;
+    // Sanction directe : rien a retenir. Progressif et avertissements : le
+    // casier reste le temps de l oubli, une recidive reprend ou il en etait.
+    enregistrer(['progressif', 'avertir'].includes(avant.mode) ? d.etat : null);
     const rendu = await rendreRole(membre, avant).catch(() => null);
     console.log(`[tags] ${membre.user.tag} ne porte plus de tag interdit${rendu ? ` (${rendu})` : ''}`);
     if (!muet) {
@@ -335,6 +342,9 @@ async function controler(membre, { muet = false } = {}) {
           + (rendu ? ` Rôle Vérifié rendu.` : '')
           + (avant.mode === 'progressif'
             ? ` Son casier (étape ${avant.etape}/${DERNIERE_ETAPE}) est gardé ${reglagesTags.oubliJours()} jours : s'il remet le tag, il passe à l'étape suivante sans délai.`
+            : '')
+          + (avant.mode === 'avertir'
+            ? ` Son casier (${avant.avert ?? 0} avertissement(s)) est gardé ${reglagesTags.oubliJours()} jours : s'il remet le tag, il passe au suivant sans délai.`
             : ''),
       });
     }

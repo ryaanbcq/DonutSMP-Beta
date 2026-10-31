@@ -161,3 +161,14 @@ test('reglages d une regle avertir : bornes respectees', () => {
   r = modifierRegle(r, 'tag:surg', { nbAvert: 99, muteH: 0, actifs: false });
   assert.deepEqual(r[0], { type: 'tag', valeur: 'surg', sanction: 'avertir', nbAvert: 5, muteH: 48 });
 });
+
+test('avertir : retirer puis remettre le tag reprend au compteur suivant, sans repartir a 1', () => {
+  const regles = [{ type: 'tag', valeur: 'surg', sanction: 'avertir', nbAvert: 3, muteH: 72 }];
+  const d1 = evaluer({ primaryGuild: pg('SURG'), regles, now: 0 });
+  const leve = evaluer({ primaryGuild: pg('FR'), regles, etat: d1.etat, now: H });
+  assert.equal(leve.action, 'leve');
+  assert.equal(leve.etat.avert, 1);
+  const retour = evaluer({ primaryGuild: pg('SURG'), regles, etat: leve.etat, now: 2 * H });
+  assert.equal(retour.sanction, 'avertir');
+  assert.equal(retour.avert, 2);
+});
