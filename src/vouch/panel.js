@@ -55,6 +55,16 @@ function ligneFichiers(preuves) {
   return [img && `${img} image${img > 1 ? 's' : ''} (aperçu ci-dessous)`, vid && `${vid} vidéo${vid > 1 ? 's' : ''}`].filter(Boolean).join(', ');
 }
 
+/**
+ * Met a jour le panneau. Avec des preuves jointes, le renvoi des fichiers
+ * depasse souvent les 3 s de Discord : on accuse reception d abord.
+ */
+async function maj(interaction, payload) {
+  if (!payload.files?.length) return interaction.update(payload);
+  await interaction.deferUpdate();
+  return interaction.editReply(payload);
+}
+
 export function rendre(b, note = '') {
   const cible = b.cible ? store.getLink(b.cible) : null;
   const t = cible ? trustDe(cible.discord_id) : null;
@@ -254,16 +264,16 @@ export async function onSelect(interaction) {
   if (interaction.customId !== 'vouch:cible') return;
   const id = interaction.values[0];
   const b = brouillon(interaction.user.id);
-  if (id === interaction.user.id) return interaction.update(rendre(b, '❌ On ne se note pas soi-même.'));
+  if (id === interaction.user.id) return maj(interaction, rendre(b, '❌ On ne se note pas soi-même.'));
   const cible = store.getLink(id);
-  if (!cible) return interaction.update(rendre(b, `❌ <@${id}> n'a pas de compte vérifié : seuls les membres link peuvent être notés.`));
+  if (!cible) return maj(interaction, rendre(b, `❌ <@${id}> n'a pas de compte vérifié : seuls les membres link peuvent être notés.`));
   const existant = store.getVouch(interaction.user.id, id);
   if (existant) {
     // Garde-fou : un avis existe deja, on ne le remplace pas sans le dire.
     poser(interaction.user.id, { cible: id, verdict: null, etoiles: null, message: '', preuves: [], video: null });
     return interaction.update(vueExistant(existant, cible));
   }
-  return interaction.update(rendre(poser(interaction.user.id, { cible: id })));
+  return maj(interaction, rendre(poser(interaction.user.id, { cible: id })));
 }
 
 function vueExistant(existant, cible) {
@@ -299,8 +309,8 @@ export async function onBouton(interaction) {
   }
   if (id === 'vouch:existant:modifier') {
     const existant = b.cible ? store.getVouch(interaction.user.id, b.cible) : null;
-    if (!existant) return interaction.update(rendre(b));
-    return interaction.update(rendre(poser(interaction.user.id, {
+    if (!existant) return maj(interaction, rendre(b));
+    return maj(interaction, rendre(poser(interaction.user.id, {
       verdict: existant.value > 0 ? 'pos' : 'neg',
       etoiles: existant.stars ?? null,
       message: existant.comment ?? '',
@@ -322,11 +332,11 @@ export async function onBouton(interaction) {
   }
   if (id.startsWith('vouch:verdict:')) {
     const verdict = id.slice('vouch:verdict:'.length);
-    return interaction.update(rendre(poser(interaction.user.id, { verdict, etoiles: verdict === 'neg' ? null : b.etoiles })));
+    return maj(interaction, rendre(poser(interaction.user.id, { verdict, etoiles: verdict === 'neg' ? null : b.etoiles })));
   }
   if (id.startsWith('vouch:etoile:')) {
     // Une etoile vaut un vouch : pas besoin de cliquer « Vouch » avant.
-    return interaction.update(rendre(poser(interaction.user.id, { verdict: 'pos', etoiles: Number(id.slice('vouch:etoile:'.length)) })));
+    return maj(interaction, rendre(poser(interaction.user.id, { verdict: 'pos', etoiles: Number(id.slice('vouch:etoile:'.length)) })));
   }
   if (id === 'vouch:message') {
     const scam = b.verdict === 'neg';
@@ -354,7 +364,7 @@ export async function onBouton(interaction) {
   if (id.startsWith('vouch:publier')) {
     const vise = id.slice('vouch:publier:'.length);
     if (vise && vise !== String(b.cible)) {
-      return interaction.update(rendre(b, '⚠️ Ce panneau était ouvert sur un autre membre : voici votre avis en cours. Vérifiez-le avant de publier.'));
+      return maj(interaction, rendre(b, '⚠️ Ce panneau était ouvert sur un autre membre : voici votre avis en cours. Vérifiez-le avant de publier.'));
     }
     return publier(interaction, b);
   }
@@ -390,22 +400,25 @@ export async function onModal(interaction) {
     const b = poser(interaction.user.id, { message, preuves, video });
     return interaction.editReply(rendre(b, (note + noteVideo).trim()));
   }
+  // Les preuves deja jointes sont renvoyees avec le panneau (jusqu a 5 x 8 Mo) :
+  // l envoi depasse souvent les 3 s que Discord laisse pour repondre
+  // (« Unknown interaction », vecu le 31/10). On accuse reception d abord.
+  if (interaction.isFromMessage()) await interaction.deferUpdate(); else await interaction.deferReply(EPH);
   const b = poser(interaction.user.id, { message, preuves, video });
-  if (interaction.isFromMessage()) return interaction.update(rendre(b, noteVideo.trim()));
-  return interaction.reply({ ...rendre(b, noteVideo.trim()), ...EPH });
+  return interaction.editReply(rendre(b, noteVideo.trim()));
 }
 
 async function publier(interaction, b) {
   const cible = b.cible ? store.getLink(b.cible) : null;
-  if (!cible) return interaction.update(rendre(b, '❌ Le membre visé n\'est plus vérifié.'));
+  if (!cible) return maj(interaction, rendre(b, '❌ Le membre visé n\'est plus vérifié.'));
   const scam = b.verdict === 'neg';
-  if (scam && b.message.length < MIN_SCAM) return interaction.update(rendre(b, `❌ Un signalement demande ${MIN_SCAM} caractères d'explication.`));
-  if (scam && !(b.preuves?.length) && !b.video) return interaction.update(rendre(b, '❌ Un signalement demande au moins une capture, une vidéo ou un clip Medal du trade.'));
-  if (!scam && !b.etoiles) return interaction.update(rendre(b, '❌ Choisissez une note.'));
+  if (scam && b.message.length < MIN_SCAM) return maj(interaction, rendre(b, `❌ Un signalement demande ${MIN_SCAM} caractères d'explication.`));
+  if (scam && !(b.preuves?.length) && !b.video) return maj(interaction, rendre(b, '❌ Un signalement demande au moins une capture, une vidéo ou un clip Medal du trade.'));
+  if (!scam && !b.etoiles) return maj(interaction, rendre(b, '❌ Choisissez une note.'));
 
   const nouveau = !store.getVouch(interaction.user.id, cible.discord_id);
   if (nouveau && !bypass(interaction.member, config) && store.vouchCountFromSince(interaction.user.id, Date.now() - 86_400_000) >= MAX_AVIS_JOUR) {
-    return interaction.update(rendre(b, `⏳ ${MAX_AVIS_JOUR} avis en 24 h, c'est le maximum. Réessayez demain, votre brouillon reste ici 30 min.`));
+    return maj(interaction, rendre(b, `⏳ ${MAX_AVIS_JOUR} avis en 24 h, c'est le maximum. Réessayez demain, votre brouillon reste ici 30 min.`));
   }
 
   await interaction.deferUpdate();
