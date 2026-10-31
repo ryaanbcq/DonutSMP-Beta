@@ -87,7 +87,7 @@ for (const col of ['log_message_id TEXT', 'etat_par TEXT']) {
   try { db.exec(`ALTER TABLE tickets ADD COLUMN ${col}`); } catch { /* deja la */ }
 }
 // Avis : etoiles (1-5, null = ancien avis sans note) et carte publiee dans le fil.
-for (const col of ['stars INTEGER', 'message_id TEXT', 'preuves TEXT']) {
+for (const col of ['stars INTEGER', 'message_id TEXT', 'preuves TEXT', 'video TEXT']) {
   try { db.exec(`ALTER TABLE vouches ADD COLUMN ${col}`); } catch { /* deja la */ }
 }
 
@@ -131,6 +131,7 @@ const q = {
   vouchGet: db.prepare('SELECT * FROM vouches WHERE from_id = ? AND to_id = ?'),
   vouchAll: db.prepare('SELECT * FROM vouches WHERE to_id = ? ORDER BY created_at DESC'),
   vouchTargets: db.prepare('SELECT DISTINCT to_id FROM vouches'),
+  vouchSetVideo: db.prepare('UPDATE vouches SET video = ? WHERE from_id = ? AND to_id = ?'),
   vouchSetMessage: db.prepare('UPDATE vouches SET message_id = ?, preuves = COALESCE(?, preuves) WHERE from_id = ? AND to_id = ?'),
   vouchCountFrom: db.prepare('SELECT COUNT(*) AS n FROM vouches WHERE from_id = ?'),
   vouchCountFromSince: db.prepare('SELECT COUNT(*) AS n FROM vouches WHERE from_id = ? AND created_at >= ?'),
@@ -205,6 +206,7 @@ export const store = {
     q.insertPayment.run(p.from, normName(p.from), p.amount, p.raw ?? null, Date.now(), outcome, challengeId),
 
   // Vouches
+  setVouchVideo: (fromId, toId, video) => q.vouchSetVideo.run(video || null, String(fromId), String(toId)),
   setVouch: (fromId, toId, value, comment, stars = null) =>
     q.upsertVouch.run(String(fromId), String(toId), value, comment ?? null, Date.now(), stars),
   getVouch: (fromId, toId) => q.vouchGet.get(String(fromId), String(toId)) ?? null,

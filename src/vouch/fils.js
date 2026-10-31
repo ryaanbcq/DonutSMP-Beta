@@ -213,7 +213,8 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
       + (positif ? `· ${etoiles(vouch.stars ?? 5)}` : '· signale **' + cibleLink.mc_name + '**')
       + (vouch.comment ? `\n> ${vouch.comment.replace(/\n/g, '\n> ')}` : ''),
   }).setTimestamp(vouch.created_at);
-  if (preuves.length) contenu.setFooter({ text: `📎 ${preuves.length} preuve(s) jointe(s)` });
+  const n = preuves.length + (vouch.video ? 1 : 0);
+  if (n) contenu.setFooter({ text: `📎 ${n} preuve(s) jointe(s)` });
 
   const embeds = [contenu];
   const images = noms.filter((n) => IMAGE.test(n)).slice(0, 4);
@@ -225,7 +226,8 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
     new ButtonBuilder().setCustomId(`vouch:suppr:${vouch.from_id}:${vouch.to_id}`)
       .setLabel('Retirer (staff)').setEmoji('🗑️').setStyle(ButtonStyle.Secondary),
   );
-  return { embeds, components: [boutons] };
+  // Le lien en texte, hors de l embed : Discord affiche le lecteur du clip.
+  return { content: vouch.video ? `🎬 ${vouch.video}` : '', embeds, components: [boutons] };
 }
 
 /**

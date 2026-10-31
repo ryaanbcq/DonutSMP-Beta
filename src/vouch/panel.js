@@ -11,6 +11,7 @@ import { etoiles, barre, ligneScore } from './trust.js';
 import { trustDe, posterAvis, retirerAvis, carteReputation, filDe, fichiersDe } from './fils.js';
 import { isValidName, bypass } from '../lib/names.js';
 import { config } from '../config.js';
+import { lireLienMedal } from './video.js';
 import { reglagesTickets } from '../tickets/reglages.js';
 
 // /vouch sans argument : UN message prive qui se remplit en quatre clics.
@@ -28,7 +29,7 @@ const MAX_AVIS_JOUR = 10;
 const CROISE_MS = 48 * 3_600_000;
 
 const brouillons = new Map();
-const brouillon = (id) => brouillons.get(String(id)) ?? { cible: null, verdict: null, etoiles: null, message: '', preuves: [] };
+const brouillon = (id) => brouillons.get(String(id)) ?? { cible: null, verdict: null, etoiles: null, message: '', preuves: [], video: null };
 const poser = (id, patch) => { brouillons.set(String(id), { ...brouillon(id), ...patch, a: Date.now() }); return brouillon(id); };
 
 // Un brouillon abandonne gardait ses preuves (jusqu a 5 x 8 Mo) en memoire
@@ -61,7 +62,7 @@ export function rendre(b, note = '') {
   // Un signalement sans preuve suffisait a faire passer n importe qui en ☠️
   // (deux alts, vingt caracteres chacun) : la capture est obligatoire.
   const complet = cible && b.verdict
-    && (scam ? b.message.length >= MIN_SCAM && (b.preuves?.length ?? 0) > 0 : b.etoiles);
+    && (scam ? b.message.length >= MIN_SCAM && ((b.preuves?.length ?? 0) > 0 || Boolean(b.video)) : b.etoiles);
 
   let description = '**Notez un membre avec qui vous avez tradé.**\n';
   if (!cible) description += '\n1️⃣ Choisissez le membre ci-dessous.';
@@ -71,7 +72,8 @@ export function rendre(b, note = '') {
       + `2️⃣ Verdict : ${b.verdict ? (scam ? '⚠️ **Signalement**' : '✅ **Vouch**') : '*à choisir*'}\n`
       + `3️⃣ Note : ${scam ? '*sans objet pour un signalement*' : b.etoiles ? `**${etoiles(b.etoiles)}**` : '*à choisir*'}\n`
       + `4️⃣ Message : ${b.message ? `\n> ${b.message.replace(/\n/g, '\n> ')}` : scam ? `*obligatoire, ${MIN_SCAM} caractères minimum*` : '*facultatif*'}`
-      + `\n📎 Preuves : ${b.preuves?.length ? ligneFichiers(b.preuves) : scam ? '*obligatoire : au moins une capture ou vidéo du trade*' : '*aucune*'}`;
+      + `\n📎 Preuves : ${b.preuves?.length ? ligneFichiers(b.preuves) : b.video ? '*aucun fichier*' : scam ? '*obligatoire : au moins une capture, une vidéo ou un clip Medal*' : '*aucune*'}`
+      + (b.video ? `\n🎬 Clip Medal : ${b.video}` : '');
   }
   if (note) description += `\n\n${note}`;
 
@@ -258,7 +260,7 @@ export async function onSelect(interaction) {
   const existant = store.getVouch(interaction.user.id, id);
   if (existant) {
     // Garde-fou : un avis existe deja, on ne le remplace pas sans le dire.
-    poser(interaction.user.id, { cible: id, verdict: null, etoiles: null, message: '', preuves: [] });
+    poser(interaction.user.id, { cible: id, verdict: null, etoiles: null, message: '', preuves: [], video: null });
     return interaction.update(vueExistant(existant, cible));
   }
   return interaction.update(rendre(poser(interaction.user.id, { cible: id })));
@@ -337,7 +339,12 @@ export async function onBouton(interaction) {
     const modal = new ModalBuilder().setCustomId('vouch:modal').setTitle(scam ? 'Que s\'est-il passé ?' : 'Votre message')
       .addLabelComponents(
         new LabelBuilder().setLabel(scam ? 'Décrivez le scam, avec des faits' : 'Un mot sur le trade').setTextInputComponent(champ),
-        new LabelBuilder().setLabel(scam ? 'Preuves (obligatoires : captures, vidéos)' : 'Preuves (captures, vidéos)')
+        new LabelBuilder().setLabel('Clip Medal (facultatif)')
+          .setDescription('Lien medal.tv du clip, pour une vidéo trop lourde pour Discord.')
+          .setTextInputComponent(new TextInputBuilder().setCustomId('video').setStyle(TextInputStyle.Short).setRequired(false)
+            .setMaxLength(300).setPlaceholder('https://medal.tv/games/minecraft/clips/...')
+            .setValue(b.video ?? '')),
+        new LabelBuilder().setLabel(scam ? 'Preuves (obligatoires : captures, vidéos ou clip Medal)' : 'Preuves (captures, vidéos)')
           .setDescription(`Images ou vidéos, jusqu'à ${MAX_PREUVES} fichiers de 8 Mo. ${b.preuves?.length ? 'Un nouvel envoi remplace les précédentes.' : ''}`.trim())
           .setFileUploadComponent(new FileUploadBuilder().setCustomId('preuves').setMinValues(0).setMaxValues(MAX_PREUVES).setRequired(false)),
       );
@@ -356,6 +363,9 @@ export async function onModal(interaction) {
   if (interaction.customId === 'vouch:chercher:modal') return chercherParTexte(interaction);
   if (interaction.customId !== 'vouch:modal') return;
   const message = interaction.fields.getTextInputValue('message').trim();
+  const videoSaisie = interaction.fields.getTextInputValue('video')?.trim() ?? '';
+  const video = lireLienMedal(videoSaisie);
+  const noteVideo = videoSaisie && !video ? '\n⚠️ Le lien vidéo doit être un clip Medal (medal.tv/.../clips/...), ignoré.' : '';
 
   // Les fichiers du formulaire ont une URL a duree de vie courte : on les
   // telecharge tout de suite, la carte publiee en sera la copie durable.
@@ -374,12 +384,12 @@ export async function onModal(interaction) {
       const ext = (a.name.match(/\.([a-z0-9]{2,5})$/i)?.[1] ?? (a.contentType ?? '').split('/')[1] ?? 'png').toLowerCase();
       preuves.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: `preuve-${preuves.length + 1}.${ext}` }));
     }
-    const b = poser(interaction.user.id, { message, preuves });
-    return interaction.editReply(rendre(b, note.trim()));
+    const b = poser(interaction.user.id, { message, preuves, video });
+    return interaction.editReply(rendre(b, (note + noteVideo).trim()));
   }
-  const b = poser(interaction.user.id, { message, preuves });
-  if (interaction.isFromMessage()) return interaction.update(rendre(b));
-  return interaction.reply({ ...rendre(b), ...EPH });
+  const b = poser(interaction.user.id, { message, preuves, video });
+  if (interaction.isFromMessage()) return interaction.update(rendre(b, noteVideo.trim()));
+  return interaction.reply({ ...rendre(b, noteVideo.trim()), ...EPH });
 }
 
 async function publier(interaction, b) {
@@ -387,7 +397,7 @@ async function publier(interaction, b) {
   if (!cible) return interaction.update(rendre(b, '❌ Le membre visé n\'est plus vérifié.'));
   const scam = b.verdict === 'neg';
   if (scam && b.message.length < MIN_SCAM) return interaction.update(rendre(b, `❌ Un signalement demande ${MIN_SCAM} caractères d'explication.`));
-  if (scam && !(b.preuves?.length)) return interaction.update(rendre(b, '❌ Un signalement demande au moins une capture ou vidéo du trade.'));
+  if (scam && !(b.preuves?.length) && !b.video) return interaction.update(rendre(b, '❌ Un signalement demande au moins une capture, une vidéo ou un clip Medal du trade.'));
   if (!scam && !b.etoiles) return interaction.update(rendre(b, '❌ Choisissez une note.'));
 
   const nouveau = !store.getVouch(interaction.user.id, cible.discord_id);
@@ -397,6 +407,7 @@ async function publier(interaction, b) {
 
   await interaction.deferUpdate();
   store.setVouch(interaction.user.id, cible.discord_id, scam ? -1 : 1, b.message || null, scam ? null : b.etoiles);
+  store.setVouchVideo(interaction.user.id, cible.discord_id, b.video);
   const fil = await posterAvis(interaction.client, interaction.user.id, cible.discord_id, { fichiers: b.preuves ?? [] })
     .catch((e) => { console.error('[vouch] publication :', e.message); return null; });
   brouillons.delete(String(interaction.user.id));
