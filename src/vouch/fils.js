@@ -265,7 +265,21 @@ export async function rafraichir(client, discordId) {
  * fichiers : preuves a joindre (AttachmentBuilder ou { attachment, name }) ;
  * elles remplacent les anciennes quand l avis est modifie.
  */
-export async function posterAvis(client, fromId, toId, { fichiers = [] } = {}) {
+// Un double clic sur « Publier » lancait deux publications en parallele :
+// aucune ne voyait encore la carte de l autre, deux cartes partaient, et le
+// retrait par le staff n en supprimait qu une (vecu le 31/10, EZblueberry sur
+// T67T). Les publications d un meme avis passent donc l une apres l autre.
+const enCours = new Map();
+export function posterAvis(client, fromId, toId, opts = {}) {
+  const cle = `${fromId}:${toId}`;
+  const avant = enCours.get(cle) ?? Promise.resolve();
+  const p = avant.catch(() => {}).then(() => posterAvisSeul(client, fromId, toId, opts));
+  enCours.set(cle, p);
+  p.finally(() => { if (enCours.get(cle) === p) enCours.delete(cle); }).catch(() => {});
+  return p;
+}
+
+async function posterAvisSeul(client, fromId, toId, { fichiers = [] } = {}) {
   const vouch = store.getVouch(fromId, toId);
   const cible = store.getLink(toId);
   if (!vouch || !cible) return null;
