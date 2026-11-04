@@ -96,6 +96,8 @@ client.once('clientReady', async (c) => {
   demarrerModeration(c);
   demarrerAntipub(c);
   demarrerPrefixe(c);
+  // Avant les fils de vouches, qui prennent plusieurs minutes au demarrage.
+  demarrerGuide(c);
   // Statut et statut personnalise choisis par /statut, retenus en base.
   try { const p = appliquerPresence(c); console.log(`[statut] ${p.statut} « ${p.texte} »`); } catch (e) { console.warn('[statut] :', e.message); }
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
@@ -150,7 +152,6 @@ client.once('clientReady', async (c) => {
   setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();
   demarrerSurveillanceTags(c);
   await demarrerVocaux(c).catch((e) => console.error('[vocaux] demarrage :', e.message));
-  demarrerGuide(c);
 });
 
 // Coupures de la passerelle Discord : discord.js reprend seul, on annonce la
