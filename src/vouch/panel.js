@@ -221,7 +221,7 @@ async function chercherParTexte(interaction) {
 }
 
 
-export async function ouvrir(interaction, cibleId = null) {
+export async function ouvrir(interaction, cibleId = null, { verdict = null } = {}) {
   const moi = store.getLink(interaction.user.id);
   const libre = bypass(interaction.member, config);
   if (!moi && !libre) return interaction.reply({ content: `❌ Pour noter, ${ouSeLier()}.`, ...EPH });
@@ -249,7 +249,7 @@ export async function ouvrir(interaction, cibleId = null) {
       });
     }
     const existant = store.getVouch(interaction.user.id, cibleId);
-    poser(interaction.user.id, { cible: cibleId });
+    poser(interaction.user.id, { cible: cibleId, ...(verdict ? { verdict } : {}) });
     return interaction.reply({ ...(existant ? vueExistant(existant, cible) : rendre(brouillon(interaction.user.id))), ...EPH });
   }
   return interaction.reply({ ...rendre(brouillon(interaction.user.id)), ...EPH });
@@ -300,6 +300,8 @@ export async function onBouton(interaction) {
   if (id.startsWith('vouch:suppr:')) return supprimer(interaction);
   if (id === 'vouch:ouvrir') return ouvrir(interaction);
   if (id.startsWith('vouch:noter:')) return ouvrir(interaction, id.slice('vouch:noter:'.length));
+  // Depuis un ticket de signalement : formulaire deja sur « Signaler un scam ».
+  if (id.startsWith('vouch:scam:')) return ouvrir(interaction, id.slice('vouch:scam:'.length), { verdict: 'neg' });
   if (id === 'vouch:chercher:mc') return interaction.showModal(modalRecherche());
 
   const b = brouillon(interaction.user.id);

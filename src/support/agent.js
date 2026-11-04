@@ -7,7 +7,7 @@
 // Tous les messages des tickets sont notes (table support_messages, 14
 // jours) : la revue quotidienne en tire des propositions de FAQ.
 
-import { escapeMarkdown } from 'discord.js';
+import { escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { embed, FR } from '../lib/brand.js';
 import { store } from '../db.js';
 import { config } from '../config.js';
@@ -79,9 +79,28 @@ async function intervenir(channelId) {
     if (!texte) return;
     const carte = embed('💬・SUPPORT DONUTSMP FR', { couleur: FR.bleu, description: texte })
       .setFooter({ text: rep.transmettre ? 'Un membre du staff prend le relais dès que possible' : 'Le staff peut reprendre la main à tout moment' });
-    const m = await salon.send({ embeds: [carte], allowedMentions: { parse: [] } });
+    // Joueur signale : s il a lie son compte, un bouton ouvre le formulaire de
+    // signalement de scam sur son profil (une seule fois par ticket).
+    const components = [];
+    let scamOffert = etat.scamOffert;
+    const vise = String(rep.vise ?? '').trim().replace(/^@/, '');
+    const cleNonLie = `non-lie:${vise.toLowerCase()}`;
+    // Deja propose : on ne repropose que si un AUTRE pseudo non lie a ete donne.
+    if (vise && (!scamOffert || (scamOffert.startsWith('non-lie:') && scamOffert !== cleNonLie))) {
+      const lie = store.getLinkByName(vise) ?? store.getLinkByName(`.${vise}`);
+      if (lie && lie.discord_id !== ticket.discord_id) {
+        components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`vouch:scam:${lie.discord_id}`)
+          .setLabel(`Signaler ${lie.mc_name} sur sa réputation`.slice(0, 80)).setEmoji('⚠️').setStyle(ButtonStyle.Danger)));
+        carte.addFields({ name: '⚠️ Prévenir la communauté', value: `**${escapeMarkdown(lie.mc_name)}** a lié son compte : le bouton ci-dessous ouvre un signalement de scam sur son profil de réputation (preuve obligatoire).` });
+        scamOffert = lie.discord_id;
+      } else if (!lie) {
+        carte.addFields({ name: '⚠️ Réputation', value: `**${escapeMarkdown(vise)}** n'a pas lié son compte au Discord : pas de profil de réputation à signaler.` });
+        scamOffert = cleNonLie;
+      }
+    }
+    const m = await salon.send({ embeds: [carte], components, allowedMentions: { parse: [] } });
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
-    memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume });
+    memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume, scamOffert });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
     if (rep.transmettre && !etat.transmis) {
       journal({
