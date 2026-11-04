@@ -81,3 +81,28 @@ test('transfert : quand un auteur a note les deux cles, le plus recent gagne', a
   store.transfererReputation('Z', 'Y');
   assert.equal(store.vouchAll('Y').find((v) => v.from_id === 'B').comment, 'nouveau');
 });
+
+test('un membre non lie garde ses avis et son post quand il lie son compte', () => {
+  store.setThread('N1', 'fil-nl', 'fil-nl', '');
+  store.setVouch('V1', 'N1', 1, 'top', 5);
+  store.setVouch('V2', 'N1', -1, 'scam', null);
+  lier('N1', 'NouveauLie');
+  assert.deepEqual(recus('N1'), ['V1:1', 'V2:-1'], 'les avis restent au Discord');
+  assert.equal(store.getThread('N1')?.thread_id, 'fil-nl', 'le meme post continue');
+  assert.deepEqual(recus(cleOrpheline('')), [], 'rien parti vers un pseudo vide');
+  assert.equal(store.kvGet('vouch.postsFusionnes') ?? '[]', '[]', 'aucun post a fermer');
+});
+
+test('non lie dont le pseudo avait deja une reputation : fusion, post du pseudo garde', async () => {
+  lier('D9', 'Ancienpost');
+  store.setThread('D9', 'fil-pseudo', 'fil-pseudo', 'Ancienpost');
+  store.setVouch('V1', 'D9', 1, 'ok', 4);
+  await delier('D9', null);
+  store.setThread('N2', 'fil-discord', 'fil-discord', '');
+  store.setVouch('V1', 'N2', -1, 'plus recent', null);
+  store.setVouch('V3', 'N2', 1, 'bien', 5);
+  lier('N2', 'Ancienpost');
+  assert.deepEqual(recus('N2'), ['V1:-1', 'V3:1'], 'un avis par auteur, le plus recent gagne');
+  assert.equal(store.getThread('N2')?.thread_id, 'fil-pseudo', 'le post du pseudo est garde');
+  assert.deepEqual(JSON.parse(store.kvGet('vouch.postsFusionnes')), ['fil-discord'], 'le post Discord sera ferme');
+});

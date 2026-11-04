@@ -16,6 +16,27 @@ import { journal } from '../ops/journal.js';
 // avis ; chaque avis est une carte en dessous. Le tag du post = son palier.
 
 export const TITRE_REPUTATION = '⭐・RÉPUTATION';
+
+/**
+ * La personne a noter : son lien si elle a lie son compte, sinon un membre du
+ * Discord non lie (nom Discord, photo de profil) ; null pour un bot ou un
+ * inconnu. mc_name porte le NOM A AFFICHER, nonLie dit si c est un pseudo
+ * Minecraft, image la vignette (skin ou photo de profil).
+ */
+export function cibleDe(client, id) {
+  if (!id) return null;
+  const link = store.getLink(id);
+  if (link) return link;
+  const membre = client?.guilds?.cache.get(config.discord.guildId)?.members.cache.get(String(id));
+  if (membre?.user.bot) return null;
+  const user = membre?.user ?? client?.users?.cache.get(String(id));
+  if (!membre && !store.getThread(id)) return null;
+  const nom = membre?.displayName ?? user?.globalName ?? user?.username ?? 'Membre';
+  return {
+    discord_id: String(id), mc_name: nom, nonLie: true,
+    image: (membre ?? user)?.displayAvatarURL?.({ size: 256, extension: 'png' }) ?? 'aucune',
+  };
+}
 const nomFil = (pseudo) => `⭐ ${pseudo}`.slice(0, 100);
 
 async function salonVouch(client) {
@@ -102,6 +123,8 @@ export async function filDe(client, link) {
   const salon = await salonVouch(client);
   if (!salon) return null;
 
+  // Un membre non lie garde un pseudo vide en base : rien a heriter par pseudo.
+  const stocke = link.nonLie ? '' : link.mc_name;
   const connu = store.getThread(link.discord_id);
   if (connu) {
     let fil = await fetchFil(client, connu.thread_id);
@@ -117,10 +140,11 @@ export async function filDe(client, link) {
       fil = null;
     }
     if (fil) {
-      if (connu.mc_name !== link.mc_name) {
+      // Bascule au link (nom Discord -> pseudo), delink, changement de nom.
+      if (connu.mc_name !== stocke || fil.name !== nomFil(link.mc_name)) {
         await reveiller(fil);
         await fil.setName(nomFil(link.mc_name)).catch(() => {});
-        store.setThread(link.discord_id, fil.id, connu.card_id, link.mc_name);
+        store.setThread(link.discord_id, fil.id, connu.card_id, stocke);
       }
       return fil;
     }
@@ -135,8 +159,8 @@ export async function filDe(client, link) {
     reason: `Post de réputation de ${link.mc_name}`,
   });
   // Dans un forum, le message de depart porte l id du post.
-  store.setThread(link.discord_id, fil.id, fil.id, link.mc_name);
-  console.log(`[vouch] fil ouvert pour ${link.mc_name}`);
+  store.setThread(link.discord_id, fil.id, fil.id, stocke);
+  console.log(`[vouch] fil ouvert pour ${link.mc_name}${link.nonLie ? ' (non lie)' : ''}`);
   return fil;
 }
 
@@ -175,10 +199,10 @@ export function carteReputation(link, client = null) {
       : `📊 \`${barre(t.score, 12)}\`  **${t.score}** / 100`;
   const contenu = embed(TITRE_REPUTATION, {
     couleur: t.palier === PALIER_SIGNALE ? FR.rouge : t.trusted ? FR.or : FR.bleu,
-    image: link.mc_name,
+    image: link.image ?? link.mc_name,
     description: [
-      `### ${t.palier.emoji} ${link.mc_name}`,
-      nom ? `${nom} · ${t.palier.nom}` : t.palier.nom,
+      `### ${t.palier.emoji} ${link.nonLie ? escapeMarkdown(link.mc_name) : link.mc_name}`,
+      link.nonLie ? `${t.palier.nom} · *compte Minecraft pas encore lié*` : nom ? `${nom} · ${t.palier.nom}` : t.palier.nom,
       '',
       note,
       `✅ **${t.pos}** vouch${t.pos > 1 ? 'es' : ''}${t.neg ? `  ·  ☠️ ${pluriel(t.neg, 'signalement')}` : '  ·  aucun signalement'}`,
@@ -274,8 +298,10 @@ async function retirerPanelEnBas(fil, link) {
 
 /** Reecrit la carte de reputation et pose ou retire le role Trusted. */
 export async function rafraichir(client, discordId) {
-  const link = store.getLink(discordId);
+  const link = cibleDe(client, discordId);
   if (!link) return;
+  // Un non lie n a de post que s il a deja ete note : pas de post vide.
+  if (link.nonLie && !store.getThread(discordId) && !store.vouchAll(discordId).length) return;
   const fil = await filDe(client, link);
   if (fil) {
     await reveiller(fil);
@@ -309,7 +335,7 @@ export function posterAvis(client, fromId, toId, opts = {}) {
 
 async function posterAvisSeul(client, fromId, toId, { fichiers = [] } = {}) {
   const vouch = store.getVouch(fromId, toId);
-  const cible = store.getLink(toId);
+  const cible = cibleDe(client, toId);
   if (!vouch || !cible) return null;
   const fil = await filDe(client, cible);
   if (!fil) return null;
@@ -373,6 +399,10 @@ export async function assurerFils(client) {
   const forum = await salonVouch(client);
   if (forum) await lectureSeule(forum);
   let n = 0;
+  // Posts des membres non lies : cartes reecrites (nom Discord a jour).
+  for (const r of store.filsNonLies()) {
+    if (!store.getLink(r.discord_id)) await rafraichir(client, r.discord_id).catch(() => {});
+  }
   for (const link of store.allLinks()) {
     const avant = store.getThread(link.discord_id);
     const fil = await filDe(client, link).catch((e) => { console.warn(`[vouch] fil de ${link.mc_name} :`, e.message); return null; });
@@ -408,3 +438,26 @@ export async function reveillerFils(client) {
   return n;
 }
 
+
+/**
+ * Posts de membres non lies dont les avis ont rejoint le post de leur pseudo
+ * au moment du link : un dernier mot, puis archives et verrouilles.
+ */
+export async function fermerPostsFusionnes(client, discordId) {
+  let liste = [];
+  try { liste = JSON.parse(store.kvGet('vouch.postsFusionnes') || '[]'); } catch { /* vide */ }
+  if (!liste.length) return;
+  store.kvSet('vouch.postsFusionnes', '[]');
+  const actuel = store.getThread(discordId);
+  for (const id of liste) {
+    const fil = await fetchFil(client, id);
+    if (!fil) continue;
+    await reveiller(fil);
+    await fil.send({ embeds: [embed('🔗・PROFIL FUSIONNÉ', {
+      couleur: FR.bleu,
+      description: `Ce membre a lié son compte Minecraft : sa réputation continue dans ${actuel ? `<#${actuel.thread_id}>` : 'son post'}. Les avis ci-dessus y sont comptés.`,
+    })] }).catch(() => {});
+    await fil.setLocked(true, 'Profil fusionné au link').catch(() => {});
+    await fil.setArchived(true, 'Profil fusionné au link').catch(() => {});
+  }
+}

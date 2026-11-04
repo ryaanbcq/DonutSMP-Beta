@@ -3,7 +3,7 @@ import { store } from '../db.js';
 import { embed, TITRES } from '../lib/brand.js';
 import { MEDALS } from '../lib/format.js';
 import { calculerTrust, barre, etoiles, PALIER_SIGNALE } from '../vouch/trust.js';
-import { carteReputation, filDe, retirerAvis } from '../vouch/fils.js';
+import { carteReputation, filDe, retirerAvis, cibleDe } from '../vouch/fils.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vouches')
@@ -53,12 +53,13 @@ export async function execute(interaction) {
   }
 
   const target = interaction.options.getUser('membre') ?? interaction.user;
-  const link = store.getLink(target.id);
+  const link = cibleDe(interaction.client, target.id);
   if (!link) {
-    return interaction.reply({ content: `**${target.username}** n'est pas vérifié.`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `**${target.username}** n'a pas de réputation (bot ou membre parti).`, flags: MessageFlags.Ephemeral });
   }
   await interaction.deferReply();
-  const fil = await filDe(interaction.client, link).catch(() => null);
+  const sansPost = link.nonLie && !store.getThread(target.id) && !store.vouchAll(target.id).length;
+  const fil = sansPost ? null : await filDe(interaction.client, link).catch(() => null);
   const carte = carteReputation(link, interaction.client);
   return interaction.editReply({ ...carte, content: fil ? `Tous ses avis : ${fil}` : undefined });
 }

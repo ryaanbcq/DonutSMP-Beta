@@ -8,7 +8,7 @@ import { journal } from '../ops/journal.js';
 import { settings, ouSeLier } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { etoiles, barre, ligneScore } from './trust.js';
-import { trustDe, posterAvis, retirerAvis, carteReputation, filDe, fichiersDe } from './fils.js';
+import { trustDe, posterAvis, retirerAvis, carteReputation, filDe, fichiersDe, cibleDe } from './fils.js';
 import { isValidName, bypass } from '../lib/names.js';
 import { config } from '../config.js';
 import { lireLienMedal } from './video.js';
@@ -66,7 +66,7 @@ async function maj(interaction, payload) {
 }
 
 export function rendre(b, note = '') {
-  const cible = b.cible ? store.getLink(b.cible) : null;
+  const cible = b.cible ? (store.getLink(b.cible) ?? (b.cibleNonLie?.discord_id === b.cible ? b.cibleNonLie : null)) : null;
   const t = cible ? trustDe(cible.discord_id) : null;
   const scam = b.verdict === 'neg';
   // Un signalement sans preuve suffisait a faire passer n importe qui en ☠️
@@ -89,7 +89,7 @@ export function rendre(b, note = '') {
 
   const contenu = embed('⭐・DONNER UN AVIS', {
     couleur: scam ? FR.rouge : b.verdict ? FR.vert : FR.bleu,
-    image: cible?.mc_name ?? 'logo',
+    image: cible?.image ?? cible?.mc_name ?? 'logo',
     description,
   });
 
@@ -139,7 +139,7 @@ export function panneauVouch(forumId) {
   const contenu = embed('⭐・RÉPUTATION', {
     description:
       "**Avant un trade, vérifiez. Après un trade, notez.**\n\n"
-      + `Chaque membre vérifié a son post dans <#${forumId}> : cherchez son pseudo pour voir son `
+      + `Chaque membre a son post dans <#${forumId}>, lié ou non (au nom Discord tant qu'il n'a pas lié son compte Minecraft) : cherchez son pseudo pour voir son `
       + 'trust score sur 100, ses étoiles, ses vouches et ses signalements.\n\n'
       + '**Chercher un membre** : choisissez-le dans le menu ci-dessous, ou tapez son pseudo Minecraft '
       + 'avec le bouton 🔍. Sa carte de réputation vous est montrée en privé.\n\n'
@@ -162,15 +162,17 @@ export function panneauVouch(forumId) {
 // ---------------------------------------------------------------------------
 
 async function montrerCarte(interaction, link, { differe = false } = {}) {
-  const fil = await filDe(interaction.client, link).catch(() => null);
+  // Pas de post vide pour un membre non lie jamais note.
+  const sansPost = link.nonLie && !store.getThread(link.discord_id) && !store.vouchAll(link.discord_id).length;
+  const fil = sansPost ? null : await filDe(interaction.client, link).catch(() => null);
   const charge = { ...carteReputation(link, interaction.client), content: fil ? `Tous ses avis : ${fil}` : undefined, ...EPH };
   return differe ? interaction.editReply(charge) : interaction.reply(charge);
 }
 
 async function chercherParMembre(interaction) {
   const id = interaction.values[0];
-  const link = store.getLink(id);
-  if (!link) return interaction.reply({ content: `<@${id}> n'a pas de compte vérifié : pas de réputation à afficher.`, ...EPH });
+  const link = cibleDe(interaction.client, id);
+  if (!link) return interaction.reply({ content: `<@${id}> n'a pas de réputation (bot ou membre parti).`, ...EPH });
   // Creer le post peut enchainer plusieurs appels API : on prend le delai de
   // 15 min de Discord au lieu des 3 s d une reponse directe.
   await interaction.deferReply(EPH);
@@ -197,7 +199,7 @@ async function chercherParTexte(interaction) {
 
   // 2. nom Discord : Discord cherche par prefixe de pseudo ou de surnom
   const membres = await interaction.guild.members.search({ query: q, limit: 10 }).catch(() => null);
-  const lies = [...(membres?.values() ?? [])].map((m) => store.getLink(m.id)).filter(Boolean);
+  const lies = [...(membres?.values() ?? [])].map((m) => cibleDe(interaction.client, m.id)).filter(Boolean);
   if (lies.length === 1) return montrerCarte(interaction, lies[0], { differe: true });
   if (lies.length > 1) {
     return interaction.editReply(
@@ -217,7 +219,7 @@ async function chercherParTexte(interaction) {
       + proches.map((l) => `• **${l.mc_name}** <@${l.discord_id}>`).join('\n'),
     );
   }
-  return interaction.editReply(`Aucun membre vérifié ne correspond à **${q}**. Seuls les comptes link ont une réputation.`);
+  return interaction.editReply(`Aucun membre ne correspond à **${q}**. Essayez son nom Discord, ou choisissez-le dans le menu du panneau.`);
 }
 
 
@@ -241,15 +243,10 @@ export async function ouvrir(interaction, cibleId = null, { verdict = null } = {
   // que par le menu.
   if (cibleId) {
     if (cibleId === interaction.user.id) return interaction.reply({ content: '❌ On ne se note pas soi-même.', ...EPH });
-    const cible = store.getLink(cibleId);
-    if (!cible) {
-      return interaction.reply({
-        content: `❌ <@${cibleId}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (\`/link\`) ont une réputation et peuvent être notés.`,
-        ...EPH,
-      });
-    }
+    const cible = cibleDe(interaction.client, cibleId);
+    if (!cible) return interaction.reply({ content: `❌ <@${cibleId}> ne peut pas être noté (bot ou membre parti).`, ...EPH });
     const existant = store.getVouch(interaction.user.id, cibleId);
-    poser(interaction.user.id, { cible: cibleId, ...(verdict ? { verdict } : {}) });
+    poser(interaction.user.id, { cible: cibleId, cibleNonLie: cible.nonLie ? cible : null, ...(verdict ? { verdict } : {}) });
     return interaction.reply({ ...(existant ? vueExistant(existant, cible) : rendre(brouillon(interaction.user.id))), ...EPH });
   }
   return interaction.reply({ ...rendre(brouillon(interaction.user.id)), ...EPH });
@@ -265,22 +262,23 @@ export async function onSelect(interaction) {
   const id = interaction.values[0];
   const b = brouillon(interaction.user.id);
   if (id === interaction.user.id) return maj(interaction, rendre(b, '❌ On ne se note pas soi-même.'));
-  const cible = store.getLink(id);
-  if (!cible) return maj(interaction, rendre(b, `❌ <@${id}> n'a pas de compte vérifié : seuls les membres link peuvent être notés.`));
+  const cible = cibleDe(interaction.client, id);
+  if (!cible) return maj(interaction, rendre(b, `❌ <@${id}> ne peut pas être noté (bot ou membre parti).`));
+  const nl = cible.nonLie ? cible : null;
   const existant = store.getVouch(interaction.user.id, id);
   if (existant) {
     // Garde-fou : un avis existe deja, on ne le remplace pas sans le dire.
-    poser(interaction.user.id, { cible: id, verdict: null, etoiles: null, message: '', preuves: [], video: null });
+    poser(interaction.user.id, { cible: id, cibleNonLie: nl, verdict: null, etoiles: null, message: '', preuves: [], video: null });
     return interaction.update(vueExistant(existant, cible));
   }
-  return maj(interaction, rendre(poser(interaction.user.id, { cible: id })));
+  return maj(interaction, rendre(poser(interaction.user.id, { cible: id, cibleNonLie: nl })));
 }
 
 function vueExistant(existant, cible) {
   const positif = existant.value > 0;
   const contenu = embed(positif ? '✅・VOUS AVEZ DÉJÀ VOUCH CE JOUEUR' : '⚠️・VOUS AVEZ DÉJÀ SIGNALÉ CE JOUEUR', {
     couleur: positif ? FR.vert : FR.rouge,
-    image: cible.mc_name,
+    image: cible.image ?? cible.mc_name,
     description:
       `Votre avis sur **${cible.mc_name}** existe déjà, publié <t:${Math.floor(existant.created_at / 1000)}:R> :\n`
       + `${positif ? etoiles(existant.stars ?? 5) : '⚠️ Signalement'}`
@@ -321,12 +319,12 @@ export async function onBouton(interaction) {
   if (id === 'vouch:existant:supprimer') {
     await interaction.deferUpdate();
     const ok = b.cible ? await retirerAvis(interaction.client, interaction.user.id, b.cible) : false;
-    const cible = b.cible ? store.getLink(b.cible) : null;
+    const cible = b.cible ? cibleDe(interaction.client, b.cible) : null;
     brouillons.delete(String(interaction.user.id));
     console.log(`[vouch] ${interaction.user.tag} retire son avis sur ${cible?.mc_name ?? b.cible}`);
     return interaction.editReply({
       embeds: [embed('🗑️・AVIS SUPPRIMÉ', {
-        couleur: FR.jaune, image: cible?.mc_name ?? 'aucune',
+        couleur: FR.jaune, image: cible?.image ?? cible?.mc_name ?? 'aucune',
         description: ok ? `Votre avis sur **${cible?.mc_name}** est retiré, son score est recalculé.` : 'Cet avis n\'existait plus.',
       })],
       components: [],
@@ -411,8 +409,8 @@ export async function onModal(interaction) {
 }
 
 async function publier(interaction, b) {
-  const cible = b.cible ? store.getLink(b.cible) : null;
-  if (!cible) return maj(interaction, rendre(b, '❌ Le membre visé n\'est plus vérifié.'));
+  const cible = b.cible ? cibleDe(interaction.client, b.cible) : null;
+  if (!cible) return maj(interaction, rendre(b, '❌ Le membre visé n\'est plus sur le serveur.'));
   const scam = b.verdict === 'neg';
   if (scam && b.message.length < MIN_SCAM) return maj(interaction, rendre(b, `❌ Un signalement demande ${MIN_SCAM} caractères d'explication.`));
   if (scam && !(b.preuves?.length) && !b.video) return maj(interaction, rendre(b, '❌ Un signalement demande au moins une capture, une vidéo ou un clip Medal du trade.'));
@@ -463,7 +461,7 @@ async function publier(interaction, b) {
   return interaction.editReply({
     embeds: [embed(scam ? '⚠️・SIGNALEMENT PUBLIÉ' : '✅・VOUCH PUBLIÉ', {
       couleur: scam ? FR.rouge : FR.vert,
-      image: cible.mc_name,
+      image: cible.image ?? cible.mc_name,
       description: `Votre avis sur **${cible.mc_name}** est publié${fil ? ` dans ${fil}` : ''}.\n`
         + `${t.palier.emoji} ${t.palier.nom}${ligneScore(t) ? ` · ${ligneScore(t)}` : ''}`,
     })],
@@ -501,7 +499,7 @@ async function prevenirVouch(client, cible, auteur, nb, t, fil) {
   const lien = fil ? `\n[Voir mon profil](https://discord.com/channels/${fil.guildId}/${fil.id})` : '';
   await user.send({ embeds: [embed('⭐・NOUVEAU VOUCH', {
     couleur: FR.vert,
-    image: cible.mc_name,
+    image: cible.image ?? cible.mc_name,
     description: `**${auteur}** vous a laissé ${etoiles(nb)} sur **${cible.mc_name}**.\n`
       + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t) ? `${ligneScore(t)} · ` : ''}${t.n} avis${lien}`,
   })] });
@@ -523,7 +521,7 @@ export async function envoyerMpSignale(client, { guildId, cible, vouch, auteur, 
 
   const contenu = embed('⚠️・VOUS AVEZ ÉTÉ SIGNALÉ', {
     couleur: FR.rouge,
-    image: cible.mc_name,
+    image: cible.image ?? cible.mc_name,
     description:
       `**${auteur}** <@${vouch.from_id}> a publié un signalement de scam sur votre profil **${cible.mc_name}**.\n`
       + `> ${message.replace(/\n/g, '\n> ')}\n`

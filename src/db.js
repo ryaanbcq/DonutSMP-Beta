@@ -223,6 +223,7 @@ export const store = {
   setThread: (discordId, threadId, cardId, mcName) =>
     q.threadSet.run(String(discordId), String(threadId), cardId ? String(cardId) : null, mcName),
   removeThread: (discordId) => q.threadDel.run(String(discordId)),
+  filsNonLies: () => db.prepare("SELECT discord_id, thread_id FROM vouch_threads WHERE mc_name = ''").all(),
   removeVouch: (fromId, toId) => q.deleteVouch.run(String(fromId), String(toId)).changes > 0,
   vouchScore: (toId) => q.vouchScore.get(String(toId)),
   vouchList: (toId, limit = 5) => q.vouchList.all(String(toId), limit),

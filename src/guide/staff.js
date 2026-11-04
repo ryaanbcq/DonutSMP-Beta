@@ -191,7 +191,7 @@ function vouches() {
   return embed('⭐・VOUCHES ET RÉPUTATION', {
     couleur: FR.or,
     description:
-      `Chaque membre lié a un **post de réputation** dans ${salon(settings.salonVouch())}, en lecture seule : seul le bot y écrit.`
+      `Chaque membre a un **post de réputation** dans ${salon(settings.salonVouch())}, en lecture seule : seul le bot y écrit. Un membre non lié en a un dès son premier avis, à son nom Discord ; le jour où il lie son compte, le même post passe à son pseudo Minecraft et garde ses avis.`
       + ' On y donne un avis avec le bouton du post ou `/vouch`.\n\n'
       + '• **Vouch** : 1 à 5 étoiles et un message facultatif.\n'
       + '• **Signalement de scam** : message de 20 caractères minimum ET une preuve (capture, vidéo ou clip Medal) obligatoires.\n'

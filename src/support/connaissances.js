@@ -46,7 +46,7 @@ export function connaissancesServeur() {
     '- Le bouton de déliaison ou `/unlink` détache le compte.',
     '',
     '## Réputation (vouches)',
-    `- Chaque membre lié a un post de réputation dans ${salon(settings.salonVouch(), 'le forum des vouches')}. On note quelqu'un avec qui on a tradé via le bouton du post ou \`/vouch\`.`,
+    `- Chaque membre du Discord a un post de réputation dans ${salon(settings.salonVouch(), 'le forum des vouches')}, lié ou non : sans compte lié, il est à son nom Discord, et passe à son pseudo Minecraft le jour où il lie son compte, avec tous ses avis. On note quelqu'un avec qui on a tradé via le bouton du post ou \`/vouch\`.`,
     '- Vouch : 1 à 5 étoiles et un message facultatif. Signalement de scam : message de 20 caractères minimum et une preuve obligatoire (capture, vidéo ou clip Medal).',
     '- Il faut être lié depuis 24 h pour noter, 10 nouveaux avis au plus par 24 h, un seul avis par personne (modifiable). `/vouches retirer` retire son propre avis.',
     '- Le trust score apparaît à partir de 5 avis. `/vouches membre` et `/profil` affichent une réputation.',

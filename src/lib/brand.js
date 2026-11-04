@@ -42,6 +42,8 @@ export function embed(titre, { couleur = FR.bleu, image = 'logo', description } 
 
   if (image === 'logo') {
     if (logoUrl) e.setThumbnail(logoUrl);
+  } else if (/^https?:\/\//.test(image ?? '')) {
+    e.setThumbnail(image); // photo de profil d un membre non lie
   } else if (image && image !== 'aucune') {
     const url = skin(image);
     if (url) e.setThumbnail(url);

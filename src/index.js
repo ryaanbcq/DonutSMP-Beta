@@ -39,7 +39,7 @@ import { onSetupSelect, onSetupBouton, onSetupModal } from './tickets/setup.js';
 import { estAdmin } from './lib/admin.js';
 import { appliquerPresence } from './commands/statut.js';
 import { onSelect as onVouchSelect, onBouton as onVouchBouton, onModal as onVouchModal } from './vouch/panel.js';
-import { assurerFils, rafraichir, reveillerFils } from './vouch/fils.js';
+import { assurerFils, rafraichir, reveillerFils, fermerPostsFusionnes } from './vouch/fils.js';
 import { onVsetupSelect, onVsetupBouton } from './vouch/setup.js';
 import { demarrerSurveillanceTags } from './tags/surveillance.js';
 import { suivreMembres } from './lib/membres.js';
@@ -390,7 +390,7 @@ async function startWatcher(c) {
     publierSuivis().catch((e) => console.error('[baltop] liste des suivis :', e.message));
     // rafraichir et pas seulement filDe : le pseudo a pu apporter sa reputation
     // (relie depuis un autre Discord), la carte, les tags et le role Trusted suivent.
-    rafraichir(c, discordId).catch((e) => console.error('[vouch] fil :', e.message));
+    rafraichir(c, discordId).then(() => fermerPostsFusionnes(c, discordId)).catch((e) => console.error('[vouch] fil :', e.message));
 
     // Solde releve tout de suite : sans ca le nouveau membre attendrait le
     // prochain tour de cycle, jusqu a un quart d heure, pour apparaitre au

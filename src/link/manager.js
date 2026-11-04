@@ -114,12 +114,20 @@ export function resolvePayment(payment) {
   // Reputation : elle suit le compte Minecraft. Ce que ce Discord portait pour
   // un ancien pseudo (delie avant ce mecanisme) retourne a cet ancien pseudo,
   // et le pseudo lie recupere la sienne, meme depuis un autre Discord.
+  // Un post de membre NON lie (pseudo vide) reste a ce Discord : ses avis
+  // basculent sur le pseudo qu il vient de lier.
   const ancien = store.getThread(challenge.discord_id);
-  if (ancien && normName(ancien.mc_name) !== normName(nomReel)) {
+  if (ancien?.mc_name && normName(ancien.mc_name) !== normName(nomReel)) {
     store.transfererReputation(challenge.discord_id, cleOrpheline(ancien.mc_name));
   }
+  const postNonLie = ancien && !ancien.mc_name ? ancien.thread_id : null;
   for (const cle of store.orphelinsDuPseudo(nomReel, challenge.discord_id)) {
     store.transfererReputation(cle, challenge.discord_id);
+  }
+  // Le pseudo avait deja son propre post : il gagne, celui du nom Discord
+  // sera ferme (avis fusionnes, cartes laissees lisibles dans l ancien).
+  if (postNonLie && store.getThread(challenge.discord_id)?.thread_id !== postNonLie) {
+    store.kvSet('vouch.postsFusionnes', JSON.stringify([...JSON.parse(store.kvGet('vouch.postsFusionnes') || '[]'), postNonLie]));
   }
   store.createLink(challenge.discord_id, nomReel, payment.amount);
   store.closeChallenge(challenge.id, 'confirmed');

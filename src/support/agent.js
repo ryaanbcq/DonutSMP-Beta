@@ -9,6 +9,7 @@
 
 import { escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { embed, FR, logo, skin } from '../lib/brand.js';
+import { cibleDe } from '../vouch/fils.js';
 import { store } from '../db.js';
 import { config } from '../config.js';
 import { journal } from '../ops/journal.js';
@@ -46,7 +47,17 @@ export function trouverLie(vise, guild, liens = store.allLinks()) {
     return m && [m.displayName, m.user.username, m.user.globalName].some((n) => n && simple(n).includes(v));
   }) : [];
   const ids = [...new Set([...parPseudo, ...parDiscord].map((l) => l.discord_id))];
-  return ids.length === 1 ? { lie: liens.find((l) => l.discord_id === ids[0]), approx: true } : null;
+  if (ids.length === 1) return { lie: liens.find((l) => l.discord_id === ids[0]), approx: true };
+  if (ids.length > 1 || !guild) return null;
+  // Membre du Discord sans compte lie : il a aussi un profil de reputation.
+  const lies = new Set(liens.map((l) => l.discord_id));
+  const noms = (m) => [m.displayName, m.user.username, m.user.globalName].filter(Boolean).map(simple);
+  const libres = [...guild.members.cache.values()].filter((m) => !m.user.bot && !lies.has(m.id));
+  const exacts = libres.filter((m) => noms(m).includes(v));
+  const proches = exacts.length ? exacts : libres.filter((m) => noms(m).some((n) => n.includes(v)));
+  if (proches.length !== 1) return null;
+  const m = proches[0];
+  return { lie: { discord_id: m.id, mc_name: m.displayName, nonLie: true }, approx: !exacts.length };
 }
 const enCours = new Set();
 const echecs = new Map(); // channelId -> nombre d echecs d affilee
@@ -128,7 +139,7 @@ async function intervenir(channelId) {
         aConfirmer = lie;
         scamOffert = `propose:${lie.discord_id}`;
       } else if (!lie) {
-        carte.addFields({ name: '⚠️ Réputation', value: `Aucun compte lié ne correspond à **${escapeMarkdown(vise)}**. S'il a un profil de réputation, donnez son pseudo Minecraft exact ; sinon, le signaler ne sera possible qu'une fois son compte lié.` });
+        carte.addFields({ name: '⚠️ Réputation', value: `Personne sur le Discord ne correspond à **${escapeMarkdown(vise)}**. Donnez son pseudo Minecraft exact ou son nom Discord ; s'il n'est pas sur le Discord, il ne peut pas encore être signalé sur sa réputation.` });
         scamOffert = cleNonLie;
       }
     }
@@ -235,8 +246,10 @@ const CHAMP = '🔎 Est-ce la bonne personne ?';
 async function ajouterConfirmation(guild, carte, components, lie) {
   const m = guild.members.cache.get(lie.discord_id) ?? await guild.members.fetch(lie.discord_id).catch(() => null);
   const ign = lie.mc_name.replace(/^\./, '');
-  carte.addFields({ name: CHAMP, value: `<@${lie.discord_id}> · \`${escapeMarkdown(lie.mc_name)}\`${m ? ` · ${escapeMarkdown(m.displayName)}` : ''}` });
-  carte.setThumbnail(skin(ign));
+  carte.addFields({ name: CHAMP, value: lie.nonLie
+    ? `<@${lie.discord_id}> · ${escapeMarkdown(lie.mc_name)} · *compte Minecraft pas encore lié*`
+    : `<@${lie.discord_id}> · \`${escapeMarkdown(lie.mc_name)}\`${m ? ` · ${escapeMarkdown(m.displayName)}` : ''}` });
+  carte.setThumbnail(lie.nonLie ? (m?.displayAvatarURL({ size: 128, extension: 'png' }) ?? logo()) : skin(ign));
   if (m) carte.setAuthor({ name: '💬・SUPPORT DONUTSMP FR', iconURL: m.displayAvatarURL({ size: 64, extension: 'png' }) });
   components.unshift(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`support:vise:oui:${lie.discord_id}`).setLabel(`Oui, c'est ${ign}`.slice(0, 80)).setEmoji('✅').setStyle(ButtonStyle.Success),
@@ -252,14 +265,14 @@ export async function onBoutonVise(interaction) {
   if (interaction.user.id !== ticket.discord_id && !estStaff(interaction.member)) {
     return interaction.reply({ content: '🔒 Seul l\'auteur du ticket (ou le staff) peut répondre.', flags: 64 });
   }
-  const lie = store.getLink(id);
+  const lie = cibleDe(interaction.client, id);
   const etat = memoire.etat(interaction.channelId);
   const ign = lie?.mc_name ?? 'ce joueur';
   const oui = choix === 'oui' && lie;
   const carte = EmbedBuilder.from(interaction.message.embeds[0]);
   const champs = (carte.data.fields ?? []).filter((f) => f.name !== CHAMP);
   carte.setFields(...champs, oui
-    ? { name: '✅ Joueur confirmé', value: `<@${id}> · \`${escapeMarkdown(ign)}\` : le bouton ci-dessous ouvre un signalement de scam sur sa réputation (preuve obligatoire).` }
+    ? { name: '✅ Joueur confirmé', value: `<@${id}> · ${lie?.nonLie ? escapeMarkdown(ign) : `\`${escapeMarkdown(ign)}\``} : le bouton ci-dessous ouvre un signalement de scam sur sa réputation (preuve obligatoire).` }
     : { name: '❌ Ce n\'est pas lui', value: `Ce n'est pas \`${escapeMarkdown(ign)}\` : donnez son pseudo Minecraft exact dans le ticket.` });
   if (!oui) carte.setThumbnail(logo() ?? null);
   // Les autres boutons du message (import des anciens vouches) restent.
@@ -270,7 +283,7 @@ export async function onBoutonVise(interaction) {
     : autres;
   memoire.poserEtat(interaction.channelId, { ...etat, scamOffert: oui ? id : `non:${id}` });
   memoire.noter({ id: `${interaction.id}`, channelId: interaction.channelId, role: 'membre', at: Date.now(),
-    content: oui ? `[Le membre a confirmé que le joueur visé est ${ign} (compte lié au Discord).]`
+    content: oui ? `[Le membre a confirmé que le joueur visé est ${ign} (${lie?.nonLie ? 'membre du Discord, compte Minecraft pas encore lié' : 'compte lié au Discord'}).]`
       : `[Le membre a répondu que le joueur visé n'est PAS ${ign} : il faut son pseudo Minecraft exact.]` });
   await interaction.update({ embeds: [carte], components: rangs });
   // L assistant enchaine (quelques secondes apres, comme pour un message).
