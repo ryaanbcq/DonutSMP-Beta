@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS vocaux_perso (
   created_at INTEGER NOT NULL
 );
 `);
+// Nom choisi par un membre : repris a chacun de ses vocaux tant qu il ne le
+// change pas.
+db.exec('CREATE TABLE IF NOT EXISTS vocaux_noms (owner_id TEXT PRIMARY KEY, nom TEXT NOT NULL)');
 // Logs : un message par vocal, poste a l ouverture et edite a la fermeture.
 for (const col of ['log_message_id TEXT', 'nom TEXT', "participants TEXT NOT NULL DEFAULT '[]'", 'pic INTEGER NOT NULL DEFAULT 0', 'masque INTEGER NOT NULL DEFAULT 0']) {
   try { db.exec(`ALTER TABLE vocaux_perso ADD COLUMN ${col}`); } catch { /* deja la */ }
@@ -55,6 +58,8 @@ const q = {
   verrou: db.prepare('UPDATE vocaux_perso SET locked = ? WHERE channel_id = ?'),
   limite: db.prepare('UPDATE vocaux_perso SET limite = ? WHERE channel_id = ?'),
   oublier: db.prepare('DELETE FROM vocaux_perso WHERE channel_id = ?'),
+  nomPrefere: db.prepare('SELECT nom FROM vocaux_noms WHERE owner_id = ?'),
+  poserNomPrefere: db.prepare('INSERT INTO vocaux_noms (owner_id, nom) VALUES (?, ?) ON CONFLICT(owner_id) DO UPDATE SET nom = excluded.nom'),
   masque: db.prepare('UPDATE vocaux_perso SET masque = ? WHERE channel_id = ?'),
   hote: db.prepare('UPDATE vocaux_perso SET owner_id = ? WHERE channel_id = ?'),
   log: db.prepare('UPDATE vocaux_perso SET log_message_id = ? WHERE channel_id = ?'),
@@ -70,6 +75,8 @@ export const vocaux = {
   poserVerrou: (id, v) => q.verrou.run(v ? 1 : 0, String(id)),
   poserLimite: (id, n) => q.limite.run(n, String(id)),
   oublier: (id) => q.oublier.run(String(id)),
+  nomPrefere: (ownerId) => q.nomPrefere.get(String(ownerId))?.nom ?? null,
+  poserNomPrefere: (ownerId, nom) => q.poserNomPrefere.run(String(ownerId), nom),
   poserMasque: (id, v) => q.masque.run(v ? 1 : 0, String(id)),
   poserHote: (id, ownerId) => q.hote.run(String(ownerId), String(id)),
   poserLog: (id, messageId) => q.log.run(messageId ? String(messageId) : null, String(id)),
@@ -258,7 +265,7 @@ async function creerVocal(guild, membre) {
   const categorie = reglagesVocaux.categorie();
   const permsBot = categorie ? guild.channels.cache.get(categorie)?.permissionsFor(moi) : moi?.permissions;
   const salon = await guild.channels.create({
-    name: nomParDefaut(nomDe(membre)),
+    name: vocaux.nomPrefere(membre.id) ?? nomParDefaut(nomDe(membre)),
     type: ChannelType.GuildVoice,
     parent: categorie || undefined,
     permissionOverwrites: [
@@ -445,7 +452,11 @@ export async function onVoicehub(interaction) {
     const ok = await salon.setName(nom, `Renommé par ${interaction.user.tag}`).then(() => true)
       .catch((e) => { console.warn('[vocaux] renommer :', e.message); return false; });
     // Discord limite les renommages (2 toutes les 10 minutes par salon).
-    if (ok) vocaux.poserNom(salon.id, nom);
+    if (ok) {
+      vocaux.poserNom(salon.id, nom);
+      // Retenu pour l hote : ses prochains vocaux porteront ce nom.
+      if (interaction.user.id === entree.owner_id) vocaux.poserNomPrefere(entree.owner_id, nom);
+    }
     if (!ok) return interaction.reply({ content: '❌ Discord refuse le renommage pour l\'instant (2 changements toutes les 10 min au plus). Réessayez plus tard.', ...EPH });
     return majPanneau(interaction, entree);
   }
