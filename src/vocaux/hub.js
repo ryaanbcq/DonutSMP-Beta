@@ -18,8 +18,9 @@
 //     un affichage pas a jour reste cliquable.
 
 import {
-  ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder,
-  TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, MessageFlags, escapeMarkdown,
+  ChannelType, PermissionFlagsBits, ActionRowBuilder, ModalBuilder,
+  TextInputBuilder, TextInputStyle, UserSelectMenuBuilder, StringSelectMenuBuilder, MessageFlags, escapeMarkdown,
+  ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize,
 } from 'discord.js';
 import { db, store } from '../db.js';
 import { config } from '../config.js';
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS vocaux_perso (
 );
 `);
 // Logs : un message par vocal, poste a l ouverture et edite a la fermeture.
-for (const col of ['log_message_id TEXT', 'nom TEXT', "participants TEXT NOT NULL DEFAULT '[]'", 'pic INTEGER NOT NULL DEFAULT 0']) {
+for (const col of ['log_message_id TEXT', 'nom TEXT', "participants TEXT NOT NULL DEFAULT '[]'", 'pic INTEGER NOT NULL DEFAULT 0', 'masque INTEGER NOT NULL DEFAULT 0']) {
   try { db.exec(`ALTER TABLE vocaux_perso ADD COLUMN ${col}`); } catch { /* deja la */ }
 }
 
@@ -54,6 +55,8 @@ const q = {
   verrou: db.prepare('UPDATE vocaux_perso SET locked = ? WHERE channel_id = ?'),
   limite: db.prepare('UPDATE vocaux_perso SET limite = ? WHERE channel_id = ?'),
   oublier: db.prepare('DELETE FROM vocaux_perso WHERE channel_id = ?'),
+  masque: db.prepare('UPDATE vocaux_perso SET masque = ? WHERE channel_id = ?'),
+  hote: db.prepare('UPDATE vocaux_perso SET owner_id = ? WHERE channel_id = ?'),
   log: db.prepare('UPDATE vocaux_perso SET log_message_id = ? WHERE channel_id = ?'),
   nom: db.prepare('UPDATE vocaux_perso SET nom = ? WHERE channel_id = ?'),
   presence: db.prepare('UPDATE vocaux_perso SET participants = ?, pic = MAX(pic, ?) WHERE channel_id = ?'),
@@ -67,6 +70,8 @@ export const vocaux = {
   poserVerrou: (id, v) => q.verrou.run(v ? 1 : 0, String(id)),
   poserLimite: (id, n) => q.limite.run(n, String(id)),
   oublier: (id) => q.oublier.run(String(id)),
+  poserMasque: (id, v) => q.masque.run(v ? 1 : 0, String(id)),
+  poserHote: (id, ownerId) => q.hote.run(String(ownerId), String(id)),
   poserLog: (id, messageId) => q.log.run(messageId ? String(messageId) : null, String(id)),
   poserNom: (id, nom) => q.nom.run(nom, String(id)),
   /** Ajoute les membres presents aux participants et retient le pic. */
@@ -97,31 +102,53 @@ const nomDe = (membre) => membre?.displayName ?? membre?.user?.globalName ?? mem
 
 // ------------------------------------------------------------ panneau
 
-function panneau(entree, salon, hote) {
-  const contenu = embed('🎙️・TON VOCAL', {
-    couleur: FR.bleu,
-    image: 'aucune',
-    description: `### ${escapeMarkdown(salon.name)}\n`
-      + 'Gérez votre vocal sans quitter Discord. Seuls l\'hôte et le staff peuvent utiliser ces boutons.',
-  }).addFields(
-    // Le nom en texte : une mention dans un embed s affiche en ID brut chez
-    // qui n a pas charge le membre.
-    { name: 'Hôte', value: escapeMarkdown(hote ?? 'inconnu'), inline: true },
-    { name: 'Accès', value: entree.locked ? '🔒 Verrouillé' : '🔓 Ouvert', inline: true },
-    { name: 'Limite', value: entree.limite > 0 ? `${entree.limite} membre${entree.limite > 1 ? 's' : ''}` : 'Aucune', inline: true },
-  ).setFooter({ text: 'Supprimé automatiquement quand tout le monde est parti' });
+// Facon VoiceMaster, en plus court : un bloc (Components V2), deux menus.
+// Les options des menus ne changent jamais : un affichage pas a jour reste
+// utilisable (meme logique que les deux boutons fixes de DonutPay).
+const REGLAGES = [
+  { value: 'rename', label: 'Renommer', emoji: '✏️', description: 'Changer le nom du vocal' },
+  { value: 'limit', label: 'Limite de membres', emoji: '👥', description: 'De 0 (aucune) à 99' },
+  { value: 'claim', label: 'Récupérer le vocal', emoji: '👑', description: 'Devenir l\'hôte si le sien est parti' },
+];
+const PERMISSIONS = [
+  { value: 'lock', label: 'Verrouiller', emoji: '🔒', description: 'Plus personne ne peut entrer' },
+  { value: 'unlock', label: 'Ouvrir', emoji: '🔓', description: 'Tout le monde peut entrer' },
+  { value: 'hide', label: 'Masquer', emoji: '👻', description: 'Le vocal disparaît de la liste' },
+  { value: 'show', label: 'Afficher', emoji: '👁️', description: 'Le vocal réapparaît' },
+  { value: 'kick', label: 'Expulser quelqu\'un', emoji: '⏏️', description: 'Le déconnecter du vocal' },
+];
 
-  const boutons = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('voicehub:lock').setLabel('Verrouiller').setEmoji('🔒').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('voicehub:unlock').setLabel('Ouvrir').setEmoji('🔓').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('voicehub:rename').setLabel('Renommer').setEmoji('✏️').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('voicehub:limit').setLabel('Limite').setEmoji('👥').setStyle(ButtonStyle.Primary),
-  );
-  const expulser = new ActionRowBuilder().addComponents(
-    new UserSelectMenuBuilder().setCustomId('voicehub:kick').setPlaceholder('⏏️ Expulser quelqu\'un du vocal')
-      .setMinValues(1).setMaxValues(1),
-  );
-  return { embeds: [contenu], components: [boutons, expulser] };
+function menu(id, placeholder, options) {
+  return new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder)
+    .addOptions(options.map((o) => ({ ...o, emoji: { name: o.emoji } }))));
+}
+
+const sep = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+
+export function panneau(entree, salon, hote, bienvenue = null) {
+  // Le nom en texte : une mention s affiche en ID brut chez qui n a pas
+  // charge le membre.
+  const etat = [
+    `👑 ${escapeMarkdown(hote ?? 'inconnu')}`,
+    entree.locked ? '🔒 verrouillé' : '🔓 ouvert',
+    entree.masque ? '👻 masqué' : null,
+    entree.limite > 0 ? `👥 ${entree.limite} max` : '👥 sans limite',
+  ].filter(Boolean).join('  ·  ');
+  const bloc = new ContainerBuilder().setAccentColor(FR.bleu)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `## 🎙️ ${escapeMarkdown(salon.name)}\n`
+      + (bienvenue ? `Bienvenue <@${bienvenue}> ! ` : '')
+      + 'Gère ton vocal avec les menus ci-dessous (hôte et staff seulement).\n'
+      + `-# ${etat}`,
+    ))
+    .addSeparatorComponents(sep())
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('### ⚙️ Réglages'))
+    .addActionRowComponents(menu('voicehub:reglages', 'Changer les réglages du vocal', REGLAGES))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('### 🔐 Permissions'))
+    .addActionRowComponents(menu('voicehub:perms', 'Changer qui peut entrer', PERMISSIONS))
+    .addSeparatorComponents(sep())
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('-# Supprimé automatiquement quand tout le monde est parti.'));
+  return { components: [bloc], flags: MessageFlags.IsComponentsV2 };
 }
 
 async function hoteDe(guild, entree) {
@@ -132,11 +159,28 @@ async function hoteDe(guild, entree) {
 /** Edite le panneau sur place, jamais supprime puis reposte. */
 async function majPanneau(interaction, entree) {
   const salon = interaction.channel;
+  const { components } = panneau(entree, salon, await hoteDe(salon.guild, entree));
   try {
-    await interaction.update(panneau(entree, salon, await hoteDe(salon.guild, entree)));
+    // Un formulaire ouvert depuis un message ephemere (choix de l expulsion)
+    // ne peut pas editer le panneau : on passe par le message.
+    if (interaction.message?.flags?.has(MessageFlags.IsComponentsV2)) await interaction.update({ components });
+    else await interaction.reply({ content: '✅ C\'est fait.', ...EPH });
   } catch (e) {
     console.warn('[vocaux] panneau :', e.message);
   }
+}
+
+/**
+ * Un menu garde l option choisie affichee, et Discord n envoie rien quand on
+ * rechoisit la meme : apres un formulaire ferme sans valider, « Renommer »
+ * ne repondait plus. On remet le panneau a neuf des que le formulaire est
+ * ouvert.
+ */
+async function remettreAZero(interaction, entree) {
+  const m = interaction.message;
+  if (!m) return;
+  const { components } = panneau(entree, interaction.channel, await hoteDe(interaction.guild, entree));
+  await m.edit({ components }).catch(() => {});
 }
 
 // ------------------------------------------------------------ logs
@@ -255,8 +299,7 @@ async function creerVocal(guild, membre) {
   vocaux.noterPresents(salon.id, [membre.id]);
   await logOuverture(guild, vocaux.get(salon.id));
   await salon.send({
-    content: `👋 <@${membre.id}>, bienvenue dans ton vocal !`,
-    ...panneau(vocaux.get(salon.id), salon, nomDe(membre)),
+    ...panneau(vocaux.get(salon.id), salon, nomDe(membre), membre.id),
     allowedMentions: { users: [membre.id] },
   }).catch((e) => console.warn('[vocaux] panneau :', e.message));
 }
@@ -353,10 +396,18 @@ export async function demarrerVocaux(client) {
 // ------------------------------------------------------------ panneau : clics
 
 export async function onVoicehub(interaction) {
-  const action = interaction.customId.slice('voicehub:'.length);
+  const id = interaction.customId.slice('voicehub:'.length);
+  // Menus : l action est l option choisie. kick = le choix du membre.
+  const action = (id === 'reglages' || id === 'perms') ? interaction.values?.[0]
+    : id === 'kick' && interaction.isUserSelectMenu() ? 'kickpick' : id;
   const entree = vocaux.get(interaction.channelId);
   if (!entree) return interaction.reply({ content: '❌ Ce salon n\'est pas un vocal perso.', ...EPH });
+
+  // Recuperer : n importe qui DANS le vocal, si l hote n y est plus.
+  if (action === 'claim') return recuperer(interaction, entree);
+
   if (!peutGerer(interaction.member, entree, estAdmin)) {
+    await remettreAZero(interaction, entree);
     return interaction.reply({ content: '🔒 Seul l\'hôte de ce vocal (ou le staff) peut faire ça.', ...EPH });
   }
   const salon = interaction.channel;
@@ -371,7 +422,17 @@ export async function onVoicehub(interaction) {
     return majPanneau(interaction, vocaux.get(salon.id));
   }
 
+  if (action === 'hide' || action === 'show') {
+    const masque = action === 'hide';
+    const ok = await salon.permissionOverwrites.edit(salon.guild.id, { ViewChannel: !masque }, { reason: `${masque ? 'Masqué' : 'Affiché'} par ${interaction.user.tag}` })
+      .then(() => true).catch((e) => { console.warn('[vocaux] masque :', e.message); return false; });
+    if (!ok) return interaction.reply({ content: '❌ Je n\'ai pas pu changer la visibilité du vocal (droits du bot).', ...EPH });
+    vocaux.poserMasque(salon.id, masque);
+    return majPanneau(interaction, vocaux.get(salon.id));
+  }
+
   if (action === 'rename') {
+    setTimeout(() => remettreAZero(interaction, entree), 1500).unref?.();
     return interaction.showModal(new ModalBuilder().setCustomId('voicehub:renameform').setTitle('Renommer le vocal')
       .addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('nom').setLabel('Nouveau nom').setStyle(TextInputStyle.Short)
@@ -390,6 +451,7 @@ export async function onVoicehub(interaction) {
   }
 
   if (action === 'limit') {
+    setTimeout(() => remettreAZero(interaction, entree), 1500).unref?.();
     return interaction.showModal(new ModalBuilder().setCustomId('voicehub:limitform').setTitle('Limite de membres')
       .addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder().setCustomId('limite').setLabel(`Nombre maximum (0 à ${LIMITE_MAX}, 0 = aucune)`)
@@ -407,6 +469,15 @@ export async function onVoicehub(interaction) {
   }
 
   if (action === 'kick') {
+    await remettreAZero(interaction, entree);
+    return interaction.reply({
+      content: '⏏️ Qui veux-tu expulser du vocal ?',
+      components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('voicehub:kick')
+        .setPlaceholder('Choisir un membre').setMinValues(1).setMaxValues(1))],
+      ...EPH,
+    });
+  }
+  if (action === 'kickpick') {
     const cible = interaction.values?.[0];
     const membre = cible ? await salon.guild.members.fetch(cible).catch(() => null) : null;
     if (!membre || membre.voice.channelId !== salon.id) {
@@ -418,7 +489,29 @@ export async function onVoicehub(interaction) {
       return interaction.reply({ content: '❌ Vous ne pouvez pas expulser ce membre.', ...EPH });
     }
     await membre.voice.disconnect(`Expulsé du vocal par ${interaction.user.tag}`).catch(() => {});
-    return interaction.reply({ content: `⏏️ **${escapeMarkdown(nomDe(membre))}** a été expulsé du vocal.`, ...EPH });
+    return interaction.update({ content: `⏏️ **${escapeMarkdown(nomDe(membre))}** a été expulsé du vocal.`, components: [] });
   }
   return interaction.reply({ content: '❌ Action inconnue.', ...EPH });
+}
+
+async function recuperer(interaction, entree) {
+  const salon = interaction.channel;
+  await remettreAZero(interaction, entree);
+  if (interaction.user.id === entree.owner_id) return interaction.reply({ content: '👑 Tu es déjà l\'hôte de ce vocal.', ...EPH });
+  if (interaction.member?.voice?.channelId !== salon.id) {
+    return interaction.reply({ content: '❌ Rejoins le vocal pour le récupérer.', ...EPH });
+  }
+  if (salon.members.has(entree.owner_id) && !estAdmin(interaction.member)) {
+    return interaction.reply({ content: '❌ L\'hôte est toujours là.', ...EPH });
+  }
+  const permsBot = salon.permissionsFor(interaction.guild.members.me);
+  const ok = await salon.permissionOverwrites.edit(interaction.user.id,
+    Object.fromEntries(DROITS_HOTE.filter((c) => droitsAccordables([c], permsBot).length).map((c) => [c, true])),
+    { reason: `Vocal récupéré par ${interaction.user.tag}` }).then(() => true).catch((e) => { console.warn('[vocaux] recuperer :', e.message); return false; });
+  if (!ok) return interaction.reply({ content: '❌ Je n\'ai pas pu te donner le vocal (droits du bot).', ...EPH });
+  await salon.permissionOverwrites.delete(entree.owner_id, 'Ancien hôte').catch(() => {});
+  vocaux.poserHote(salon.id, interaction.user.id);
+  const maj = vocaux.get(salon.id);
+  await interaction.message?.edit({ components: panneau(maj, salon, nomDe(interaction.member)).components }).catch(() => {});
+  return interaction.reply({ content: '👑 Tu es maintenant l\'hôte de ce vocal.', ...EPH });
 }
