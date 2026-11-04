@@ -67,32 +67,32 @@ function moderation(guild) {
   const perms = registre.perms();
   const { membres: tous, roles: rolesTout } = registre.autorises();
   const regle = tous.length || rolesTout.length || Object.values(perms).some((l) => l?.length);
-  const qui = (a) => roles(perms[a], regle ? '*seulement ceux qui peuvent tout faire*' : '*admins du bot*');
+  const qui = (a) => `-# 👮 ${roles(perms[a], regle ? 'seulement ceux qui peuvent tout faire' : 'admins du bot')}`;
+  const peutTout = [membres(guild, tous), roles(rolesTout, '')].filter(Boolean).join(' ');
   return embed('🔨・SANCTIONS', {
     couleur: FR.rouge,
     description:
-      `Les commandes s'écrivent dans **n'importe quel salon** avec le préfixe **\`${p}\`**. Le message est effacé,`
-      + ' la réponse aussi au bout de 10 s, et tout part dans le journal. Le membre se désigne par **mention ou ID**'
-      + ' (pratique s\'il a quitté le serveur).\n\n'
-      + `\`${p}warn @membre raison\` · avertir (MP au membre)\n`
-      + `\`${p}unwarn @membre [numéro|tout] [raison]\` · retirer un avertissement (le dernier par défaut)\n`
-      + `\`${p}warns @membre\` · voir ses avertissements\n`
-      + `\`${p}mute @membre [temps] [raison]\` · rendre muet, **1 h** sans temps, 28 jours au plus\n`
-      + `\`${p}unmute @membre [raison]\` · rendre la parole\n`
-      + `\`${p}kick @membre [raison]\` · expulser\n`
-      + `\`${p}ban @membre [temps] [raison]\` · bannir, **définitif** sans temps, débannissement automatique sinon\n`
-      + `\`${p}unban <ID> [raison]\` · débannir\n\n`
-      + '**Temps** : `10m`, `2h`, `3j`, `1sem`. Exemple : '
-      + `\`${p}ban 123456789012345678 3j pub en MP\`\n\n`
-      + '**Qui peut faire quoi**\n'
-      + `⚠️ Avertir (\`${p}warn\`, \`${p}unwarn\`, \`${p}warns\`) · ${qui('warn')}\n`
-      + `🔇 Mute (\`${p}mute\`, \`${p}unmute\`) · ${qui('mute')}\n`
-      + `👢 Expulser (\`${p}kick\`) · ${qui('kick')}\n`
-      + `⛔ Bannir (\`${p}ban\`, \`${p}unban\`) · ${qui('ban')}\n`
-      + `👑 Tout faire · ${[membres(guild, tous), roles(rolesTout, '')].filter(Boolean).join(' ') || '*personne*'}\n\n`
-      + '**Garde-fous** : on ne sanctionne ni soi-même, ni le propriétaire, ni un bot,'
-      + ' ni quelqu\'un dont le rôle est au même niveau ou au-dessus du sien.\n'
-      + '-# Les mêmes commandes existent en slash (/ban, /mute…). Préfixe et rôles : /setup general > Modération.',
+      `Préfixe : **\`${p}\`** · dans n'importe quel salon · le membre par **@mention ou ID**\n`
+      + '-# Ton message est effacé, la réponse aussi après 10 s, tout reste dans le journal.\n\n'
+      + '### ⚠️ Avertir\n'
+      + `\`${p}warn @membre raison\`\n`
+      + `\`${p}unwarn @membre [numéro|tout]\` · le dernier par défaut\n`
+      + `\`${p}warns @membre\` · son historique\n`
+      + `${qui('warn')}\n`
+      + '### 🔇 Mute\n'
+      + `\`${p}mute @membre [temps] [raison]\` · 1 h par défaut, 28 j max\n`
+      + `\`${p}unmute @membre\`\n`
+      + `${qui('mute')}\n`
+      + '### 👢 Expulser\n'
+      + `\`${p}kick @membre [raison]\`\n`
+      + `${qui('kick')}\n`
+      + '### ⛔ Bannir\n'
+      + `\`${p}ban @membre [temps] [raison]\` · définitif sans temps\n`
+      + `\`${p}unban <ID>\`\n`
+      + `${qui('ban')}\n\n`
+      + `⏱️ **Temps** : \`10m\` \`2h\` \`3j\` \`1sem\` · ex. \`${p}ban 123456789012345678 3j pub en MP\`\n`
+      + (peutTout ? `👑 **Peut tout faire** : ${peutTout}\n` : '')
+      + '-# Préfixe et rôles : /setup general > Modération.',
   });
 }
 
