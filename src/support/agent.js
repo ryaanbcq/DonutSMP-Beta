@@ -242,5 +242,7 @@ export async function onBoutonVise(interaction) {
   memoire.noter({ id: `${interaction.id}`, channelId: interaction.channelId, role: 'membre', at: Date.now(),
     content: oui ? `[Le membre a confirmé que le joueur visé est ${ign} (compte lié au Discord).]`
       : `[Le membre a répondu que le joueur visé n'est PAS ${ign} : il faut son pseudo Minecraft exact.]` });
-  return interaction.update({ embeds: [carte], components: rangs });
+  await interaction.update({ embeds: [carte], components: rangs });
+  // L assistant enchaine (quelques secondes apres, comme pour un message).
+  planifier(interaction.channelId);
 }
