@@ -46,6 +46,7 @@ import { suivreMembres } from './lib/membres.js';
 import { demarrerModeration } from './moderation/actions.js';
 import { demarrerAntipub, onBoutonAntipub } from './moderation/antipub.js';
 import { demarrerPrefixe } from './moderation/prefixe.js';
+import { demarrerVocaux, onVoicehub } from './vocaux/hub.js';
 import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -147,6 +148,7 @@ client.once('clientReady', async (c) => {
   if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
   setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();
   demarrerSurveillanceTags(c);
+  await demarrerVocaux(c).catch((e) => console.error('[vocaux] demarrage :', e.message));
 });
 
 // Coupures de la passerelle Discord : discord.js reprend seul, on annonce la
@@ -201,6 +203,7 @@ client.on('interactionCreate', async (interaction) => {
     }
     if (interaction.isAnySelectMenu()) {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
+      if (interaction.customId.startsWith('voicehub:')) return await onVoicehub(interaction);
       if (interaction.customId.startsWith('recl:')) return await onReclamationSelect(interaction);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
       if (interaction.customId.startsWith('ticket:add:')) return await onSelectTicket(interaction);
@@ -268,6 +271,7 @@ function refusSetup(interaction) {
 }
 
 async function onBouton(interaction) {
+  if (interaction.customId.startsWith('voicehub:')) return onVoicehub(interaction);
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('antipub:')) return onBoutonAntipub(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
@@ -342,6 +346,7 @@ async function onDelier(interaction) {
 }
 
 async function onModal(interaction) {
+  if (interaction.customId.startsWith('voicehub:')) return onVoicehub(interaction);
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
   if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);

@@ -41,6 +41,8 @@ import { reglagesTags } from '../tags/surveillance.js';
 import {
   pageModeration, onModerationSelect, onModerationBouton, onModerationModal, pageAntipub, onAntipubSelect, onAntipubBouton, onAntipubModal,
 } from '../moderation/setup.js';
+import { pageVocaux, onVocauxSelect, onVocauxBouton } from '../vocaux/setup.js';
+import { reglagesVocaux } from '../vocaux/hub.js';
 
 const ok = (v) => (v ? '✅' : '⚠️');
 const salon = (id) => (id ? `<#${id}>` : '*à choisir*');
@@ -104,6 +106,8 @@ export async function rendreSetupGeneral(guild, note = '') {
           .setEmoji('🏷️').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:mod').setLabel('Modération').setEmoji('🔨').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:antipub').setLabel('Anti-pub').setEmoji('🚫').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:page:vocaux').setLabel(`Vocaux${reglagesVocaux.hub() ? '' : ' (éteints)'}`)
+          .setEmoji('🔊').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -359,6 +363,7 @@ export async function onGsetupSelect(interaction) {
   if (id.startsWith('tags:')) return onTagsSelect(interaction, id);
   if (id.startsWith('mod:')) return onModerationSelect(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubSelect(interaction, id);
+  if (id.startsWith('vocaux:')) return onVocauxSelect(interaction, id);
 
   if (id === 'admin') {
     const avant = settings.rolesAdmin();
@@ -449,6 +454,8 @@ export async function onGsetupBouton(interaction) {
   if (id === 'page:tags') return interaction.update(pageTags());
   if (id === 'page:mod') return interaction.update(pageModeration());
   if (id === 'page:antipub') return interaction.update(pageAntipub());
+  if (id === 'page:vocaux') return interaction.update(pageVocaux(guild));
+  if (id.startsWith('vocaux:')) return onVocauxBouton(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubBouton(interaction, id);
   if (id.startsWith('mod:')) return onModerationBouton(interaction, id);
   if (id === 'beneficiaire') {
