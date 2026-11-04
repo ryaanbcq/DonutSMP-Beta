@@ -21,6 +21,9 @@ import { journal } from '../ops/journal.js';
 import { embed, FR } from '../lib/brand.js';
 import { TYPES_BOOST, boostsDuMessage, compterBoosts, decisionRole, texteMerci } from './logique.js';
 
+// GIF de la trend « W » (winner) sous le remerciement ; kv boosts.gif pour en changer, « aucun » pour l enlever.
+export const GIF_W = 'https://media.tenor.com/dhnCFJ_FZ8YAAAAC/look-at-the-size-of-this-w-spongebob.gif';
+
 const PAGES_MAX = 30; // 3 000 messages du salon systeme au demarrage
 
 const lire = () => { try { return JSON.parse(store.kvGet('boosts.compteurs') ?? '') ?? {}; } catch { return {}; } };
@@ -30,6 +33,7 @@ export const reglagesBoosts = {
   roleId: () => store.kvGet('boosts.role') || null,
   poserRole: (id) => store.kvSet('boosts.role', id ? String(id) : ''),
   compteurs: lire,
+  gif: () => { const g = store.kvGet('boosts.gif'); return g === 'aucun' ? null : g || GIF_W; },
 };
 
 function roleSuper(guild) {
@@ -64,6 +68,8 @@ async function remercier(m, membre, boosts, devientSuper) {
     image: membre.displayAvatarURL({ size: 256 }),
     description: texteMerci({ boosts, total: m.guild.premiumSubscriptionCount, devientSuper, nomSuper }),
   });
+  const gif = reglagesBoosts.gif();
+  if (gif) carte.setImage(gif);
   await m.reply({ content: `${membre}`, embeds: [carte], allowedMentions: { users: [membre.id], repliedUser: false } });
 }
 
