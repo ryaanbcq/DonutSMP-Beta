@@ -323,14 +323,15 @@ async function supprimer(interaction, ticket, { staff }) {
 }
 
 /**
- * Suppression par le bot lui meme (ticket resolu, ou inactif 48 h). Comme une
- * suppression staff : pas de transcript automatique (decision de Ryan), le
- * message de log passe a « Supprime ».
+ * Suppression par le bot lui meme (ticket resolu, ou inactif 48 h). Personne
+ * n a pu cliquer « Sauvegarder les logs » : le transcript part TOUJOURS dans
+ * le message de log avant la suppression (decision de Ryan, 04/11).
  */
 export async function supprimerTicketAuto(guild, ticket, raison) {
   const salon = await guild.channels.fetch(ticket.channel_id).catch(() => null);
+  const fichier = salon ? await transcript(guild.client, salon, ticket).catch((e) => { console.warn('[ticket] transcript :', e.message); return null; }) : null;
   store.setTicketEtat(ticket.channel_id, 'supprime', guild.members.me?.id ?? null);
-  await majJournal(guild, store.getTicket(ticket.channel_id)).catch(() => {});
+  await majJournal(guild, store.getTicket(ticket.channel_id), fichier ? { fichier } : {}).catch(() => {});
   marquerRelais(guild, ticket.channel_id, 'ferme', raison).catch(() => {});
   console.log(`[ticket] #${ticket.id} supprime automatiquement (${raison})`);
   if (salon) await salon.delete(`Ticket #${ticket.id} : ${raison}`).catch((e) => console.warn('[ticket] suppression :', e.message));

@@ -162,7 +162,7 @@ function tickets() {
       + '📄 **Sauvegarder les logs** · transcript dans le salon des logs\n'
       + '🗑️ **Supprimer** · pas de transcript automatique : clique **Sauvegarder les logs** avant si la conversation compte\n\n'
       + '**Fin automatique**\n'
-      + '⏳ Le membre ne répond plus depuis **24 h** à une réponse du staff ou du support : le bot le prévient, et **24 h** plus tard sans un mot de personne le ticket est supprimé. Un message de n\'importe qui annule. Un ticket où le membre attend le staff n\'est jamais supprimé pour ça.\n'
+      + '⏳ Le membre ne répond plus depuis **24 h** à une réponse du staff ou du support : le bot le prévient, et **24 h** plus tard sans un mot de personne le ticket est supprimé. Un message de n\'importe qui annule. Un ticket où le membre attend le staff n\'est jamais supprimé pour ça. Les logs sont sauvegardés automatiquement avant.\n'
       + '✅ Quand le support a réglé la demande, il demande au membre si c\'est résolu : **Oui** = ticket supprimé 1 minute plus tard, **Non** = on continue.\n'
       + '-# Catégories, dossiers et rôles : /setup tickets.',
   });
