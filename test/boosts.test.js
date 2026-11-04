@@ -28,14 +28,15 @@ test('boosts : role donne a 2 boosts, retire seulement s il vient du bot', () =>
   assert.equal(decisionRole({ boosts: 0, booste: false, aLeRole: true, donneParBot: false }), null);
 });
 
-test('boosts : remerciement, avec le passage Super Booster', async () => {
+test('boosts : remerciement, salon des avantages et passage Super Booster', async () => {
   const { texteMerci } = await import('../src/boosts/logique.js');
-  const un = texteMerci({ boosts: 1, total: 37, devientSuper: false, nomSuper: 'Super Booster' });
+  const un = texteMerci({ boosts: 1, total: 37, devientSuper: false, roleSuper: '<@&9>', salonAvantages: '42' });
   assert.match(un, /Merci énormément pour ton boost/);
-  assert.match(un, /Un 2e boost et tu passes \*\*Super Booster\*\*/);
+  assert.match(un, /<#42>/);
+  assert.match(un, /Un 2e boost et tu passes <@&9>/);
   assert.match(un, /37 boosts/);
-  const deux = texteMerci({ boosts: 2, total: 38, devientSuper: true, nomSuper: 'Super Booster' });
+  const deux = texteMerci({ boosts: 2, total: 38, devientSuper: true, roleSuper: '<@&9>', salonAvantages: null });
   assert.match(deux, /2e boost/);
-  assert.match(deux, /tu deviens \*\*Super Booster\*\*/);
-  assert.doesNotMatch(deux, /Un 2e boost/);
+  assert.match(deux, /tu deviens <@&9>/);
+  assert.doesNotMatch(deux, /Un 2e boost|<#/);
 });

@@ -33,16 +33,20 @@ export function decisionRole({ boosts, booste, aLeRole, donneParBot }) {
   return null;
 }
 
-/** Texte du remerciement poste sous le message de boost. */
-export function texteMerci({ boosts, total, devientSuper, nomSuper }) {
+/**
+ * Texte du remerciement poste sous le message de boost. Les avantages ne sont
+ * PAS ecrits ici : on renvoie vers le salon du serveur, que le staff modifie
+ * quand il veut. roleSuper = mention du role (dans un embed, une mention ne ping personne).
+ */
+export function texteMerci({ boosts, total, devientSuper, roleSuper, salonAvantages }) {
   const lignes = [
     boosts >= 2
       ? `Merci énormément, c'est ton **${boosts}e boost** ! 💜`
       : 'Merci énormément pour ton boost ! 💜',
-    'Grâce à toi la commu DonutSMP FR garde ses avantages : meilleure qualité vocale, plus d\'emojis, bannière, et tu as débloqué les options 💎 des vocaux temporaires.',
+    salonAvantages ? `Tes avantages de booster t'attendent dans <#${salonAvantages}>.` : 'Ton soutien compte énormément pour la commu DonutSMP FR.',
   ];
-  if (devientSuper) lignes.push(`\n💎 Avec 2 boosts, tu deviens **${nomSuper}** !`);
-  else if (boosts < 2 && nomSuper) lignes.push(`\n-# Un 2e boost et tu passes **${nomSuper}**.`);
+  if (devientSuper && roleSuper) lignes.push(`\n💎 Avec 2 boosts, tu deviens ${roleSuper} !`);
+  else if (boosts < 2 && roleSuper) lignes.push(`\n-# Un 2e boost et tu passes ${roleSuper}.`);
   if (total) lignes.push(`-# Le serveur compte maintenant ${total} boosts.`);
   return lignes.join('\n');
 }

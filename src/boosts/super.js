@@ -14,6 +14,7 @@
 //
 //   kv boosts.role       id du role (sinon le role dont le nom contient « super booster »)
 //   kv boosts.compteurs  JSON { userId: { n, bot } }
+//   kv boosts.salonAvantages  salon des avantages (sinon celui dont le nom contient « nous-soutenir »)
 
 import { store } from '../db.js';
 import { config } from '../config.js';
@@ -33,6 +34,11 @@ export const reglagesBoosts = {
   roleId: () => store.kvGet('boosts.role') || null,
   poserRole: (id) => store.kvSet('boosts.role', id ? String(id) : ''),
   compteurs: lire,
+  salonAvantages: (guild) => {
+    const id = store.kvGet('boosts.salonAvantages');
+    if (id) return guild.channels.cache.has(id) ? id : null;
+    return guild.channels.cache.find((c) => /nous-?soutenir/i.test(c.name))?.id ?? null;
+  },
   gif: () => { const g = store.kvGet('boosts.gif'); return g === 'aucun' ? null : g || GIF_W; },
 };
 
@@ -62,11 +68,11 @@ async function appliquer(membre, c) {
 
 /** Remerciement en reponse au message systeme de boost, dans le meme salon. */
 async function remercier(m, membre, boosts, devientSuper) {
-  const nomSuper = roleSuper(m.guild)?.name?.replace(/^[^\p{L}\p{N}]+/u, '') || null;
+  const role = roleSuper(m.guild);
   const carte = embed('🚀・MERCI POUR TON BOOST', {
     couleur: 0xf47fff, // rose Nitro
     image: membre.displayAvatarURL({ size: 256 }),
-    description: texteMerci({ boosts, total: m.guild.premiumSubscriptionCount, devientSuper, nomSuper }),
+    description: texteMerci({ boosts, total: m.guild.premiumSubscriptionCount, devientSuper, roleSuper: role ? `${role}` : null, salonAvantages: reglagesBoosts.salonAvantages(m.guild) }),
   });
   const gif = reglagesBoosts.gif();
   if (gif) carte.setImage(gif);
