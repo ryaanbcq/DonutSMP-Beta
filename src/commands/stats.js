@@ -5,19 +5,13 @@ import { presence } from '../ingame/presence.js';
 import { embed, TITRES, FR } from '../lib/brand.js';
 import { isValidName } from '../lib/names.js';
 import { valeurNumerique } from '../minecraft/dialog.js';
+import { donut } from '../donut/api.js';
+import { shortMoney, duration } from '../lib/format.js';
+import { lignesStats } from '../stats/carte.js';
 
 // Comme /bal : chaque consultation coute une commande en jeu.
 const ATTENTE_MS = 15_000;
 const dernier = new Map();
-
-// Ordre et libelles des lignes renvoyees par DonutSMP.
-const LIGNES = [
-  ['Money', 'Argent'],
-  ['Kills', 'Kills'],
-  ['Deaths', 'Morts'],
-  ['Playtime', 'Temps de jeu'],
-  ['Shards', 'Shards'],
-];
 
 export const data = new SlashCommandBuilder()
   .setName('stats')
@@ -46,19 +40,38 @@ export async function execute(interaction) {
     });
   }
 
+  dernier.set(interaction.user.id, Date.now());
+
+  // Avec une cle API DonutSMP : la fiche complete, sans passer par le bot en jeu.
+  if (donut.live) {
+    await interaction.deferReply();
+    const st = await donut.stats(pseudo).catch((e) => { console.warn('[stats] API :', e.message); return undefined; });
+    if (st === null) return interaction.editReply(`Aucun joueur nommé **${pseudo}** sur DonutSMP.`);
+    if (st) {
+      const vu = await donut.lookup(pseudo).catch(() => null);
+      const lien = store.getLinkByName(st.name);
+      return interaction.editReply({ embeds: [carte(st.name, {
+        argent: shortMoney(st.money), shards: st.shards, kills: st.kills, morts: st.deaths, temps: duration(st.playtimeMs),
+        poses: st.placedBlocks, casses: st.brokenBlocks, mobs: st.mobsKilled, enLigne: Boolean(vu), rang: vu?.rank ?? null,
+        discordId: lien?.discord_id,
+      }, 'API officielle DonutSMP')] });
+    }
+    // API en panne : on retombe sur le jeu.
+  }
+
   const etat = await presence();
   if (!etat.enLigne) {
-    return interaction.reply({
+    const charge = {
       embeds: [embed('⚠️・SERVICE INDISPONIBLE', {
         couleur: FR.jaune,
         description: "Notre bot n'est pas connecté à DonutSMP, impossible de lire une fiche pour le moment.",
       })],
       flags: MessageFlags.Ephemeral,
-    });
+    };
+    return interaction.deferred ? interaction.editReply(charge) : interaction.reply(charge);
   }
 
-  dernier.set(interaction.user.id, Date.now());
-  await interaction.deferReply();
+  if (!interaction.deferred) await interaction.deferReply();
 
   const fiche = await consulterStats(pseudo);
 
@@ -68,29 +81,18 @@ export async function execute(interaction) {
   if (fiche.invalide) return interaction.editReply('❌ Pseudo invalide.');
   if (fiche.inconnu) return interaction.editReply(`Aucun joueur nommé **${pseudo}** sur DonutSMP.`);
 
-  const carte = embed(TITRES.stats, { image: fiche.nom, description: `**${fiche.nom}**` });
-
-  for (const [cle, libelle] of LIGNES) {
-    if (fiche.lignes[cle]) carte.addFields({ name: libelle, value: fiche.lignes[cle], inline: true });
-  }
-
-  // Lignes que DonutSMP ajouterait sans qu on les ait prevues.
-  for (const [cle, valeur] of Object.entries(fiche.lignes)) {
-    if (!LIGNES.some(([k]) => k === cle)) carte.addFields({ name: cle, value: valeur, inline: true });
-  }
-
-  const kills = valeurNumerique(fiche.lignes.Kills);
-  const morts = valeurNumerique(fiche.lignes.Deaths);
-  if (kills !== null && morts !== null) {
-    carte.addFields({
-      name: 'K/D',
-      value: morts > 0 ? (kills / morts).toFixed(2) : String(kills),
-      inline: true,
-    });
-  }
-
+  const L = fiche.lignes;
   const lien = store.getLinkByName(fiche.nom);
-  if (lien) carte.addFields({ name: 'Membre vérifié', value: `<@${lien.discord_id}>` });
+  return interaction.editReply({ embeds: [carte(fiche.nom, {
+    argent: L.Money, shards: L.Shards ? valeurNumerique(L.Shards) : null,
+    kills: valeurNumerique(L.Kills) ?? undefined, morts: valeurNumerique(L.Deaths) ?? undefined,
+    killsTexte: L.Kills, mortsTexte: L.Deaths, temps: L.Playtime, discordId: lien?.discord_id,
+  }, '/stats en jeu')] });
+}
 
-  return interaction.editReply({ embeds: [carte] });
+function carte(nom, f, source) {
+  return embed(TITRES.stats, { image: 'aucune', description: `## ${nom.replace(/[*_`~|]/g, '\\$&')}\n${lignesStats(f)}` })
+    .setThumbnail(`https://mc-heads.net/body/${encodeURIComponent(nom.replace(/^\./, ''))}/128`)
+    .setFooter({ text: `Source : ${source}` })
+    .setTimestamp();
 }
