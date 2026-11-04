@@ -49,7 +49,7 @@ import { demarrerPrefixe } from './moderation/prefixe.js';
 import { demarrerVocaux, onVoicehub } from './vocaux/hub.js';
 import { demarrerGuide } from './guide/staff.js';
 import { demarrerSuggestions } from './suggestions/salon.js';
-import { demarrerSupport } from './support/agent.js';
+import { demarrerSupport, onBoutonVise } from './support/agent.js';
 import { demarrerRevue, onBoutonSupport, onModalSupport } from './support/revue.js';
 import { onBoutonImport } from './support/anciens.js';
 import { intentMembresCoche } from './tags/intent.js';
@@ -284,6 +284,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('voicehub:')) return onVoicehub(interaction);
   if (interaction.customId.startsWith('support:faq:')) return onBoutonSupport(interaction);
   if (interaction.customId.startsWith('support:import:')) return onBoutonImport(interaction);
+  if (interaction.customId.startsWith('support:vise:')) return onBoutonVise(interaction);
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('antipub:')) return onBoutonAntipub(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
