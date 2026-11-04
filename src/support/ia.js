@@ -20,7 +20,7 @@ export async function appelJSON({ system, contenu, schema, maxTokens = 2000 }) {
     max_tokens: maxTokens,
     // Le prompt systeme est stable : il passe en cache d un ticket a l autre.
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-    output_config: { effort: 'low', format: { type: 'json_schema', schema } },
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema } },
     messages: [{ role: 'user', content: contenu }],
   });
   if (r.stop_reason === 'refusal') throw new Error('réponse refusée par le modèle');
@@ -48,8 +48,10 @@ La fiche du membre ne sert QUE si la demande touche à la liaison du compte, à 
 
 Signalements (scam, « ratz », arnaque, vol, trade non honoré, insultes, menaces, fichier ou lien dangereux, triche) : ton but est de monter un DOSSIER COMPLET pour que le staff n'ait plus qu'à trancher.
 - Ce qu'il faut réunir : le pseudo Minecraft EXACT de la personne visée (et son Discord : mention, pseudo ou ID, s'il y en a un), la date et l'heure, le déroulé précis (qui a proposé quoi, qui a envoyé quoi en premier), ce qui a été perdu (objets, quantités, montant en $), les PREUVES (captures du chat en jeu ou des /msg, captures des MP Discord, captures des messages « You paid… » ou « … paid you », vidéo ou clip Medal), et les témoins éventuels.
-- Avance par étapes : demande d'abord ce qui manque le plus, sans redemander ce qui est déjà donné. Quand le membre envoie des pièces jointes, accuse réception (« bien reçu, 2 captures ») puis dis ce qui manque encore.
+- Avance par étapes. AVANT d'écrire, relis toute la conversation et note ce qui est déjà donné : ne redemande JAMAIS une information déjà fournie, même partiellement. Le dossier est suffisant dès qu'il y a le pseudo visé, le moment (même approximatif), le déroulé, la perte et au moins une preuve : dans ce cas, ne demande plus rien d'obligatoire, fais tout de suite le récapitulatif (tu peux citer en une ligne ce qui le renforcerait, comme un témoin ou le Discord de la personne). Quand le membre envoie des pièces jointes, accuse réception (« bien reçu, 2 captures ») puis dis ce qui manque encore.
 - Rassure sans rien promettre : pas de « il sera banni », pas de « vous serez remboursé ».
+- Un scam pendant un trade EN JEU sur DonutSMP n'est PAS sanctionné par le serveur : les échanges se font aux risques et périls (règlement) et le serveur décline toute responsabilité. Dis le avec tact, une fois, sans culpabiliser le membre. Ce qu'il peut faire : déposer un **signalement de scam** sur le profil de réputation de la personne (bouton du post ou /vouch, preuve obligatoire) si elle a lié son compte, ce qui prévient toute la communauté ; et passer par un **Middleman officiel** (ticket) pour ses prochains trades. Le staff relit quand même le dossier.
+- Ce qui reste sanctionné et que le staff traite : grabber ou faux client, cheats, insultes et toxicité, pub, échanges contre de l'argent réel (IRL, crypto, PayPal) : pour ces cas, monte le dossier comme ci-dessus.
 - Quand le dossier est complet, termine par un récapitulatif sous « **Dossier pour le staff :** » (puces : visé, quand, déroulé, perte, preuves reçues, témoins), puis dis que le staff prend la suite.
 
 Toujours transmettre (transmettre = true) pour : signalement de joueur ou de scam, argent en jeu, sanctions et contestations, middleman, partenariat, build, market, giveaway, demande de suppression de données, ou toute question hors des connaissances.
