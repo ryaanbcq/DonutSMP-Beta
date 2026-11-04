@@ -95,3 +95,39 @@ export function lireProfilComplet(simplifie) {
   }
   return lignes;
 }
+
+// Petites capitales Unicode de DonutSMP (« ѕʜᴀʀᴅѕ ») -> lettres normales.
+const PETITES = { 'ᴀ': 'a', 'ʙ': 'b', 'ᴄ': 'c', 'ᴅ': 'd', 'ᴇ': 'e', 'ꜰ': 'f', 'ɢ': 'g', 'ʜ': 'h', 'ɪ': 'i', 'ᴊ': 'j', 'ᴋ': 'k', 'ʟ': 'l', 'ᴍ': 'm',
+  'ɴ': 'n', 'ᴏ': 'o', 'ᴘ': 'p', 'ǫ': 'q', 'ʀ': 'r', 'ѕ': 's', 'ꜱ': 's', 'ᴛ': 't', 'ᴜ': 'u', 'ᴠ': 'v', 'ᴡ': 'w', 'ʏ': 'y', 'ᴢ': 'z', 'х': 'x' };
+
+/** « ʙʟᴏᴄᴋѕ ᴘʟᴀᴄᴇᴅ » -> « Blocks Placed ». */
+export function libelleLisible(texte) {
+  const plat = [...String(texte ?? '')].map((c) => PETITES[c] ?? c).join('').replace(/[^A-Za-z ]/g, '').trim().toLowerCase();
+  return plat.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+/** Composant de texte, en NBT type ou deja simplifie, ou en JSON. */
+function texteItem(x, simplifier) {
+  if (x === null || x === undefined) return '';
+  if (typeof x === 'string') { try { return x.startsWith('{') ? rendreComposant(JSON.parse(x)) : x; } catch { return x; } }
+  if (x.type && 'value' in x && simplifier) { try { return rendreComposant(simplifier(x)); } catch { return ''; } }
+  return rendreComposant(x);
+}
+
+/**
+ * Menu « profil complet » : un objet par stat, nom = libelle (petites
+ * capitales), premiere ligne de description = valeur. Rend { Libelle: valeur }.
+ */
+export function lireMenuProfil(items, simplifier = null) {
+  const lignes = {};
+  for (const it of items) {
+    if (!it) continue;
+    const nom = texteItem(it.nom, simplifier).trim();
+    const lore = (Array.isArray(it.lore) ? it.lore : []).map((l) => texteItem(l, simplifier).trim()).filter(Boolean);
+    if (nom.includes(':')) { lignesLibellees(nom, lignes); continue; }
+    const cle = libelleLisible(nom);
+    if (!cle || cle === 'Back' || !lore.length || /click/i.test(lore[0])) continue;
+    lignes[cle] ??= lore[0];
+  }
+  return lignes;
+}

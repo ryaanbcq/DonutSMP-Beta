@@ -20,7 +20,7 @@ import { creerVerificateur } from './verifications.js';
 import nbt from 'prismarine-nbt';
 import minecraftData from 'minecraft-data';
 import { paquetClicCustom } from '../src/minecraft/clic.js';
-import { lireDialogueStats, boutonProfilComplet, lireProfilComplet, lignesLibellees, rendreComposant } from '../src/minecraft/dialog.js';
+import { lireDialogueStats, boutonProfilComplet, lireProfilComplet, lireMenuProfil as lireMenuProfilItems } from '../src/minecraft/dialog.js';
 
 const cfg = {
   host: process.env.MC_HOST ?? 'donutsmp.net',
@@ -704,20 +704,14 @@ function traiterDialogue(paquet) {
   finirStats(fiche);
 }
 
-/** Le profil complet arrive peut-etre en menu : on lit les objets avant de le fermer. */
+/** Le profil complet arrive en menu (un objet par stat) : on le lit avant de le fermer. */
 function lireMenuProfil(fenetre) {
   if (!demande?.fiche) return false;
-  const lignes = {};
-  const texte = (x) => { try { return rendreComposant(typeof x === 'string' && x.startsWith('{') ? JSON.parse(x) : x); } catch { return String(x ?? ''); } };
-  for (const item of fenetre.slots) {
-    if (!item) continue;
-    const nom = texte(item.customName ?? item.displayName ?? '');
-    const lore = (item.customLore ?? []).map(texte);
-    lignesLibellees([nom, ...lore].join('\n'), lignes);
-    // « Shards » en nom et « 1K » seul en lore
-    if (nom && lore.length && !nom.includes(':') && lore[0] && !lore[0].includes(':')) lignes[nom.replace(/[^A-Za-z ]/g, '').trim()] ??= lore[0].trim();
-  }
-  garderDialogueBrut('menu', fenetre.slots.filter(Boolean).map((i) => ({ nom: i.customName ?? i.displayName, lore: i.customLore ?? null })));
+  const items = fenetre.slots.filter(Boolean).map((i) => ({ nom: i.customName ?? i.displayName, lore: i.customLore ?? null }));
+  garderDialogueBrut('menu', items);
+  const lignes = lireMenuProfilItems(items, (x) => nbt.simplify(x));
+  // Money du menu = « 2.2B » sans le $ : on garde celui de la fiche.
+  delete lignes.Money;
   finirStats(demande.fiche, lignes);
   return true;
 }

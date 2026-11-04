@@ -60,3 +60,16 @@ test('profil complet : trouve le bouton et lit la page suivante', async () => {
   assert.deepEqual(lireProfilComplet(page), { Shards: '1K', 'Blocks Placed': '8.2K', 'Blocks Broken': '23K', 'Mobs Killed': '170' });
   assert.deepEqual(lignesLibellees('Last Seen: Online now'), { 'Last Seen': 'Online now' });
 });
+
+test('profil complet en menu : petites capitales et valeur en description', async () => {
+  const { lireMenuProfil, libelleLisible } = await import('../src/minecraft/dialog.js');
+  assert.equal(libelleLisible('ʙʟᴏᴄᴋѕ ᴘʟᴀᴄᴇᴅ'), 'Blocks Placed');
+  assert.equal(libelleLisible('ѕʜᴀʀᴅѕ'), 'Shards');
+  const items = [
+    { nom: { text: '', extra: [{ text: 'ᴍᴏɴᴇʏ' }] }, lore: [{ text: '', extra: [{ text: '2.2B' }] }] },
+    { nom: { text: '', extra: [{ text: 'ѕʜᴀʀᴅѕ' }] }, lore: [{ text: '1K' }] },
+    { nom: { text: '', extra: [{ text: 'ᴍᴏʙѕ ᴋɪʟʟᴇᴅ' }] }, lore: [{ text: '170' }] },
+    { nom: { text: 'Back' }, lore: [{ text: 'Click to return' }] },
+  ];
+  assert.deepEqual(lireMenuProfil(items), { Money: '2.2B', Shards: '1K', 'Mobs Killed': '170' });
+});
