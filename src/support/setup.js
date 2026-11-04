@@ -9,6 +9,7 @@ import { embed, FR } from '../lib/brand.js';
 import { settings } from '../settings.js';
 import { reglagesTickets, cleDe } from '../tickets/reglages.js';
 import { reglagesSupport } from './reglages.js';
+import { reglagesRelais } from './relais.js';
 import { iaDisponible, MODELE } from './ia.js';
 import { lancerRevue } from './revue.js';
 import { replanifier } from './agent.js';
@@ -22,6 +23,7 @@ export function pageSupport(note = '') {
   const cats = reglagesTickets.categories();
   const faq = reglagesSupport.faq();
   const revue = reglagesSupport.salonRevue() || settings.salonJournal();
+  const relais = reglagesRelais.salon();
 
   const etat = !iaDisponible() ? '🔴 **Pas de clé API** (ANTHROPIC_API_KEY dans le .env)'
     : actif ? '🟢 **Actif**' : '🔴 **Éteint**';
@@ -32,6 +34,7 @@ export function pageSupport(note = '') {
     + `⏱️ **Délai** · ${r.delaiJourMin} min le jour, **${r.delaiNuitMin} min la nuit** (${r.nuitDebut} h à ${r.nuitFin} h)\n`
     + `🎯 **Répond sur le fond dans** · ${cats.filter((c) => fond.includes(c.cle)).map((c) => `${c.emoji} ${c.nom}`).join(', ') || '*aucune catégorie : accueil seulement*'}\n`
     + `📚 **FAQ** · ${faq.length} entrée(s)\n`
+    + `🆘 **Relais humain** · ${relais ? `<#${relais}>` : '*automatique : le salon « général-staff »*'} (carte quand il passe la main au staff)\n`
     + `🌙 **Revue chaque jour à 5 h** · ${revue ? `<#${revue}>` : '*pas de salon*'} (bilan + propositions de FAQ à valider)\n`
     + `-# Au plus ${r.maxIaParTicket} réponses par ticket et ${r.maxParJour} par jour. Les tickets ouverts avant l'allumage ne sont pas repris.`
     + (note ? `\n\n${note}` : '');
@@ -40,13 +43,17 @@ export function pageSupport(note = '') {
     .setPlaceholder('🌙 Salon de la revue quotidienne (staff)').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1);
   if (reglagesSupport.salonRevue()) menuRevue.setDefaultChannels(reglagesSupport.salonRevue());
 
+  const menuRelais = new ChannelSelectMenuBuilder().setCustomId('gsetup:support:relais')
+    .setPlaceholder('🆘 Salon du relais humain (staff)').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1);
+  if (reglagesRelais.salon()) menuRelais.setDefaultChannels(reglagesRelais.salon());
+
   const menuCats = new StringSelectMenuBuilder().setCustomId('gsetup:support:cats')
     .setPlaceholder('🎯 Catégories où il répond sur le fond').setMinValues(0).setMaxValues(Math.max(1, Math.min(25, cats.length)))
     .addOptions((cats.length ? cats : [{ cle: 'aucune', nom: 'Aucune catégorie', emoji: '➖' }]).slice(0, 25).map((c) => ({
       label: court(c.nom, 100), value: c.cle ?? cleDe(c.nom), emoji: { name: c.emoji || '🎫' }, default: fond.includes(c.cle),
     })));
 
-  const rangs = [new ActionRowBuilder().addComponents(menuRevue), new ActionRowBuilder().addComponents(menuCats)];
+  const rangs = [new ActionRowBuilder().addComponents(menuRelais), new ActionRowBuilder().addComponents(menuRevue), new ActionRowBuilder().addComponents(menuCats)];
   if (faq.length) {
     rangs.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('gsetup:support:faqrm')
       .setPlaceholder(`🗑️ Retirer une entrée de la FAQ (${faq.length})`).setMinValues(1).setMaxValues(1)
@@ -65,6 +72,10 @@ export function pageSupport(note = '') {
 }
 
 export async function onSupportSelect(interaction, id) {
+  if (id === 'support:relais') {
+    reglagesRelais.poserSalon(interaction.values[0] ?? '');
+    return interaction.update(pageSupport('✅ Salon du relais enregistré.'));
+  }
   if (id === 'support:revue') {
     reglagesSupport.poserSalonRevue(interaction.values[0] ?? '');
     return interaction.update(pageSupport('✅ Salon de la revue enregistré.'));

@@ -10,6 +10,7 @@ import { settings } from '../settings.js';
 import { reglagesTickets, slugCategorie } from './reglages.js';
 import { enteteTicket, boutonsTicket, embedLog, TITRE_TICKET } from './panel.js';
 import { surTicketOuvert } from '../support/agent.js';
+import { marquerRelais } from '../support/relais.js';
 import { rendreTranscript, collecterMessages } from './transcript.js';
 
 // Cycle de vie d un ticket : menu du panneau → formulaire → salon prive.
@@ -232,6 +233,7 @@ async function fermer(interaction, ticket, { staff, auteur }) {
   await majEntete(interaction, { ...ticket, etat: 'ferme' }, { prisPar: ticket.pris_par });
 
   console.log(`[ticket] #${ticket.id} ferme par ${interaction.user.tag}`);
+  marquerRelais(interaction.guild, ticket.channel_id, 'ferme', interaction.member?.displayName ?? interaction.user.username).catch(() => {});
   await majJournal(interaction.guild, store.getTicket(ticket.channel_id));
   return interaction.editReply({
     embeds: [embedLog('🔒・TICKET FERMÉ',
@@ -272,6 +274,7 @@ async function prendre(interaction, ticket, { staff }) {
   store.setTicketPris(ticket.channel_id, nouveau);
   await interaction.deferUpdate();
   await majEntete(interaction, ticket, { prisPar: nouveau });
+  marquerRelais(interaction.guild, ticket.channel_id, nouveau ? 'pris' : 'attente', nouveau ? (interaction.member?.displayName ?? interaction.user.username) : null).catch(() => {});
   await majJournal(interaction.guild, store.getTicket(ticket.channel_id));
   await interaction.channel.send({
     embeds: [embedLog(TITRE_TICKET, nouveau

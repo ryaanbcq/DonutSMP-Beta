@@ -21,6 +21,7 @@ import { repondreTicket, iaDisponible } from './ia.js';
 import { ficheMembre } from './fiche.js';
 import { chercherFils } from './anciens.js';
 import { imagesDuTicket } from './images.js';
+import { publierRelais, marquerRelais } from './relais.js';
 
 const minuteurs = new Map(); // channelId -> timeout
 
@@ -152,7 +153,12 @@ async function intervenir(channelId) {
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
     memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume, scamOffert, anciensOffert });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
-    if (rep.transmettre && !etat.transmis) {
+    // Relais humain : carte dans le salon du staff, mise a jour a chaque
+    // nouvelle transmission ; sans salon, on garde l alerte du journal.
+    const relaye = rep.transmettre
+      ? await publierRelais(salon.guild, ticket, { resume: rep.resume, infos: rep.infos ?? [] }).catch((e) => { console.warn('[support] relais :', e.message); return false; })
+      : false;
+    if (rep.transmettre && !etat.transmis && !relaye) {
       journal({
         niveau: 'info',
         titre: `Support IA : ticket #${ticket.id} à reprendre`,
@@ -187,7 +193,11 @@ async function surMessage(message) {
     id: message.id, channelId: message.channelId, role: r, content: message.content,
     pieces: message.attachments.size, at: message.createdTimestamp,
   });
-  if (r === 'staff') { clearTimeout(minuteurs.get(message.channelId)); minuteurs.delete(message.channelId); return; }
+  if (r === 'staff') {
+    clearTimeout(minuteurs.get(message.channelId)); minuteurs.delete(message.channelId);
+    marquerRelais(message.guild, message.channelId, 'pris', message.member?.displayName ?? message.author.username).catch(() => {});
+    return;
+  }
   planifier(message.channelId);
 }
 

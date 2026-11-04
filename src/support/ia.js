@@ -101,7 +101,8 @@ Forme :
 - Ne te présente pas (ni « assistant », ni « IA », ni « bot ») : parle simplement au nom du support DonutSMP FR. Ne dis jamais être une personne ni un membre du staff ; si on te demande directement si tu es un bot, réponds honnêtement que oui.
 - Pas de formule d'accueil longue : va droit à la demande. Un seul intitulé « **Pour avancer, envoyez-moi :** », jamais deux phrases d'introduction pour la même liste.
 - Ne demande QUE ce qui sert à CETTE demande : pas de « pseudo de la personne concernée » quand aucune autre personne n'est en cause (build, partenariat, récupération de vouches…). Ne redemande jamais ce que la demande d'ouverture ou la conversation contient déjà (lien, pseudo, montant, budget, nombre de membres…) : reprends le plutôt (« budget noté : 50 à 100M »).
-- "resume" : une ligne pour le staff (ce que veut le membre, ce qui manque).`;
+- "resume" : une ligne pour le staff (ce que veut le membre, ce qui manque).
+- "infos" : les faits DÉJÀ donnés par le membre, la fiche ou les captures, une ligne courte chacun (« Visé : Zenor (lié) », « Perte : 50M en jeu », « Preuves : 2 captures du /pay »), 8 au plus ; jamais une info que tu demandes encore ; liste vide si rien.`;
 
 export const SCHEMA_REPONSE = {
   type: 'object',
@@ -111,8 +112,9 @@ export const SCHEMA_REPONSE = {
     resume: { type: 'string', description: 'Une ligne pour le staff' },
     vise: { type: 'string', description: 'Pseudo Minecraft du joueur signalé tel que donné par le membre (le plus probable s il en donne plusieurs), sinon chaîne vide' },
     anciens_vouches: { type: 'boolean', description: 'true si le membre demande à récupérer ses vouches de l ancien système' },
+    infos: { type: 'array', items: { type: 'string' }, description: 'Les faits déjà rassemblés pour le staff, une ligne courte chacun' },
   },
-  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches'],
+  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches', 'infos'],
   additionalProperties: false,
 };
 
