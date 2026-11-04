@@ -26,7 +26,7 @@ export function connaissancesServeur() {
     '- Pseudo, avatar, statut et description corrects ; les modifier si le staff le demande.',
     '- Échanges de spawners autorisés entre joueurs, À VOS RISQUES ET PÉRILS : en cas de scam, le serveur décline toute responsabilité. Pour sécuriser un trade, demander un Middleman officiel en ouvrant un ticket.',
     '- Respect des règles de DonutSMP : cheats, hacks, mods interdits, exploits de bugs interdits et lourdement sanctionnés.',
-    '- Interdit de partager des liens de clients Minecraft non officiels, mods suspects ou logiciels tiers ; un faux « client » qui vole les identifiants (grabber) = ban définitif immédiat. Ne jamais télécharger quelque chose venant d\'un membre.',
+    '- Interdit de partager des liens de clients Minecraft non officiels, mods suspects ou logiciels tiers ; un faux « client » qui vole les identifiants ou prend le contrôle du PC (grabber, RAT = virus) = ban définitif immédiat. Ne jamais télécharger quelque chose venant d\'un membre.',
     '- Cross-trading et échanges contre de l\'argent réel (IRL, crypto, PayPal, cartes cadeaux) formellement interdits.',
     '- Recrutement staff : 18 ans minimum, au moins le rôle Spider, casier vierge de sanction grave, maturité ; candidature par ticket.',
     '',
