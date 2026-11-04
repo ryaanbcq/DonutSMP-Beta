@@ -21,10 +21,13 @@ export async function appelJSON({ system, contenu, schema, maxTokens = 16000 }) 
     model: MODELE,
     max_tokens: maxTokens,
     // Le prompt systeme est stable : il passe en cache d un ticket a l autre.
-    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+    // Cache d une heure : la nuit, les tickets sont espaces de plus de 5 min.
+    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } }],
     output_config: { effort: process.env.SUPPORT_EFFORT || 'high', format: { type: 'json_schema', schema } },
     messages: [{ role: 'user', content: contenu }],
   });
+  const u = r.usage ?? {};
+  console.log(`[support] tokens : cache lu ${u.cache_read_input_tokens ?? 0}, cache ecrit ${u.cache_creation_input_tokens ?? 0}, nouveaux ${u.input_tokens ?? 0}, sortie ${u.output_tokens ?? 0}`);
   if (r.stop_reason === 'refusal') throw new Error('réponse refusée par le modèle');
   if (r.stop_reason === 'max_tokens') throw new Error('réponse coupée');
   const texte = r.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
