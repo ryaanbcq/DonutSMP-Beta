@@ -7,8 +7,8 @@
 // Tous les messages des tickets sont notes (table support_messages, 14
 // jours) : la revue quotidienne en tire des propositions de FAQ.
 
-import { escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { embed, FR } from '../lib/brand.js';
+import { escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { embed, FR, logo } from '../lib/brand.js';
 import { store } from '../db.js';
 import { config } from '../config.js';
 import { journal } from '../ops/journal.js';
@@ -144,9 +144,9 @@ async function intervenir(channelId) {
           : 'Ancien forum introuvable : le staff vérifiera à la main.' });
       }
     }
+    if (aConfirmer) await ajouterConfirmation(salon.guild, carte, components, aConfirmer);
     const m = await salon.send({ embeds: [carte], components, allowedMentions: { parse: [] } });
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
-    if (aConfirmer) await salon.send(await carteConfirmation(salon.guild, aConfirmer)).catch((e) => console.warn('[support] confirmation :', e.message));
     memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume, scamOffert, anciensOffert });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
     if (rep.transmettre && !etat.transmis) {
@@ -199,28 +199,22 @@ export const replanifier = reprendre;
 
 // ------------------------------------------------------------ confirmation du joueur vise
 
-async function carteConfirmation(guild, lie) {
+const CHAMP = '🔎 Est-ce la bonne personne ?';
+
+/** Confirmation dans le MEME encadre : une ligne, skin en vignette, photo en icone, Oui / Non. */
+async function ajouterConfirmation(guild, carte, components, lie) {
   const m = guild.members.cache.get(lie.discord_id) ?? await guild.members.fetch(lie.discord_id).catch(() => null);
-  const nom = m?.displayName ?? m?.user.username ?? 'compte Discord inconnu';
   const ign = lie.mc_name.replace(/^\./, '');
-  const carte = embed('🔎・EST-CE LA BONNE PERSONNE ?', { couleur: FR.jaune, image: 'aucune',
-    description: `<@${lie.discord_id}>\n**Pseudo Minecraft :** \`${escapeMarkdown(lie.mc_name)}\`\n**Discord :** ${escapeMarkdown(nom)}`
-      + '\n\n-# Confirmez pour pouvoir signaler ce joueur sur sa réputation.' });
-  if (m) carte.setThumbnail(m.displayAvatarURL({ size: 256, extension: 'png' }));
-  carte.setImage(`https://mc-heads.net/body/${encodeURIComponent(ign)}/180`);
-  return {
-    // La mention en texte s affiche avec le bon nom ; aucune notification.
-    content: `<@${lie.discord_id}>`,
-    embeds: [carte],
-    components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`support:vise:oui:${lie.discord_id}`).setLabel('Oui, c\'est lui').setEmoji('✅').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`support:vise:non:${lie.discord_id}`).setLabel('Non').setEmoji('❌').setStyle(ButtonStyle.Secondary),
-    )],
-    allowedMentions: { parse: [] },
-  };
+  carte.addFields({ name: CHAMP, value: `<@${lie.discord_id}> · \`${escapeMarkdown(lie.mc_name)}\`${m ? ` · ${escapeMarkdown(m.displayName)}` : ''}` });
+  carte.setThumbnail(`https://mc-heads.net/body/${encodeURIComponent(ign)}/100`);
+  if (m) carte.setAuthor({ name: '💬・SUPPORT DONUTSMP FR', iconURL: m.displayAvatarURL({ size: 64, extension: 'png' }) });
+  components.unshift(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`support:vise:oui:${lie.discord_id}`).setLabel(`Oui, c'est ${ign}`.slice(0, 80)).setEmoji('✅').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`support:vise:non:${lie.discord_id}`).setLabel('Non').setEmoji('❌').setStyle(ButtonStyle.Secondary),
+  ));
 }
 
-/** Oui / Non sur la carte de confirmation : l auteur du ticket ou le staff. */
+/** Oui / Non sur la confirmation : l auteur du ticket ou le staff. Edite le meme encadre. */
 export async function onBoutonVise(interaction) {
   const [, , choix, id] = interaction.customId.split(':');
   const ticket = store.getTicket(interaction.channelId);
@@ -231,21 +225,22 @@ export async function onBoutonVise(interaction) {
   const lie = store.getLink(id);
   const etat = memoire.etat(interaction.channelId);
   const ign = lie?.mc_name ?? 'ce joueur';
-  const carte = interaction.message.embeds[0] ? embed('🔎・JOUEUR SIGNALÉ', { couleur: choix === 'oui' ? FR.rouge : FR.bleu, image: 'aucune' }) : null;
-  if (choix === 'oui' && lie) {
-    memoire.poserEtat(interaction.channelId, { ...etat, scamOffert: id });
-    memoire.noter({ id: `${interaction.id}`, channelId: interaction.channelId, role: 'membre',
-      content: `[Le membre a confirmé que le joueur visé est ${ign} (compte lié au Discord).]`, at: Date.now() });
-    carte?.setDescription(`✅ Confirmé : **${escapeMarkdown(ign)}**.\nLe bouton ci-dessous ouvre un signalement de scam sur son profil de réputation (preuve obligatoire), pour prévenir toute la communauté.`);
-    return interaction.update({
-      embeds: carte ? [carte] : [],
-      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`vouch:scam:${id}`)
-        .setLabel(`Signaler ${ign} sur sa réputation`.slice(0, 80)).setEmoji('⚠️').setStyle(ButtonStyle.Danger))],
-    });
-  }
-  memoire.poserEtat(interaction.channelId, { ...etat, scamOffert: `non:${id}` });
-  memoire.noter({ id: `${interaction.id}`, channelId: interaction.channelId, role: 'membre',
-    content: `[Le membre a répondu que le joueur visé n'est PAS ${ign} : il faut son pseudo Minecraft exact.]`, at: Date.now() });
-  carte?.setDescription(`❌ Ce n'est pas **${escapeMarkdown(ign)}**. Donnez son pseudo Minecraft exact dans le ticket.`);
-  return interaction.update({ content: '', embeds: carte ? [carte] : [], components: [] });
+  const oui = choix === 'oui' && lie;
+  const carte = EmbedBuilder.from(interaction.message.embeds[0]);
+  const champs = (carte.data.fields ?? []).filter((f) => f.name !== CHAMP);
+  carte.setFields(...champs, oui
+    ? { name: '✅ Joueur confirmé', value: `<@${id}> · \`${escapeMarkdown(ign)}\` : le bouton ci-dessous ouvre un signalement de scam sur sa réputation (preuve obligatoire).` }
+    : { name: '❌ Ce n\'est pas lui', value: `Ce n'est pas \`${escapeMarkdown(ign)}\` : donnez son pseudo Minecraft exact dans le ticket.` });
+  if (!oui) carte.setThumbnail(logo() ?? null);
+  // Les autres boutons du message (import des anciens vouches) restent.
+  const autres = interaction.message.components.filter((r) => !r.components.some((c) => c.customId?.startsWith('support:vise:')));
+  const rangs = oui
+    ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`vouch:scam:${id}`)
+      .setLabel(`Signaler ${ign} sur sa réputation`.slice(0, 80)).setEmoji('⚠️').setStyle(ButtonStyle.Danger)), ...autres]
+    : autres;
+  memoire.poserEtat(interaction.channelId, { ...etat, scamOffert: oui ? id : `non:${id}` });
+  memoire.noter({ id: `${interaction.id}`, channelId: interaction.channelId, role: 'membre', at: Date.now(),
+    content: oui ? `[Le membre a confirmé que le joueur visé est ${ign} (compte lié au Discord).]`
+      : `[Le membre a répondu que le joueur visé n'est PAS ${ign} : il faut son pseudo Minecraft exact.]` });
+  return interaction.update({ embeds: [carte], components: rangs });
 }
