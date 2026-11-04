@@ -85,3 +85,12 @@ export function droitsAccordables(voulus, permsBot) {
   return voulus.filter((cle) => !permsBot || permsBot.has(PermissionFlagsBits.Administrator) || permsBot.has(PermissionFlagsBits[cle]))
     .map((cle) => PermissionFlagsBits[cle]);
 }
+
+/** Duree lisible : 45 s, 12 min, 2 h 05. */
+export function dureeVocal(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
+}

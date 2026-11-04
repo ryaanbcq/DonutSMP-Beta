@@ -21,6 +21,7 @@ export function pageVocaux(guild, note = '') {
     + ' et poste un panneau (Verrouiller, Ouvrir, Renommer, Limite, Expulser). Le vocal est supprimé quand il est vide.\n\n'
     + `${hub ? '✅' : '⚠️'} **Hub** · ${salon(hub)}\n`
     + `${cat ? '✅' : '⚠️'} **Catégorie des vocaux** · ${salon(cat)}\n`
+    + `${reglagesVocaux.salonLogs() ? '✅' : '➖'} **Logs (ouverts et fermés)** · ${reglagesVocaux.salonLogs() ? salon(reglagesVocaux.salonLogs()) : '*aucun*'}\n`
     + `👮 **Staff** · ${staff.length ? staff.map((r) => `<@&${r}>`).join(' ') : '*rôles admin du bot (page d\'accueil)*'}, plus « Gérer le serveur »\n`
     + `🔊 **Vocaux ouverts** · ${vocaux.tous().length}\n`
     + (hub && cat
@@ -34,12 +35,16 @@ export function pageVocaux(guild, note = '') {
   const menuCat = new ChannelSelectMenuBuilder().setCustomId('gsetup:vocaux:cat')
     .setPlaceholder('📁 Catégorie des vocaux perso').setChannelTypes(ChannelType.GuildCategory).setMinValues(0).setMaxValues(1);
   if (cat) menuCat.setDefaultChannels(cat);
+  const menuLogs = new ChannelSelectMenuBuilder().setCustomId('gsetup:vocaux:logs')
+    .setPlaceholder('📋 Logs des vocaux ouverts et fermés (staff)').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1);
+  if (reglagesVocaux.salonLogs()) menuLogs.setDefaultChannels(reglagesVocaux.salonLogs());
 
   return {
     embeds: [embed('🔊・VOCAUX', { couleur: FR.bleu, description })],
     components: [
       new ActionRowBuilder().addComponents(menuHub),
       new ActionRowBuilder().addComponents(menuCat),
+      new ActionRowBuilder().addComponents(menuLogs),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gsetup:vocaux:creer').setLabel('Tout créer pour moi').setEmoji('✨').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('gsetup:vocaux:off').setLabel('Désactiver').setEmoji('⏹️').setStyle(ButtonStyle.Danger)
@@ -54,6 +59,14 @@ export async function onVocauxSelect(interaction, id) {
   const valeur = interaction.values[0] ?? '';
   if (id === 'vocaux:hub') reglagesVocaux.poserHub(valeur);
   if (id === 'vocaux:cat') reglagesVocaux.poserCategorie(valeur);
+  if (id === 'vocaux:logs') {
+    reglagesVocaux.poserSalonLogs(valeur);
+    // Salon staff : les roles admin du bot le voient, comme les autres logs.
+    const s = valeur ? interaction.guild.channels.cache.get(valeur) : null;
+    for (const r of s ? settings.rolesAdmin() : []) {
+      await s.permissionOverwrites.edit(r, { ViewChannel: true, ReadMessageHistory: true }, { reason: 'Rôle staff du bot' }).catch(() => {});
+    }
+  }
   return interaction.update(pageVocaux(interaction.guild, valeur ? `✅ <#${valeur}> enregistré.` : '✅ Retiré.'));
 }
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { PermissionFlagsBits, PermissionsBitField } from 'discord.js';
 import {
   nomVocal, nomParDefaut, sansPrefixe, bornerLimite, peutGerer, sortDuVocal, droitsManquants, droitsAccordables,
-  NOM_MAX,
+  NOM_MAX, dureeVocal,
 } from '../src/vocaux/logique.js';
 
 const membre = (id, bits = 0n) => ({ id, permissions: new PermissionsBitField(bits) });
@@ -55,4 +55,10 @@ test('vocaux : droits du bot manquants et droits accordables', () => {
   const bot = new PermissionsBitField([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]);
   assert.deepEqual(droitsAccordables(['ViewChannel', 'Connect', 'MuteMembers'], bot), [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]);
   assert.equal(droitsAccordables(['MuteMembers'], new PermissionsBitField(PermissionFlagsBits.Administrator)).length, 1);
+});
+
+test('vocaux : duree du log lisible', () => {
+  assert.equal(dureeVocal(45_000), '45 s');
+  assert.equal(dureeVocal(12 * 60_000), '12 min');
+  assert.equal(dureeVocal(125 * 60_000), '2 h 05');
 });

@@ -29,7 +29,7 @@ import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
 import {
   nomVocal, nomParDefaut, sansPrefixe, bornerLimite, peutGerer, sortDuVocal, droitsManquants,
-  DROITS_HOTE, DROITS_STAFF, droitsAccordables, LIMITE_MAX, NOM_MAX,
+  DROITS_HOTE, DROITS_STAFF, droitsAccordables, LIMITE_MAX, NOM_MAX, dureeVocal,
 } from './logique.js';
 
 db.exec(`
@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS vocaux_perso (
   created_at INTEGER NOT NULL
 );
 `);
+// Logs : un message par vocal, poste a l ouverture et edite a la fermeture.
+for (const col of ['log_message_id TEXT', 'nom TEXT', "participants TEXT NOT NULL DEFAULT '[]'", 'pic INTEGER NOT NULL DEFAULT 0']) {
+  try { db.exec(`ALTER TABLE vocaux_perso ADD COLUMN ${col}`); } catch { /* deja la */ }
+}
 
 const q = {
   get: db.prepare('SELECT * FROM vocaux_perso WHERE channel_id = ?'),
@@ -50,6 +54,9 @@ const q = {
   verrou: db.prepare('UPDATE vocaux_perso SET locked = ? WHERE channel_id = ?'),
   limite: db.prepare('UPDATE vocaux_perso SET limite = ? WHERE channel_id = ?'),
   oublier: db.prepare('DELETE FROM vocaux_perso WHERE channel_id = ?'),
+  log: db.prepare('UPDATE vocaux_perso SET log_message_id = ? WHERE channel_id = ?'),
+  nom: db.prepare('UPDATE vocaux_perso SET nom = ? WHERE channel_id = ?'),
+  presence: db.prepare('UPDATE vocaux_perso SET participants = ?, pic = MAX(pic, ?) WHERE channel_id = ?'),
 };
 
 export const vocaux = {
@@ -60,13 +67,29 @@ export const vocaux = {
   poserVerrou: (id, v) => q.verrou.run(v ? 1 : 0, String(id)),
   poserLimite: (id, n) => q.limite.run(n, String(id)),
   oublier: (id) => q.oublier.run(String(id)),
+  poserLog: (id, messageId) => q.log.run(messageId ? String(messageId) : null, String(id)),
+  poserNom: (id, nom) => q.nom.run(nom, String(id)),
+  /** Ajoute les membres presents aux participants et retient le pic. */
+  noterPresents: (id, ids) => {
+    const e = vocaux.get(id);
+    if (!e) return;
+    const avant = participantsDe(e);
+    const tous = [...new Set([...avant, ...ids.map(String)])];
+    q.presence.run(JSON.stringify(tous), ids.length, String(id));
+  },
 };
+
+export function participantsDe(e) {
+  try { const l = JSON.parse(e?.participants ?? '[]'); return Array.isArray(l) ? l : []; } catch { return []; }
+}
 
 export const reglagesVocaux = {
   hub: () => store.kvGet('vocaux.hub') || null,
   categorie: () => store.kvGet('vocaux.categorie') || null,
   poserHub: (id) => store.kvSet('vocaux.hub', id ? String(id) : ''),
   poserCategorie: (id) => store.kvSet('vocaux.categorie', id ? String(id) : ''),
+  salonLogs: () => store.kvGet('vocaux.salonLogs') || null,
+  poserSalonLogs: (id) => store.kvSet('vocaux.salonLogs', id ? String(id) : ''),
 };
 
 const EPH = { flags: MessageFlags.Ephemeral };
@@ -116,6 +139,62 @@ async function majPanneau(interaction, entree) {
   }
 }
 
+// ------------------------------------------------------------ logs
+
+function nomsMembres(guild, ids, max = 15) {
+  const noms = ids.slice(0, max).map((id) => {
+    const m = guild.members.cache.get(id);
+    return m ? escapeMarkdown(nomDe(m)) : `ID ${id}`;
+  });
+  return noms.join(', ') + (ids.length > max ? ` et ${ids.length - max} autre(s)` : '');
+}
+
+function carteLog(guild, e, fin = null) {
+  const hote = guild.members.cache.get(e.owner_id);
+  const debut = Math.floor(e.created_at / 1000);
+  const champs = [
+    { name: 'Hôte', value: `${hote ? escapeMarkdown(nomDe(hote)) : 'inconnu'}\n-# ${e.owner_id}`, inline: true },
+    { name: 'Ouvert', value: `<t:${debut}:t>`, inline: true },
+  ];
+  if (fin) {
+    const ids = participantsDe(e);
+    champs.push(
+      { name: 'Fermé', value: `<t:${Math.floor(fin.at / 1000)}:t> · ${dureeVocal(fin.at - e.created_at)}`, inline: true },
+      { name: `Participants (${ids.length}, ${e.pic} en même temps au plus)`, value: nomsMembres(guild, ids) || 'aucun' },
+    );
+  }
+  return embed(fin ? '⚫・VOCAL FERMÉ' : '🟢・VOCAL OUVERT', {
+    couleur: fin ? 0x4f545c : FR.vert,
+    image: 'aucune',
+    description: `**${escapeMarkdown(fin?.nom ?? e.nom ?? 'vocal')}**${fin ? `\n${fin.raison}` : `\n<#${e.channel_id}>`}`,
+  }).addFields(champs);
+}
+
+async function salonLogs(guild) {
+  const id = reglagesVocaux.salonLogs();
+  if (!id) return null;
+  const s = guild.channels.cache.get(id) ?? await guild.channels.fetch(id).catch(() => null);
+  return s?.isTextBased?.() ? s : null;
+}
+
+async function logOuverture(guild, e) {
+  const s = await salonLogs(guild);
+  if (!s) return;
+  const m = await s.send({ embeds: [carteLog(guild, e)], allowedMentions: { parse: [] } })
+    .catch((err) => { console.warn('[vocaux] log :', err.message); return null; });
+  if (m) vocaux.poserLog(e.channel_id, m.id);
+}
+
+/** Edite le log d ouverture (ou en poste un s il a disparu). */
+async function logFermeture(guild, e, raison, nom = null) {
+  const s = await salonLogs(guild);
+  if (!s) return;
+  const carte = carteLog(guild, e, { at: Date.now(), raison, nom: nom ?? e.nom });
+  const m = e.log_message_id ? await s.messages.fetch(e.log_message_id).catch(() => null) : null;
+  if (m) await m.edit({ embeds: [carte] }).catch((err) => console.warn('[vocaux] log :', err.message));
+  else await s.send({ embeds: [carte], allowedMentions: { parse: [] } }).catch((err) => console.warn('[vocaux] log :', err.message));
+}
+
 // ------------------------------------------------------------ creation et suppression
 
 const enCreation = new Set(); // un double passage par le hub ne cree qu un vocal
@@ -161,6 +240,7 @@ async function creerVocal(guild, membre) {
   if (!salon) return;
 
   vocaux.creer(salon.id, membre.id);
+  vocaux.poserNom(salon.id, salon.name);
   console.log(`[vocaux] vocal cree pour ${membre.user.tag} (${salon.id})`);
   const deplace = await membre.voice.setChannel(salon).then(() => true).catch((e) => {
     console.warn('[vocaux] deplacement :', e.message);
@@ -172,6 +252,8 @@ async function creerVocal(guild, membre) {
     vocaux.oublier(salon.id);
     return;
   }
+  vocaux.noterPresents(salon.id, [membre.id]);
+  await logOuverture(guild, vocaux.get(salon.id));
   await salon.send({
     content: `👋 <@${membre.id}>, bienvenue dans ton vocal !`,
     ...panneau(vocaux.get(salon.id), salon, nomDe(membre)),
@@ -179,11 +261,18 @@ async function creerVocal(guild, membre) {
   }).catch((e) => console.warn('[vocaux] panneau :', e.message));
 }
 
-async function nettoyer(salon, id) {
+async function nettoyer(guild, salon, id, demarrage = false) {
   const sort = sortDuVocal(salon);
   if (sort === 'garder') return false;
-  if (sort === 'supprimer') await salon.delete('Vocal perso vide').catch((e) => console.warn('[vocaux] suppression :', e.message));
+  const e = vocaux.get(id);
+  // Oublie d abord : channelDelete ne doit pas logguer une seconde fois.
   vocaux.oublier(id);
+  if (sort === 'supprimer') await salon.delete('Vocal perso vide').catch((err) => console.warn('[vocaux] suppression :', err.message));
+  if (e) {
+    await logFermeture(guild, e, demarrage
+      ? 'Vide au redémarrage du bot : supprimé au démarrage (heure de fermeture approximative).'
+      : sort === 'supprimer' ? 'Tout le monde est parti.' : 'Le salon avait déjà disparu.', salon?.name);
+  }
   return true;
 }
 
@@ -199,8 +288,12 @@ export async function surVoiceState(avant, apres) {
       try { await creerVocal(apres.guild, membre); } finally { enCreation.delete(membre.id); }
     }
   }
+  // Arrivee dans un vocal perso : participant retenu pour le log.
+  if (apres.channelId && apres.channelId !== hub && vocaux.get(apres.channelId) && apres.channel) {
+    vocaux.noterPresents(apres.channelId, [...apres.channel.members.keys()]);
+  }
   if (avant.channelId && avant.channelId !== hub && vocaux.get(avant.channelId)) {
-    await nettoyer(avant.channel ?? avant.guild.channels.cache.get(avant.channelId), avant.channelId);
+    await nettoyer(avant.guild, avant.channel ?? avant.guild.channels.cache.get(avant.channelId), avant.channelId);
   }
 }
 
@@ -214,7 +307,7 @@ export async function balayerVocaux(client) {
   let n = 0;
   for (const e of vocaux.tous()) {
     const salon = guild.channels.cache.get(e.channel_id) ?? await guild.channels.fetch(e.channel_id).catch(() => null);
-    if (await nettoyer(salon, e.channel_id)) n += 1;
+    if (await nettoyer(guild, salon, e.channel_id, true)) n += 1;
   }
   return n;
 }
@@ -236,7 +329,13 @@ export function problemesDroits(guild) {
 
 export async function demarrerVocaux(client) {
   client.on('voiceStateUpdate', (a, b) => surVoiceState(a, b).catch((e) => console.error('[vocaux] :', e.message)));
-  client.on('channelDelete', (salon) => { if (vocaux.get(salon.id)) vocaux.oublier(salon.id); });
+  // Supprime a la main par le staff : log de fermeture quand meme.
+  client.on('channelDelete', (salon) => {
+    const e = vocaux.get(salon.id);
+    if (!e) return;
+    vocaux.oublier(salon.id);
+    logFermeture(salon.guild, e, 'Salon supprimé à la main.', salon.name).catch(() => {});
+  });
   if (!reglagesVocaux.hub()) return;
   const n = await balayerVocaux(client).catch((e) => { console.warn('[vocaux] balayage :', e.message); return 0; });
   console.log(`[vocaux] hub actif, ${n} vocal(aux) orphelin(s) nettoye(s)`);
@@ -285,6 +384,7 @@ export async function onVoicehub(interaction) {
     const ok = await salon.setName(nom, `Renommé par ${interaction.user.tag}`).then(() => true)
       .catch((e) => { console.warn('[vocaux] renommer :', e.message); return false; });
     // Discord limite les renommages (2 toutes les 10 minutes par salon).
+    if (ok) vocaux.poserNom(salon.id, nom);
     if (!ok) return interaction.reply({ content: '❌ Discord refuse le renommage pour l\'instant (2 changements toutes les 10 min au plus). Réessayez plus tard.', ...EPH });
     return majPanneau(interaction, entree);
   }
