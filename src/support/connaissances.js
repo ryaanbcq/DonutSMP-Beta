@@ -44,6 +44,7 @@ export function connaissancesServeur() {
     '- Il faut être lié depuis 24 h pour noter, 10 nouveaux avis au plus par 24 h, un seul avis par personne (modifiable). `/vouches retirer` retire son propre avis.',
     '- Le trust score apparaît à partir de 5 avis. `/vouches membre` et `/profil` affichent une réputation.',
     '- Un faux avis ou un avis abusif : seul le staff peut le retirer, le signaler dans le ticket.',
+    '- Récupérer ses vouches de l\'ANCIEN système (ancien forum où chacun avait son post) : c\'est possible, le staff les importe lui même avec le lien du post. Le membre doit être lié et envoyer le LIEN de son post de l\'ancien forum (clic droit sur le post > Copier le lien). Les vouches gardent leur auteur et leur date.',
     '',
     '## Commandes utiles',
     '- `/bal [pseudo]` : solde DonutSMP d\'un joueur. `/baltop` : classement. `/stats [pseudo]` : fiche DonutSMP. `/profil` : profil d\'un membre vérifié.',

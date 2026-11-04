@@ -21,6 +21,28 @@ import { repondreTicket, iaDisponible } from './ia.js';
 import { ficheMembre } from './fiche.js';
 
 const minuteurs = new Map(); // channelId -> timeout
+
+const simple = (n) => String(n ?? '').toLowerCase().replace(/^[.@]/, '').replace(/[^a-z0-9_]/g, '');
+
+/**
+ * Le compte lie qui correspond au pseudo donne par le membre : exact
+ * d abord, sinon un candidat UNIQUE parmi les pseudos lies qui commencent
+ * par lui ou le contiennent (« Zenor » pour ZENORX), ou parmi les noms
+ * Discord. Rend { lie, approx } ou null.
+ */
+export function trouverLie(vise, guild, liens = store.allLinks()) {
+  const exact = store.getLinkByName(vise) ?? store.getLinkByName(`.${vise}`);
+  if (exact) return { lie: exact, approx: false };
+  const v = simple(vise);
+  if (v.length < 3) return null;
+  const parPseudo = liens.filter((l) => simple(l.mc_name).startsWith(v) || simple(l.mc_name).includes(v));
+  const parDiscord = guild ? liens.filter((l) => {
+    const m = guild.members.cache.get(l.discord_id);
+    return m && [m.displayName, m.user.username, m.user.globalName].some((n) => n && simple(n).includes(v));
+  }) : [];
+  const ids = [...new Set([...parPseudo, ...parDiscord].map((l) => l.discord_id))];
+  return ids.length === 1 ? { lie: liens.find((l) => l.discord_id === ids[0]), approx: true } : null;
+}
 const enCours = new Set();
 let client = null;
 
@@ -87,14 +109,19 @@ async function intervenir(channelId) {
     const cleNonLie = `non-lie:${vise.toLowerCase()}`;
     // Deja propose : on ne repropose que si un AUTRE pseudo non lie a ete donne.
     if (vise && (!scamOffert || (scamOffert.startsWith('non-lie:') && scamOffert !== cleNonLie))) {
-      const lie = store.getLinkByName(vise) ?? store.getLinkByName(`.${vise}`);
+      const trouve = trouverLie(vise, salon.guild);
+      const lie = trouve?.lie;
       if (lie && lie.discord_id !== ticket.discord_id) {
         components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`vouch:scam:${lie.discord_id}`)
           .setLabel(`Signaler ${lie.mc_name} sur sa réputation`.slice(0, 80)).setEmoji('⚠️').setStyle(ButtonStyle.Danger)));
-        carte.addFields({ name: '⚠️ Prévenir la communauté', value: `**${escapeMarkdown(lie.mc_name)}** a lié son compte : le bouton ci-dessous ouvre un signalement de scam sur son profil de réputation (preuve obligatoire).` });
+        carte.addFields({
+          name: '⚠️ Prévenir la communauté',
+          value: (trouve.approx ? `Il s'agit sans doute de **${escapeMarkdown(lie.mc_name)}** : si c'est bien lui, ` : `**${escapeMarkdown(lie.mc_name)}** a lié son compte : `)
+            + 'le bouton ci-dessous ouvre un signalement de scam sur son profil de réputation (preuve obligatoire).',
+        });
         scamOffert = lie.discord_id;
       } else if (!lie) {
-        carte.addFields({ name: '⚠️ Réputation', value: `**${escapeMarkdown(vise)}** n'a pas lié son compte au Discord : pas de profil de réputation à signaler.` });
+        carte.addFields({ name: '⚠️ Réputation', value: `Aucun compte lié ne correspond à **${escapeMarkdown(vise)}** : s'il a un profil de réputation, donnez son pseudo Minecraft exact.` });
         scamOffert = cleNonLie;
       }
     }
