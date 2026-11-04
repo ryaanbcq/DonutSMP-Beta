@@ -23,6 +23,7 @@ import { chercherFils } from './anciens.js';
 import { imagesDuTicket } from './images.js';
 import { publierRelais, marquerRelais } from './relais.js';
 import { programmerSuppression } from '../tickets/fin.js';
+import { demarrerDoc } from './doc-donut.js';
 
 const minuteurs = new Map(); // channelId -> timeout
 
@@ -166,7 +167,8 @@ async function intervenir(channelId) {
         texte: `<#${channelId}> · ${escapeMarkdown(ticket.categorie ?? 'sans catégorie')}\n> ${escapeMarkdown(String(rep.resume ?? '').slice(0, 300))}`,
       });
     }
-    if (rep.resolu && !rep.transmettre && !etat.transmis) await demanderResolution(salon, ticket).catch((e) => console.warn('[support] resolution :', e.message));
+    // Meme apres une transmission : le membre peut dire que c est regle.
+    if (rep.resolu && !rep.transmettre) await demanderResolution(salon, ticket).catch((e) => console.warn('[support] resolution :', e.message));
     echecs.delete(channelId);
   } catch (e) {
     console.warn('[support] reponse :', e.message);
@@ -211,6 +213,7 @@ function reprendre() {
 export function demarrerSupport(c) {
   client = c;
   c.on('messageCreate', (m) => surMessage(m).catch((e) => console.warn('[support] :', e.message)));
+  demarrerDoc();
   reprendre();
   console.log(`[support] assistant IA ${supportActif() ? 'actif' : `à l'arrêt${iaDisponible() ? '' : ' (pas de clé ANTHROPIC_API_KEY)'}`}`);
 }

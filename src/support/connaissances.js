@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { settings } from '../settings.js';
 import { compteBot } from '../ingame/compte.js';
 import { shortMoney } from '../lib/format.js';
+import { docDonutTexte } from './doc-donut.js';
 
 const salon = (id, sinon) => (id ? `<#${id}>` : sinon);
 
@@ -61,5 +62,10 @@ export function connaissancesServeur() {
     '',
     '## Vocaux temporaires',
     '- Rejoindre le salon « Créer un vocal » crée un vocal perso, réglable depuis son panneau (renommer, limite, verrouiller, masquer, expulser).',
-  ].join('\n');
+    '',
+    '## Ce que seul le staff officiel de DonutSMP peut faire',
+    '- DonutSMP FR est une communauté de joueurs : son staff ne gère que ce Discord. Il ne peut RIEN faire en jeu sur DonutSMP.',
+    '- Relève du support officiel https://support.donutsmp.net : ban, mute ou sanction EN JEU et leur contestation, objets ou argent perdus en jeu (bug, rollback), achats de la boutique (rangs, clés, paiement), bug ou duplication à signaler, problème de compte sur le serveur, joueur qui triche en jeu.',
+    '- Procédure : se connecter sur le site avec Discord ou Google, lier son compte Minecraft en générant un code puis en tapant `/link <code>` en jeu sur DonutSMP, puis ouvrir un ticket. Réponse en général sous 24 à 48 h (indiqué sur le site).',
+  ].join('\n') + (docDonutTexte() ? `\n\n${docDonutTexte()}` : '');
 }
