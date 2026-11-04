@@ -244,7 +244,7 @@ function configuration() {
   return embed('⚙️・CONFIGURATION', {
     couleur: FR.bleu,
     description:
-      '`/setup general` · tout : rôles, salons, panneaux, logs, dons, bot en jeu, tags, modération, anti-pub, vocaux, ce guide\n'
+      '`/setup general` · tout : rôles, salons, panneaux, logs, dons, bot en jeu, tags, modération, anti-pub, vocaux, compteurs, support IA, ce guide\n'
       + '`/setup tickets` · `/setup vouches` · `/setup dons` · réglages de chaque système\n'
       + '`/panel` · republier un panneau dans un salon · `/embed create` · poster un embed\n'
       + '`/statut` · statut du bot · `/sauvegarde` · télécharger toutes les données du bot\n\n'

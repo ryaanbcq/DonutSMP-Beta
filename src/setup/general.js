@@ -44,6 +44,8 @@ import {
 import { pageVocaux, onVocauxSelect, onVocauxBouton } from '../vocaux/setup.js';
 import { reglagesVocaux } from '../vocaux/hub.js';
 import { pageGuide, onGuideSelect, onGuideBouton } from '../guide/setup.js';
+import { pageCompteurs, onCompteursSelect, onCompteursBouton, onCompteursModal } from '../compteurs/setup.js';
+import { reglagesCompteurs } from '../compteurs/compteurs.js';
 import { pageSupport, onSupportSelect, onSupportBouton, onSupportModal } from '../support/setup.js';
 import { reglagesSupport } from '../support/reglages.js';
 
@@ -116,6 +118,8 @@ export async function rendreSetupGeneral(guild, note = '') {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gsetup:page:support').setLabel(`Support IA${reglagesSupport.actif() ? '' : ' (éteint)'}`)
           .setEmoji('🤖').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:page:compteurs').setLabel(`Compteurs${reglagesCompteurs.actifs().length ? '' : ' (éteints)'}`)
+          .setEmoji('📊').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -372,6 +376,7 @@ export async function onGsetupSelect(interaction) {
   if (id.startsWith('mod:')) return onModerationSelect(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubSelect(interaction, id);
   if (id.startsWith('vocaux:')) return onVocauxSelect(interaction, id);
+  if (id.startsWith('compteurs:')) return onCompteursSelect(interaction, id);
   if (id === 'guide:salon' || id === 'guide:suggestions') return onGuideSelect(interaction);
   if (id.startsWith('support:')) return onSupportSelect(interaction, id);
 
@@ -465,6 +470,8 @@ export async function onGsetupBouton(interaction) {
   if (id === 'page:mod') return interaction.update(pageModeration());
   if (id === 'page:antipub') return interaction.update(pageAntipub());
   if (id === 'page:vocaux') return interaction.update(pageVocaux(guild));
+  if (id === 'page:compteurs') { await interaction.deferUpdate(); return interaction.editReply(await pageCompteurs(guild)); }
+  if (id.startsWith('compteurs:')) return onCompteursBouton(interaction, id);
   if (id.startsWith('vocaux:')) return onVocauxBouton(interaction, id);
   if (id === 'page:guide') return interaction.update(pageGuide());
   if (id === 'guide:republier') return onGuideBouton(interaction);
@@ -533,6 +540,7 @@ export async function onGsetupModal(interaction) {
   if (id.startsWith('antipub:')) return onAntipubModal(interaction, id);
   if (id.startsWith('mod:')) return onModerationModal(interaction, id);
   if (id.startsWith('support:')) return onSupportModal(interaction, id);
+  if (id === 'compteurs:modal') return onCompteursModal(interaction);
   const pseudo = interaction.fields.getTextInputValue('pseudo').trim();
   if (pseudo && !/^\.?[A-Za-z0-9_]{1,24}$/.test(pseudo)) {
     return interaction.update(pageDons(`❌ « ${pseudo} » n'est pas un pseudo Minecraft.`));
