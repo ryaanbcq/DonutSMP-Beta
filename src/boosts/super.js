@@ -22,8 +22,18 @@ import { journal } from '../ops/journal.js';
 import { embed, FR } from '../lib/brand.js';
 import { TYPES_BOOST, boostsDuMessage, compterBoosts, decisionRole, texteMerci } from './logique.js';
 
-// GIF de la trend « W » (winner) sous le remerciement ; kv boosts.gif pour en changer, « aucun » pour l enlever.
-export const GIF_W = 'https://media.tenor.com/dhnCFJ_FZ8YAAAAC/look-at-the-size-of-this-w-spongebob.gif';
+// GIF « on te met sur le podium » (Chad, W, winner), un au hasard a chaque boost.
+// kv boosts.gifs = liste JSON d URLs pour remplacer cette liste, « aucun » pour ne plus en mettre.
+export const GIFS = [
+  'https://media.tenor.com/dhnCFJ_FZ8YAAAAC/look-at-the-size-of-this-w-spongebob.gif',
+  'https://media.tenor.com/IJ2ayn1zPOkAAAAC/bigw.gif',
+  'https://media.tenor.com/qTeM434Ja3AAAAAC/giga-chad-chad.gif',
+  'https://media.tenor.com/jHvyFefhKmcAAAAC/mujikcboro-seriymujik.gif',
+  'https://media.tenor.com/wOmVCYLUjmcAAAAC/so-tuff.gif',
+  'https://media.tenor.com/nQafJ4ISWj4AAAAC/wario-w.gif',
+  'https://media.tenor.com/3G2tzd1u-pcAAAAC/dub-bossman.gif',
+  'https://media.tenor.com/6VQiZcfJsCMAAAAC/f1-fernando-alonso.gif',
+];
 
 const PAGES_MAX = 30; // 3 000 messages du salon systeme au demarrage
 
@@ -39,7 +49,13 @@ export const reglagesBoosts = {
     if (id) return guild.channels.cache.has(id) ? id : null;
     return guild.channels.cache.find((c) => /nous-?soutenir/i.test(c.name))?.id ?? null;
   },
-  gif: () => { const g = store.kvGet('boosts.gif'); return g === 'aucun' ? null : g || GIF_W; },
+  gif: () => {
+    const v = store.kvGet('boosts.gifs');
+    if (v === 'aucun') return null;
+    let liste = GIFS;
+    try { const l = JSON.parse(v ?? 'null'); if (Array.isArray(l) && l.length) liste = l.filter((u) => /^https:\/\//.test(u)); } catch { /* liste par defaut */ }
+    return liste.length ? liste[Math.floor(Math.random() * liste.length)] : null;
+  },
 };
 
 function roleSuper(guild) {
