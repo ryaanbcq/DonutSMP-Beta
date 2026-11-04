@@ -45,6 +45,7 @@ export function trouverLie(vise, guild, liens = store.allLinks()) {
   return ids.length === 1 ? { lie: liens.find((l) => l.discord_id === ids[0]), approx: true } : null;
 }
 const enCours = new Set();
+const echecs = new Map(); // channelId -> nombre d echecs d affilee
 let client = null;
 
 export const supportActif = () => reglagesSupport.actif() && iaDisponible();
@@ -156,8 +157,14 @@ async function intervenir(channelId) {
         texte: `<#${channelId}> · ${escapeMarkdown(ticket.categorie ?? 'sans catégorie')}\n> ${escapeMarkdown(String(rep.resume ?? '').slice(0, 300))}`,
       });
     }
+    echecs.delete(channelId);
   } catch (e) {
     console.warn('[support] reponse :', e.message);
+    // Une API qui hoquette ne doit pas laisser le membre sans reponse : on
+    // retente 30 s puis 2 min plus tard, puis on laisse au staff.
+    const n = (echecs.get(channelId) ?? 0) + 1;
+    echecs.set(channelId, n);
+    if (n <= 2) setTimeout(() => planifier(channelId), n === 1 ? 30_000 : 120_000).unref?.();
   } finally {
     enCours.delete(channelId);
   }
