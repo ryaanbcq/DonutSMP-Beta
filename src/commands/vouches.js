@@ -59,6 +59,6 @@ export async function execute(interaction) {
   }
   await interaction.deferReply();
   const fil = await filDe(interaction.client, link).catch(() => null);
-  const carte = carteReputation(link);
+  const carte = carteReputation(link, interaction.client);
   return interaction.editReply({ ...carte, content: fil ? `Tous ses avis : ${fil}` : undefined });
 }

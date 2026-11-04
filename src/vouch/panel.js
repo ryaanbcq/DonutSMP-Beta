@@ -163,7 +163,7 @@ export function panneauVouch(forumId) {
 
 async function montrerCarte(interaction, link, { differe = false } = {}) {
   const fil = await filDe(interaction.client, link).catch(() => null);
-  const charge = { ...carteReputation(link), content: fil ? `Tous ses avis : ${fil}` : undefined, ...EPH };
+  const charge = { ...carteReputation(link, interaction.client), content: fil ? `Tous ses avis : ${fil}` : undefined, ...EPH };
   return differe ? interaction.editReply(charge) : interaction.reply(charge);
 }
 

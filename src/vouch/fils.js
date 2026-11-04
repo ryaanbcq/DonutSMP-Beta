@@ -1,6 +1,7 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ThreadAutoArchiveDuration, ChannelType, EmbedBuilder, AttachmentBuilder,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ThreadAutoArchiveDuration, ChannelType, EmbedBuilder, AttachmentBuilder, escapeMarkdown,
 } from 'discord.js';
+import { config } from '../config.js';
 import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
@@ -128,7 +129,7 @@ export async function filDe(client, link) {
 
   const fil = await salon.threads.create({
     name: nomFil(link.mc_name),
-    message: carteReputation(link),
+    message: carteReputation(link, client),
     appliedTags: await tagDe(salon, trustDe(link.discord_id).palier),
     autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
     reason: `Post de réputation de ${link.mc_name}`,
@@ -139,11 +140,26 @@ export async function filDe(client, link) {
   return fil;
 }
 
+/**
+ * Nom Discord en TEXTE : une mention <@id> dans un embed s affiche en ID brut
+ * chez qui n a pas le membre en cache (vecu 04/11 sur les cartes). Cache du
+ * serveur (rempli au demarrage par tousLesMembres), sinon cache des
+ * utilisateurs ; null si inconnu.
+ */
+export function nomDiscord(client, id) {
+  if (!client || !id) return null;
+  const membre = client.guilds?.cache.get(config.discord.guildId)?.members.cache.get(id);
+  const user = membre?.user ?? client.users?.cache.get(id);
+  const nom = membre?.displayName ?? user?.globalName ?? user?.username;
+  return nom ? escapeMarkdown(nom) : null;
+}
+
 export function trustDe(discordId) {
   return calculerTrust(store.vouchAll(discordId));
 }
 
-export function carteReputation(link) {
+export function carteReputation(link, client = null) {
+  const nom = nomDiscord(client, link.discord_id);
   const t = trustDe(link.discord_id);
   const dernier = store.vouchAll(link.discord_id)[0];
   const pluriel = (n, mot) => `**${n}** ${mot}${n > 1 ? 's' : ''}`;
@@ -162,7 +178,7 @@ export function carteReputation(link) {
     image: link.mc_name,
     description: [
       `### ${t.palier.emoji} ${link.mc_name}`,
-      `<@${link.discord_id}> · ${t.palier.nom}`,
+      nom ? `${nom} · ${t.palier.nom}` : t.palier.nom,
       '',
       note,
       `✅ **${t.pos}** vouch${t.pos > 1 ? 'es' : ''}${t.neg ? `  ·  ☠️ ${pluriel(t.neg, 'signalement')}` : '  ·  aucun signalement'}`,
@@ -211,7 +227,8 @@ export async function fichiersDe(message) {
  * les images vont DANS l embed (la premiere en grand, jusqu a trois autres
  * en galerie, meme URL de carte = Discord les groupe), le reste en piece jointe.
  */
-export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null } = {}) {
+export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null, client = null } = {}) {
+  const nomAuteur = nomDiscord(client, vouch.from_id);
   const positif = vouch.value > 0;
   const preuves = noms.length ? noms.map((name) => ({ name })) : (() => {
     try { return JSON.parse(vouch.preuves ?? '[]'); } catch { return []; }
@@ -220,7 +237,7 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
     couleur: positif ? FR.vert : FR.rouge,
     image: auteurLink?.mc_name ?? 'aucune',
     description:
-      `**${auteurLink?.mc_name ?? 'Membre'}** <@${vouch.from_id}> `
+      `**${auteurLink?.mc_name ?? 'Membre'}** ${nomAuteur ? `(${nomAuteur}) ` : ''}`
       + (positif ? `· ${etoiles(vouch.stars ?? 5)}` : '· signale **' + cibleLink.mc_name + '**')
       + (vouch.comment ? `\n> ${vouch.comment.replace(/\n/g, '\n> ')}` : ''),
   }).setTimestamp(vouch.created_at);
@@ -263,7 +280,7 @@ export async function rafraichir(client, discordId) {
   if (fil) {
     await reveiller(fil);
     const carte = await fil.fetchStarterMessage().catch(() => null);
-    if (carte) await carte.edit(carteReputation(link)).catch((e) => console.warn('[vouch] carte :', e.message));
+    if (carte) await carte.edit(carteReputation(link, client)).catch((e) => console.warn('[vouch] carte :', e.message));
     await retirerPanelEnBas(fil, link);
     const forum = await salonVouch(client);
     if (forum) await fil.setAppliedTags(await tagDe(forum, trustDe(discordId).palier)).catch(() => {});
@@ -308,7 +325,7 @@ async function posterAvisSeul(client, fromId, toId, { fichiers = [] } = {}) {
   let files = fichiers;
   if (!files.length && ancien) files = await fichiersDe(ancien);
   const lien = `https://discord.com/channels/${fil.guildId}/${fil.id}`;
-  const carte = carteAvis(vouch, store.getLink(fromId), cible, { noms: files.map((f) => f.name), lien });
+  const carte = carteAvis(vouch, store.getLink(fromId), cible, { noms: files.map((f) => f.name), lien, client });
   let m;
   if (ancien) {
     m = await ancien.edit(files.length ? { ...carte, files, attachments: [] } : carte).catch((e) => { console.warn('[vouch] carte :', e.message); return null; });
