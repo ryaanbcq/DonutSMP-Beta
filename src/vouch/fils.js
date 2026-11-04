@@ -4,7 +4,9 @@ import {
 import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
-import { calculerTrust, etoiles, ligneScore } from './trust.js';
+import {
+  calculerTrust, etoiles, ligneScore, barre, MIN_AVIS, PALIER_SIGNALE,
+} from './trust.js';
 import { journal } from '../ops/journal.js';
 
 // Un post par joueur link dans le FORUM des vouches, nomme « ⭐ Pseudo » pour
@@ -144,22 +146,31 @@ export function trustDe(discordId) {
 export function carteReputation(link) {
   const t = trustDe(link.discord_id);
   const dernier = store.vouchAll(link.discord_id)[0];
-  const pct = t.n ? Math.round((t.pos / t.n) * 100) : null;
+  const pluriel = (n, mot) => `**${n}** ${mot}${n > 1 ? 's' : ''}`;
 
+  // Une ligne par idee, des blancs entre les blocs, pas de colonnes : les
+  // champs « inline » tombaient de travers et le ✅ devant 0 signalement
+  // se lisait comme un vouch.
+  const note = t.pos ? `${etoiles(t.moyenne)}  **${t.moyenne.toFixed(1)}**` : '☆☆☆☆☆  pas encore de note';
+  const score = t.palier === PALIER_SIGNALE
+    ? `☠️ Trust score suspendu (${pluriel(t.neg, 'signalement')})`
+    : t.n < MIN_AVIS
+      ? `-# 📊 Trust score à partir de ${MIN_AVIS} avis · ${t.n} / ${MIN_AVIS}`
+      : `📊 \`${barre(t.score, 12)}\`  **${t.score}** / 100`;
   const contenu = embed(TITRE_REPUTATION, {
-    couleur: t.palier.emoji === '☠️' ? FR.rouge : t.trusted ? FR.or : FR.bleu,
+    couleur: t.palier === PALIER_SIGNALE ? FR.rouge : t.trusted ? FR.or : FR.bleu,
     image: link.mc_name,
-    description:
-      `**${link.mc_name}** · <@${link.discord_id}>\n`
-      + `## ${t.palier.emoji} ${t.palier.nom}\n`
-      + `${etoiles(t.moyenne)} ${t.pos ? t.moyenne.toFixed(1) : 'sans note'} · `
-      + `${t.n} avis${pct === null ? '' : ` · ${pct} % positifs`}\n`
-      + ligneScore(t),
-  }).addFields(
-    { name: 'Vouches', value: `✅ ${t.pos}`, inline: true },
-    { name: 'Signalements', value: `${t.neg ? '☠️' : '✅'} ${t.neg}`, inline: true },
-    { name: 'Dernier avis', value: dernier ? `<t:${Math.floor(dernier.created_at / 1000)}:R>` : 'Aucun', inline: true },
-  );
+    description: [
+      `### ${t.palier.emoji} ${link.mc_name}`,
+      `<@${link.discord_id}> · ${t.palier.nom}`,
+      '',
+      note,
+      `✅ **${t.pos}** vouch${t.pos > 1 ? 'es' : ''}${t.neg ? `  ·  ☠️ ${pluriel(t.neg, 'signalement')}` : '  ·  aucun signalement'}`,
+      score,
+      '',
+      `-# ${dernier ? `Dernier avis <t:${Math.floor(dernier.created_at / 1000)}:R>` : 'Aucun avis pour le moment'}`,
+    ].join('\n'),
+  });
   const boutons = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`vouch:noter:${link.discord_id}`)
       .setLabel(`Donner un avis sur ${link.mc_name}`).setEmoji('⭐').setStyle(ButtonStyle.Primary),
