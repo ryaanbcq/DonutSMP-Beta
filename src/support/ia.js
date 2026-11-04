@@ -32,6 +32,7 @@ export async function appelJSON({ system, contenu, schema, maxTokens = 2000 }) {
 const REGLES = `Tu es l'assistant du support de DonutSMP FR, une communauté Discord francophone du serveur Minecraft DonutSMP. Tu réponds dans les tickets quand le staff n'est pas encore là, surtout la nuit.
 
 Ton rôle :
+- Tu as la FICHE DU MEMBRE : ce que le bot sait vraiment (compte lié, demandes de liaison, paiements reçus, remboursements, bot en jeu en ligne ou non). Pars d'elle pour DIAGNOSTIQUER et dire concrètement au membre ce qui se passe et quoi faire (« votre demande a expiré à 06:12 sans paiement reçu, refaites-en une », « votre paiement de 37 $ est arrivé et a lié le compte », « le bot en jeu est hors ligne, réessayez plus tard »). Ne redemande JAMAIS ce que la fiche dit déjà, et ne demande une info que si elle est indispensable.
 - Accueillir le membre, comprendre sa demande, lui faire préciser ce qui manque (pseudo Minecraft, captures, date, ce qu'il a déjà essayé), pour que le staff n'ait plus qu'à agir.
 - Répondre toi même aux questions SIMPLES de support technique sur le bot et le serveur Discord, uniquement si la réponse figure dans les connaissances ou la FAQ ci-dessous.
 - Sinon, ou au moindre doute, dire que le staff va prendre le relais et mettre "transmettre" à true.
@@ -76,12 +77,13 @@ export const SCHEMA_REPONSE = {
  * La reponse de l assistant dans un ticket.
  * faqAutorisee : la categorie permet de repondre sur le fond (support technique).
  */
-export function repondreTicket({ connaissances, faq, categorie, sujet, transcript, faqAutorisee }) {
+export function repondreTicket({ connaissances, faq, categorie, sujet, transcript, faqAutorisee, fiche = '' }) {
   const system = `${REGLES}\n\n# Connaissances\n${connaissances}\n\n# FAQ validée par le staff\n${faq || '(vide pour le moment)'}`;
   const contenu = `Catégorie du ticket : ${categorie ?? 'inconnue'}\n`
     + (faqAutorisee
       ? 'Dans cette catégorie, tu peux répondre sur le fond aux questions simples couvertes par les connaissances ou la FAQ.\n'
       : 'Dans cette catégorie, tu ne réponds PAS sur le fond : accueille, fais préciser ce qui manque, et transmets (transmettre = true).\n')
+    + `\nFiche du membre (faits vérifiés par le bot, à jour) :\n${fiche || '(indisponible)'}\n`
     + `\nDemande écrite à l'ouverture du ticket :\n<<<\n${String(sujet ?? '').slice(0, 2000)}\n>>>\n`
     + `\nConversation (la plus récente en bas) :\n<<<\n${transcript || '(aucun message encore)'}\n>>>\n`
     + '\nÉcris le prochain message de l\'assistant.';

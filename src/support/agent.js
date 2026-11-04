@@ -18,6 +18,7 @@ import { decider, budgetDispo, transcriptPourIA } from './logique.js';
 import { memoire, reglagesSupport, faqTexte } from './reglages.js';
 import { connaissancesServeur } from './connaissances.js';
 import { repondreTicket, iaDisponible } from './ia.js';
+import { ficheMembre } from './fiche.js';
 
 const minuteurs = new Map(); // channelId -> timeout
 const enCours = new Set();
@@ -70,6 +71,7 @@ async function intervenir(channelId) {
     const rep = await repondreTicket({
       connaissances: connaissancesServeur(), faq: faqTexte(), categorie: ticket.categorie,
       sujet: ticket.sujet, transcript: transcriptPourIA(messages), faqAutorisee,
+      fiche: await ficheMembre(ticket.discord_id).catch((e) => `(fiche indisponible : ${e.message})`),
     });
     const texte = String(rep.message ?? '').replace(/—/g, ',').trim().slice(0, 1800);
     if (!texte) return;
