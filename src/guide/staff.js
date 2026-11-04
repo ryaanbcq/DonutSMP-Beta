@@ -231,12 +231,13 @@ function vocaux() {
     couleur: FR.bleu,
     description:
       `État : ${hub ? `🟢 **actif**, hub ${salon(hub)}` : '🔴 **éteint**'}\n\n`
-      + 'Rejoindre le hub crée un vocal perso et y déplace le membre, qui en devient l\'hôte. Dans le chat du vocal, un panneau :\n'
-      + '• **Réglages** : renommer (le nom est gardé pour ses prochains vocaux), limite de membres, récupérer le vocal si l\'hôte est parti\n'
-      + '• **Permissions** : verrouiller, ouvrir, masquer, afficher, expulser quelqu\'un\n'
+      + 'Rejoindre le hub crée un vocal perso et y déplace le membre, qui en devient propriétaire. Dans le chat du vocal, un panneau (et `/vocal`) :\n'
+      + '• **Réglages** : nom (gardé pour ses prochains vocaux), limite, statut, caméra et soundboard 💎, région (propriétaire du serveur), réinitialiser, sauvegarder ses réglages\n'
+      + '• **Permissions** : verrouiller, déverrouiller, autoriser, refuser, inviter en MP 💎, expulser, transférer, voir les accès\n'
+      + '💎 = boosters seulement. Si le propriétaire part, le vocal passe à quelqu\'un qui est dedans. Les rôles protégés ne peuvent être ni expulsés ni refusés.\n'
       + 'Le staff peut tout faire sur n\'importe quel vocal. Le vocal est supprimé quand il se vide.'
       + `${reglagesVocaux.salonLogs() ? ` Ouvertures et fermetures (durée, participants) dans ${salon(reglagesVocaux.salonLogs())}.` : ''}\n`
-      + '-# Hub, catégorie et logs : /setup general > Vocaux.',
+      + '-# Hub, catégorie, logs, rôles protégés, nom et limite par défaut : /setup general > Vocaux.',
   });
 }
 

@@ -41,7 +41,7 @@ import { reglagesTags } from '../tags/surveillance.js';
 import {
   pageModeration, onModerationSelect, onModerationBouton, onModerationModal, pageAntipub, onAntipubSelect, onAntipubBouton, onAntipubModal,
 } from '../moderation/setup.js';
-import { pageVocaux, onVocauxSelect, onVocauxBouton } from '../vocaux/setup.js';
+import { pageVocaux, onVocauxSelect, onVocauxBouton, onVocauxModal } from '../vocaux/setup.js';
 import { reglagesVocaux } from '../vocaux/hub.js';
 import { pageGuide, onGuideSelect, onGuideBouton } from '../guide/setup.js';
 import { pageCompteurs, onCompteursSelect, onCompteursBouton, onCompteursModal } from '../compteurs/setup.js';
@@ -537,6 +537,7 @@ export async function onGsetupModal(interaction) {
   const { guild, client } = interaction;
   const id = interaction.customId.slice('gsetup:'.length);
   if (id.startsWith('tags:')) return onTagsModal(interaction, id);
+  if (id.startsWith('vocaux:')) return onVocauxModal(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubModal(interaction, id);
   if (id.startsWith('mod:')) return onModerationModal(interaction, id);
   if (id.startsWith('support:')) return onSupportModal(interaction, id);

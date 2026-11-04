@@ -25,3 +25,17 @@ export function peutRenommer(renommages = [], now = Date.now()) {
   const recents = renommages.filter((d) => now - d < FENETRE);
   return { ok: recents.length < 2, recents };
 }
+
+/**
+ * Garde le nom actuel du salon et ne remplace que le nombre (le dernier
+ * groupe de chiffres, espaces de milliers compris). Sans nombre dans le nom :
+ * le modele s applique.
+ */
+export function nomAvecNombre(nomActuel, n, modele) {
+  const nom = String(nomActuel ?? '');
+  const re = /\d[\d\s  .,]*\d|\d/g;
+  let dernier = null;
+  for (const m of nom.matchAll(re)) dernier = m;
+  if (!dernier) return nomSalon(modele, n);
+  return (nom.slice(0, dernier.index) + formater(n) + nom.slice(dernier.index + dernier[0].length)).slice(0, 100);
+}

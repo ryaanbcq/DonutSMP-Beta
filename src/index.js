@@ -209,6 +209,9 @@ for (const evt of ['uncaughtException', 'unhandledRejection']) {
 client.on('interactionCreate', async (interaction) => {
   const qui = interaction.user?.tag ?? interaction.user?.id;
   try {
+    if (interaction.isAutocomplete()) {
+      return await client.commands.get(interaction.commandName)?.autocomplete?.(interaction);
+    }
     if (interaction.isButton()) {
       console.log(`[ui] bouton ${interaction.customId} par ${qui}`);
       return await onBouton(interaction);

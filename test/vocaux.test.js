@@ -62,3 +62,13 @@ test('vocaux : duree du log lisible', () => {
   assert.equal(dureeVocal(12 * 60_000), '12 min');
   assert.equal(dureeVocal(125 * 60_000), '2 h 05');
 });
+
+test('vocaux : modele de nom, attente des invitations, roles proteges', async () => {
+  const { nomDepuisModele, attenteInvitation, estProtege } = await import('../src/vocaux/logique.js');
+  assert.equal(nomDepuisModele('🔊 Vocal de {pseudo}', { pseudo: 'Ryan', utilisateur: 'ryaan' }), '🔊 Vocal de Ryan');
+  assert.equal(nomDepuisModele('{utilisateur} chill', { pseudo: 'Ryan', utilisateur: 'ryaan' }), 'ryaan chill');
+  assert.equal(attenteInvitation(1000, 5, 1000 + 60_000), 4 * 60_000);
+  assert.equal(attenteInvitation(0, 5, 10 * 60_000), 0);
+  assert.equal(estProtege(['a', 'b'], ['b']), true);
+  assert.equal(estProtege(['a'], []), false);
+});

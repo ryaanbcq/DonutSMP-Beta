@@ -9,7 +9,7 @@
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { store } from '../db.js';
 import { config } from '../config.js';
-import { TYPES, MINUTES, nomSalon, peutRenommer } from './logique.js';
+import { TYPES, MINUTES, nomSalon, nomAvecNombre, peutRenommer } from './logique.js';
 
 export { TYPES, MINUTES };
 
@@ -29,6 +29,7 @@ export const reglagesCompteurs = {
     const c = lire();
     if (!c[type]) return;
     c[type].modele = modele ? (modele.includes('{nombre}') ? modele : `${modele} {nombre}`) : undefined;
+    c[type].appliquerModele = true; // un modele choisi au setup s applique une fois, puis seul le nombre change
     ecrire(c);
   },
   actifs: () => Object.keys(TYPES).filter((t) => lire()[t]?.salonId),
@@ -68,13 +69,16 @@ export async function actualiser(guild) {
     const salon = guild.channels.cache.get(c[t].salonId);
     if (!salon) { res.erreurs.push(`${TYPES[t].label} : salon supprimé`); continue; }
     try { await fermer(salon); } catch (e) { res.erreurs.push(`${TYPES[t].label} : impossible de fermer le salon (${e.message})`); }
-    const nom = nomSalon(c[t].modele ?? TYPES[t].defaut, n[t]);
-    if (salon.name === nom) continue;
+    const modele = c[t].modele ?? TYPES[t].defaut;
+    // Le nom du salon est garde tel quel (renomme a la main par le staff ?) : seul le nombre change.
+    const nom = c[t].appliquerModele ? nomSalon(modele, n[t]) : nomAvecNombre(salon.name, n[t], modele);
+    if (salon.name === nom) { delete c[t].appliquerModele; continue; }
     const { ok, recents } = peutRenommer(c[t].renommages);
     if (!ok) { res.attente.push(t); continue; }
     try {
       await salon.setName(nom, 'Compteur');
       c[t].renommages = [...recents, Date.now()];
+      delete c[t].appliquerModele;
       res.changes.push(t);
     } catch (e) {
       res.erreurs.push(`${TYPES[t].label} : ${e.message}`);

@@ -94,3 +94,26 @@ export function dureeVocal(ms) {
   if (min < 60) return `${min} min`;
   return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
 }
+
+// ------------------------------------------------------------ repris de « vocaux temporaires »
+
+/** Nom du salon depuis le modele : {pseudo} (sur le serveur), {utilisateur} (Discord). */
+export function nomDepuisModele(modele, { pseudo, utilisateur }) {
+  const nom = String(modele || '🔊 Vocal de {pseudo}')
+    .replaceAll('{pseudo}', pseudo ?? 'membre')
+    .replaceAll('{utilisateur}', utilisateur ?? 'membre')
+    .trim().slice(0, 100);
+  return nom || 'Vocal';
+}
+
+/** Temps restant avant de pouvoir reinviter (ms). */
+export function attenteInvitation(derniere, minutes, maintenant = Date.now()) {
+  return Math.max(0, minutes * 60_000 - (maintenant - derniere));
+}
+
+/** Un membre avec un role protege ne peut pas etre expulse ni refuse. */
+export function estProtege(rolesMembre, rolesProteges) {
+  const set = new Set(rolesProteges);
+  for (const id of rolesMembre) if (set.has(id)) return true;
+  return false;
+}
