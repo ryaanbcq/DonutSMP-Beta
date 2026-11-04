@@ -85,7 +85,7 @@ function moderation(guild) {
       + '### 🔇 Mute\n'
       + `\`${p}mute @membre [durée] [raison]\` · sans durée : mute d'1 h (28 jours au plus)\n`
       + `\`${p}unmute @membre\`\n`
-      + `\`${p}habs @membre\` / \`${p}unhabs @membre\` · donne ou retire le rôle habs (aussi \`/habs\`)\n`
+      + `\`${p}habs @membre\` / \`${p}unhabs @membre\` · met en prison (rôle Prison) ou en sort (aussi \`/habs\`)\n`
       + `${qui('mute')}\n`
       + '### 👢 Expulser\n'
       + `\`${p}kick @membre [raison]\`\n`

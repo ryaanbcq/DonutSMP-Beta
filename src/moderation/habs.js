@@ -1,8 +1,9 @@
-// Role « habs » donne par les moderateurs : /habs membre, ou +habs @membre
+// /habs : met un membre en PRISON (role Prison) : /habs membre, ou +habs @membre
 // (+unhabs @membre ou /habs membre retirer:oui pour l enlever).
 //
 // Qui peut : ceux qui ont le droit de mute (/setup general > Modération).
-// Le role : kv mod.roleHabs, sinon le premier role dont le nom contient « habs ».
+// Le role : kv mod.roleHabs, sinon le role Prison de la prod (ROLE_PRISON),
+// sinon le premier role dont le nom contient « prison » ou « habs » (beta).
 
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../db.js';
@@ -10,6 +11,8 @@ import { journal } from '../ops/journal.js';
 import { peutSanctionner } from './actions.js';
 
 export const PERM_HABS = 'mute';
+// Role Prison du serveur DonutSMP FR (Ryan, 04/11). Un ID de role n est pas un secret.
+export const ROLE_PRISON = '1491851506390011924';
 
 export const reglagesHabs = {
   roleId: () => store.kvGet('mod.roleHabs') || null,
@@ -19,14 +22,14 @@ export const reglagesHabs = {
 export function roleHabs(guild) {
   const id = reglagesHabs.roleId();
   if (id) return guild.roles.cache.get(id) ?? null;
-  return guild.roles.cache.find((r) => /habs/i.test(r.name)) ?? null;
+  return guild.roles.cache.get(ROLE_PRISON) ?? guild.roles.cache.find((r) => /prison|habs/i.test(r.name)) ?? null;
 }
 
 /** Donne ou retire le role. Rend { ok, texte }. */
 export async function appliquerHabs({ guild, moderateur, id, retirer = false }) {
   if (!peutSanctionner(moderateur, PERM_HABS)) return { ok: false, texte: '🔒 Réservé aux modérateurs.' };
   const role = roleHabs(guild);
-  if (!role) return { ok: false, texte: '❌ Aucun rôle « habs » sur le serveur.' };
+  if (!role) return { ok: false, texte: '❌ Aucun rôle Prison sur le serveur.' };
   const cible = await guild.members.fetch(id).catch(() => null);
   if (!cible) return { ok: false, texte: `❌ <@${id}> n'est pas sur le serveur.` };
   if (cible.user.bot) return { ok: false, texte: '❌ Pas sur un bot.' };
@@ -50,10 +53,10 @@ export async function appliquerHabs({ guild, moderateur, id, retirer = false }) 
 
 export const data = new SlashCommandBuilder()
   .setName('habs')
-  .setDescription('Donner (ou retirer) le rôle habs à un membre')
+  .setDescription('Mettre un membre en prison (ou l\'en sortir)')
   .setDMPermission(false)
   .addUserOption((o) => o.setName('joueur').setDescription('Le membre').setRequired(true))
-  .addBooleanOption((o) => o.setName('retirer').setDescription('Retirer le rôle au lieu de le donner').setRequired(false));
+  .addBooleanOption((o) => o.setName('retirer').setDescription('Sortir le membre de prison').setRequired(false));
 
 export async function execute(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });

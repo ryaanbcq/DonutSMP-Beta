@@ -8,7 +8,7 @@
 //   +unmute @membre [raison]
 //   +unban <id ou @mention> [raison]
 //   +warns @membre
-//   +habs @membre / +unhabs @membre     (role habs, voir habs.js)
+//   +habs @membre / +unhabs @membre     (role Prison, voir habs.js)
 //
 // Le prefixe se regle dans /setup general > Modération (« + » par defaut).
 // Memes droits, memes garde-fous et meme journal que les slash commands. Le
