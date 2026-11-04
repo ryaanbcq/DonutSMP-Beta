@@ -8,7 +8,7 @@
 // jours) : la revue quotidienne en tire des propositions de FAQ.
 
 import { escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
-import { embed, FR, logo } from '../lib/brand.js';
+import { embed, FR, logo, skin } from '../lib/brand.js';
 import { store } from '../db.js';
 import { config } from '../config.js';
 import { journal } from '../ops/journal.js';
@@ -206,7 +206,7 @@ async function ajouterConfirmation(guild, carte, components, lie) {
   const m = guild.members.cache.get(lie.discord_id) ?? await guild.members.fetch(lie.discord_id).catch(() => null);
   const ign = lie.mc_name.replace(/^\./, '');
   carte.addFields({ name: CHAMP, value: `<@${lie.discord_id}> · \`${escapeMarkdown(lie.mc_name)}\`${m ? ` · ${escapeMarkdown(m.displayName)}` : ''}` });
-  carte.setThumbnail(`https://mc-heads.net/body/${encodeURIComponent(ign)}/100`);
+  carte.setThumbnail(skin(ign));
   if (m) carte.setAuthor({ name: '💬・SUPPORT DONUTSMP FR', iconURL: m.displayAvatarURL({ size: 64, extension: 'png' }) });
   components.unshift(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`support:vise:oui:${lie.discord_id}`).setLabel(`Oui, c'est ${ign}`.slice(0, 80)).setEmoji('✅').setStyle(ButtonStyle.Success),
