@@ -119,7 +119,7 @@ async function intervenir(channelId) {
         aConfirmer = lie;
         scamOffert = `propose:${lie.discord_id}`;
       } else if (!lie) {
-        carte.addFields({ name: '⚠️ Réputation', value: `Aucun compte lié ne correspond à **${escapeMarkdown(vise)}** : s'il a un profil de réputation, donnez son pseudo Minecraft exact.` });
+        carte.addFields({ name: '⚠️ Réputation', value: `Aucun compte lié ne correspond à **${escapeMarkdown(vise)}**. S'il a un profil de réputation, donnez son pseudo Minecraft exact ; sinon, le signaler ne sera possible qu'une fois son compte lié.` });
         scamOffert = cleNonLie;
       }
     }
