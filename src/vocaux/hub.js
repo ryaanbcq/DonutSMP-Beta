@@ -390,6 +390,13 @@ export async function demarrerVocaux(client) {
   const n = await balayerVocaux(client).catch((e) => { console.warn('[vocaux] balayage :', e.message); return 0; });
   console.log(`[vocaux] hub actif, ${n} vocal(aux) orphelin(s) nettoye(s)`);
   const guild = client.guilds.cache.get(config.discord.guildId);
+  // Entres dans le hub pendant que le bot etait arrete : on les sert.
+  const hub = guild?.channels.cache.get(reglagesVocaux.hub());
+  for (const membre of hub?.members?.values() ?? []) {
+    if (membre.user.bot || enCreation.has(membre.id)) continue;
+    enCreation.add(membre.id);
+    await creerVocal(guild, membre).catch((e) => console.error('[vocaux] creation :', e.message)).finally(() => enCreation.delete(membre.id));
+  }
   const pbs = problemesDroits(guild);
   if (pbs.length) {
     journal({

@@ -108,6 +108,9 @@ client.once('clientReady', async (c) => {
   demarrerSupport(c);
   demarrerFin(c);
   demarrerCompteurs(c);
+  // Tout de suite : place apres les fils de vouches (plusieurs minutes), le
+  // hub restait sourd apres chaque redemarrage (vecu 04/11).
+  demarrerVocaux(c).catch((e) => console.error('[vocaux] demarrage :', e.message));
   demarrerRevue(c);
   // Statut et statut personnalise choisis par /statut, retenus en base.
   try { const p = appliquerPresence(c); console.log(`[statut] ${p.statut} « ${p.texte} »`); } catch (e) { console.warn('[statut] :', e.message); }
@@ -162,7 +165,6 @@ client.once('clientReady', async (c) => {
   if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
   setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();
   demarrerSurveillanceTags(c);
-  await demarrerVocaux(c).catch((e) => console.error('[vocaux] demarrage :', e.message));
 });
 
 // Coupures de la passerelle Discord : discord.js reprend seul, on annonce la
