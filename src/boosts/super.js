@@ -41,6 +41,14 @@ export const GIFS = [
   'https://media.tenor.com/ZhkSXEZ24UUAAAAC/sad-thump-up-cat-sad-cat.gif',
   'https://media.tenor.com/2gBB2vAD2ZAAAAAC/cat-cat-memes.gif',
   'https://media.tenor.com/6KK7L1KeV_IAAAAC/mochi-mochimons.gif',
+  // choisis par Ryan (les deux plus lourds en version reduite : 10 et 32 Mo sinon)
+  'https://media.tenor.com/NkREwRhR13cAAAAC/handshake-cat-meme.gif',
+  'https://media.tenor.com/bPHU4vgIlCsAAAAC/gog-the-alien-dog-gog-the-alien.gif',
+  'https://media.tenor.com/C-ZraRpWG2sAAAAC/cat-flowers.gif',
+  'https://media.tenor.com/WQhefsbg9A0AAAAC/shrek.gif',
+  'https://media.tenor.com/jc6Cl1EwyvcAAAAM/xd-memes.gif',
+  'https://media.tenor.com/P9Wo-yf7JykAAAAC/funny-dog.gif',
+  'https://media.tenor.com/Xrw4TXgbPoMAAAAM/dog-shake-hands-gentle-dog-v2.gif',
 ];
 
 const PAGES_MAX = 30; // 3 000 messages du salon systeme au demarrage
