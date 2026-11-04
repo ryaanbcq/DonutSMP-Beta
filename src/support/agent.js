@@ -71,7 +71,9 @@ async function intervenir(channelId) {
     const rep = await repondreTicket({
       connaissances: connaissancesServeur(), faq: faqTexte(), categorie: ticket.categorie,
       sujet: ticket.sujet, transcript: transcriptPourIA(messages), faqAutorisee,
-      fiche: await ficheMembre(ticket.discord_id).catch((e) => `(fiche indisponible : ${e.message})`),
+      // La fiche (liaison, paiements, bot en jeu) n a de sens que dans les
+      // categories de support technique : un signalement n en a pas besoin.
+      fiche: faqAutorisee ? await ficheMembre(ticket.discord_id).catch((e) => `(fiche indisponible : ${e.message})`) : '',
     });
     const texte = String(rep.message ?? '').replace(/—/g, ',').trim().slice(0, 1800);
     if (!texte) return;
