@@ -237,6 +237,7 @@ function vocaux() {
       + '💎 = boosters seulement. Si le propriétaire part, le vocal passe à quelqu\'un qui est dedans. Les rôles protégés ne peuvent être ni expulsés ni refusés.\n'
       + 'Le staff peut tout faire sur n\'importe quel vocal. Le vocal est supprimé quand il se vide.'
       + `${reglagesVocaux.salonLogs() ? ` Ouvertures et fermetures (durée, participants) dans ${salon(reglagesVocaux.salonLogs())}.` : ''}\n`
+      + '💎 **Super Booster** : un membre qui booste 2 fois reçoit le rôle tout seul (le bot compte les messages de boost du salon système), et le perd s\'il ne booste plus, sauf si le rôle a été donné à la main.\n'
       + '-# Hub, catégorie, logs, rôles protégés, nom et limite par défaut : /setup general > Vocaux.',
   });
 }

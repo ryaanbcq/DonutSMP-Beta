@@ -52,6 +52,7 @@ import { demarrerSuggestions } from './suggestions/salon.js';
 import { demarrerSupport, onBoutonVise, onBoutonResolu } from './support/agent.js';
 import { demarrerFin } from './tickets/fin.js';
 import { demarrerCompteurs } from './compteurs/compteurs.js';
+import { demarrerBoosts } from './boosts/super.js';
 import { demarrerRevue, onBoutonSupport, onModalSupport } from './support/revue.js';
 import { onBoutonImport } from './support/anciens.js';
 import { intentMembresCoche } from './tags/intent.js';
@@ -108,6 +109,7 @@ client.once('clientReady', async (c) => {
   demarrerSupport(c);
   demarrerFin(c);
   demarrerCompteurs(c);
+  demarrerBoosts(c);
   // Tout de suite : place apres les fils de vouches (plusieurs minutes), le
   // hub restait sourd apres chaque redemarrage (vecu 04/11).
   demarrerVocaux(c).catch((e) => console.error('[vocaux] demarrage :', e.message));
