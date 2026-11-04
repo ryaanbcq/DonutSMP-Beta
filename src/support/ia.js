@@ -82,8 +82,9 @@ export const SCHEMA_REPONSE = {
     transmettre: { type: 'boolean', description: 'true si le staff doit prendre la suite' },
     resume: { type: 'string', description: 'Une ligne pour le staff' },
     vise: { type: 'string', description: 'Pseudo Minecraft du joueur signalé tel que donné par le membre (le plus probable s il en donne plusieurs), sinon chaîne vide' },
+    anciens_vouches: { type: 'boolean', description: 'true si le membre demande à récupérer ses vouches de l ancien système' },
   },
-  required: ['message', 'transmettre', 'resume', 'vise'],
+  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches'],
   additionalProperties: false,
 };
 

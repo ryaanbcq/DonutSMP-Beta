@@ -19,6 +19,7 @@ import { memoire, reglagesSupport, faqTexte } from './reglages.js';
 import { connaissancesServeur } from './connaissances.js';
 import { repondreTicket, iaDisponible } from './ia.js';
 import { ficheMembre } from './fiche.js';
+import { chercherFils } from './anciens.js';
 
 const minuteurs = new Map(); // channelId -> timeout
 
@@ -125,9 +126,30 @@ async function intervenir(channelId) {
         scamOffert = cleNonLie;
       }
     }
+    // Anciens vouches : le bot retrouve le post du membre dans l ancien forum
+    // (les membres n y ont plus acces) et propose l import au staff.
+    let anciensOffert = false;
+    if (rep.anciens_vouches && !etat.anciensOffert) {
+      const { forum, fils, parAuteur } = await chercherFils(salon.guild, ticket.discord_id).catch(() => ({ forum: null, fils: [] }));
+      anciensOffert = true;
+      if (fils.length) {
+        carte.addFields({
+          name: '📥 Anciens vouches',
+          value: `${parAuteur ? 'Post' : 'Post probable'} retrouvé dans ${forum} : ${fils.map((f) => `[${escapeMarkdown(f.name)}](${f.url})`).join(', ')}.\n`
+            + 'Staff : le bouton ouvre la fiche d\'import (vous excluez ce qui ne va pas, puis vous importez).',
+        });
+        components.push(new ActionRowBuilder().addComponents(fils.map((f) => new ButtonBuilder()
+          .setCustomId(`support:import:${f.id}:${ticket.discord_id}`).setLabel(`Importer · ${f.name}`.slice(0, 80))
+          .setEmoji('📥').setStyle(ButtonStyle.Secondary))));
+      } else {
+        carte.addFields({ name: '📥 Anciens vouches', value: forum
+          ? `Aucun post à son nom retrouvé dans ${forum} : le staff vérifiera à la main.`
+          : 'Ancien forum introuvable : le staff vérifiera à la main.' });
+      }
+    }
     const m = await salon.send({ embeds: [carte], components, allowedMentions: { parse: [] } });
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
-    memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume, scamOffert });
+    memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume, scamOffert, anciensOffert });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
     if (rep.transmettre && !etat.transmis) {
       journal({

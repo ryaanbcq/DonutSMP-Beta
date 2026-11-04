@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   maj        INTEGER NOT NULL DEFAULT 0
 );
 `);
-try { db.exec('ALTER TABLE support_tickets ADD COLUMN scam_offert TEXT'); } catch { /* deja la */ }
+for (const col of ['scam_offert TEXT', 'anciens_offert INTEGER NOT NULL DEFAULT 0']) {
+  try { db.exec(`ALTER TABLE support_tickets ADD COLUMN ${col}`); } catch { /* deja la */ }
+}
 
 const q = {
   ajouter: db.prepare('INSERT OR IGNORE INTO support_messages (id, channel_id, role, content, pieces, at) VALUES (?, ?, ?, ?, ?, ?)'),
@@ -42,6 +44,7 @@ const q = {
     ON CONFLICT(channel_id) DO UPDATE SET ia_count = excluded.ia_count, transmis = excluded.transmis, resume = excluded.resume, maj = excluded.maj`),
   depuisEtats: db.prepare('SELECT * FROM support_tickets WHERE maj >= ?'),
   scam: db.prepare('UPDATE support_tickets SET scam_offert = ? WHERE channel_id = ?'),
+  anciens: db.prepare('UPDATE support_tickets SET anciens_offert = 1 WHERE channel_id = ?'),
 };
 
 const json = (cle, defaut) => { try { return JSON.parse(store.kvGet(cle) ?? '') ?? defaut; } catch { return defaut; } };
@@ -53,11 +56,12 @@ export const memoire = {
   purger: (avant) => q.purger.run(avant).changes,
   etat: (channelId) => {
     const e = q.etat.get(String(channelId));
-    return e ? { iaCount: e.ia_count, transmis: Boolean(e.transmis), resume: e.resume, scamOffert: e.scam_offert ?? null } : { iaCount: 0, transmis: false, resume: null, scamOffert: null };
+    return e ? { iaCount: e.ia_count, transmis: Boolean(e.transmis), resume: e.resume, scamOffert: e.scam_offert ?? null, anciensOffert: Boolean(e.anciens_offert) } : { iaCount: 0, transmis: false, resume: null, scamOffert: null };
   },
   poserEtat: (channelId, e) => {
     q.poserEtat.run(String(channelId), e.iaCount ?? 0, e.transmis ? 1 : 0, e.resume ?? null, Date.now());
     if (e.scamOffert !== undefined) q.scam.run(e.scamOffert, String(channelId));
+    if (e.anciensOffert) q.anciens.run(String(channelId));
   },
   etatsDepuis: (at) => q.depuisEtats.all(at),
 };
