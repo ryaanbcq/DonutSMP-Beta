@@ -80,17 +80,17 @@ function moderation(guild) {
       + `\`${p}warns @membre\` · son historique\n`
       + `${qui('warn')}\n`
       + '### 🔇 Mute\n'
-      + `\`${p}mute @membre [temps] [raison]\` · 1 h par défaut, 28 j max\n`
+      + `\`${p}mute @membre [durée] [raison]\` · sans durée : mute d'1 h (28 jours au plus)\n`
       + `\`${p}unmute @membre\`\n`
       + `${qui('mute')}\n`
       + '### 👢 Expulser\n'
       + `\`${p}kick @membre [raison]\`\n`
       + `${qui('kick')}\n`
       + '### ⛔ Bannir\n'
-      + `\`${p}ban @membre [temps] [raison]\` · définitif sans temps\n`
+      + `\`${p}ban @membre [durée] [raison]\` · sans durée : ban définitif\n`
       + `\`${p}unban <ID>\`\n`
       + `${qui('ban')}\n\n`
-      + `⏱️ **Temps** : \`10m\` \`2h\` \`3j\` \`1sem\` · ex. \`${p}ban 123456789012345678 3j pub en MP\`\n`
+      + `⏱️ **Durée** : \`10m\` \`2h\` \`3j\` \`1sem\` · ex. \`${p}ban 123456789012345678 3j pub en MP\`\n`
       + (peutTout ? `👑 **Peut tout faire** : ${peutTout}\n` : '')
       + '-# Préfixe et rôles : /setup general > Modération.',
   });
