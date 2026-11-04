@@ -48,6 +48,7 @@ import { demarrerAntipub, onBoutonAntipub } from './moderation/antipub.js';
 import { demarrerPrefixe } from './moderation/prefixe.js';
 import { demarrerVocaux, onVoicehub } from './vocaux/hub.js';
 import { demarrerGuide } from './guide/staff.js';
+import { demarrerSuggestions } from './suggestions/salon.js';
 import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -98,6 +99,7 @@ client.once('clientReady', async (c) => {
   demarrerPrefixe(c);
   // Avant les fils de vouches, qui prennent plusieurs minutes au demarrage.
   demarrerGuide(c);
+  demarrerSuggestions(c);
   // Statut et statut personnalise choisis par /statut, retenus en base.
   try { const p = appliquerPresence(c); console.log(`[statut] ${p.statut} « ${p.texte} »`); } catch (e) { console.warn('[statut] :', e.message); }
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);

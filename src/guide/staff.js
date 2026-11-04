@@ -20,6 +20,7 @@ import { reglagesTags } from '../tags/surveillance.js';
 import { libelle, resumeSanction } from '../tags/regles.js';
 import { reglagesTickets } from '../tickets/reglages.js';
 import { reglagesVocaux } from '../vocaux/hub.js';
+import { reglagesSuggestions } from '../suggestions/salon.js';
 
 export const reglagesGuide = {
   salon: () => store.kvGet('guide.salon') || null,
@@ -225,6 +226,7 @@ function configuration() {
       + '`/statut` · statut du bot · `/sauvegarde` · télécharger toutes les données du bot\n\n'
       + `**Journal du bot** : ${salon(settings.salonJournal())} (pannes, erreurs, sanctions automatiques)\n`
       + `**Logs des liaisons** : ${salon(settings.salonLogs())}\n`
+      + `**Idées et bugs du bot** : ${salon(reglagesSuggestions.salon())} (un ✅ = un vote)\n`
       + '-# Un souci avec le bot : prévenir Ryan.',
   });
 }

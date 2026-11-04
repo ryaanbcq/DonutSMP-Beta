@@ -366,7 +366,7 @@ export async function onGsetupSelect(interaction) {
   if (id.startsWith('mod:')) return onModerationSelect(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubSelect(interaction, id);
   if (id.startsWith('vocaux:')) return onVocauxSelect(interaction, id);
-  if (id === 'guide:salon') return onGuideSelect(interaction);
+  if (id === 'guide:salon' || id === 'guide:suggestions') return onGuideSelect(interaction);
 
   if (id === 'admin') {
     const avant = settings.rolesAdmin();
