@@ -18,7 +18,8 @@
 import { store } from '../db.js';
 import { config } from '../config.js';
 import { journal } from '../ops/journal.js';
-import { TYPES_BOOST, boostsDuMessage, compterBoosts, decisionRole } from './logique.js';
+import { embed, FR } from '../lib/brand.js';
+import { TYPES_BOOST, boostsDuMessage, compterBoosts, decisionRole, texteMerci } from './logique.js';
 
 const PAGES_MAX = 30; // 3 000 messages du salon systeme au demarrage
 
@@ -39,7 +40,7 @@ function roleSuper(guild) {
 
 async function appliquer(membre, c) {
   const role = roleSuper(membre.guild);
-  if (!role) return;
+  if (!role) return null;
   const e = c[membre.id] ?? { n: 0, bot: false };
   const d = decisionRole({ boosts: e.n, booste: Boolean(membre.premiumSinceTimestamp), aLeRole: membre.roles.cache.has(role.id), donneParBot: e.bot });
   if (d === 'donner') {
@@ -47,10 +48,23 @@ async function appliquer(membre, c) {
     c[membre.id] = { ...e, bot: true };
     console.log(`[boosts] ${membre.user.tag} : ${e.n} boosts, role ${role.name} donne`);
     journal({ niveau: 'ok', titre: '💎 Super Booster', texte: `**${membre.displayName}** a boosté le serveur ${e.n} fois : rôle **${role.name}** donné.` });
+    return 'donne';
   } else if (d === 'retirer') {
     await membre.roles.remove(role, 'Ne booste plus le serveur');
     console.log(`[boosts] ${membre.user.tag} ne booste plus, role ${role.name} retire`);
   }
+  return null;
+}
+
+/** Remerciement en reponse au message systeme de boost, dans le meme salon. */
+async function remercier(m, membre, boosts, devientSuper) {
+  const nomSuper = roleSuper(m.guild)?.name?.replace(/^[^\p{L}\p{N}]+/u, '') || null;
+  const carte = embed('🚀・MERCI POUR TON BOOST', {
+    couleur: 0xf47fff, // rose Nitro
+    image: membre.displayAvatarURL({ size: 256 }),
+    description: texteMerci({ boosts, total: m.guild.premiumSubscriptionCount, devientSuper, nomSuper }),
+  });
+  await m.reply({ content: `${membre}`, embeds: [carte], allowedMentions: { users: [membre.id], repliedUser: false } });
 }
 
 async function surMessage(m) {
@@ -59,8 +73,9 @@ async function surMessage(m) {
   const e = c[m.author.id] ?? { n: 0, bot: false };
   c[m.author.id] = { ...e, n: e.n + boostsDuMessage(m.content) };
   const membre = m.member ?? await m.guild.members.fetch(m.author.id).catch(() => null);
-  if (membre) await appliquer(membre, c).catch((err) => console.warn('[boosts] role :', err.message));
+  const r = membre ? await appliquer(membre, c).catch((err) => { console.warn('[boosts] role :', err.message); return null; }) : null;
   ecrire(c);
+  if (membre) await remercier(m, membre, c[m.author.id].n, r === 'donne').catch((err) => console.warn('[boosts] merci :', err.message));
 }
 
 async function surMembre(ancien, membre) {
