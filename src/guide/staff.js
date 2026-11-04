@@ -35,7 +35,7 @@ const salon = (id, vide = '*pas réglé*') => (id ? `<#${id}>` : vide);
 function membres(guild, ids) {
   return ids.map((id) => {
     const m = guild?.members.cache.get(id);
-    return m ? `**${escapeMarkdown(m.displayName)}**` : `\`${id}\``;
+    return m ? `**${escapeMarkdown(m.displayName)}**` : '*membre parti*';
   }).join(', ');
 }
 
@@ -250,6 +250,11 @@ export async function publierGuide(client, { force = false } = {}) {
   const s = await client.channels.fetch(id).catch(() => null);
   if (!guild || !s?.isTextBased?.()) return { note: 'salon introuvable' };
 
+  // Au demarrage la liste des membres n est pas encore chargee : on va
+  // chercher ceux que le guide nomme (une requete par membre, pas la passerelle).
+  for (const mid of registre.autorises().membres) {
+    if (!guild.members.cache.has(mid)) await guild.members.fetch(mid).catch(() => null);
+  }
   const embeds = rendreGuide(guild);
   const empreintes = embeds.map(empreinte);
   if (!force && empreintes.join() === dernieres.join()) return { note: 'à jour' };
