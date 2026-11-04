@@ -31,14 +31,14 @@ test('support : un membre qui relance ne repousse pas la premiere reponse', () =
   assert.equal(decider({ ticket: t, messages, reglages: r, actif: true, now: JOUR }).action, 'repondre');
 });
 
-test('support : en conversation, reponse 10 s apres le dernier message du membre', () => {
+test('support : en conversation, reponse 4 s apres le dernier message du membre', () => {
   const t = ouvert(JOUR - 60 * MIN);
   const etat = { iaCount: 1 };
-  const vient = [{ role: 'ia', at: JOUR - 40 * MIN }, { role: 'membre', at: JOUR - 3000 }];
+  const vient = [{ role: 'ia', at: JOUR - 40 * MIN }, { role: 'membre', at: JOUR - 1000 }];
   const d = decider({ ticket: t, messages: vient, etat, reglages: r, actif: true, now: JOUR });
   assert.equal(d.action, 'attendre');
-  assert.equal(d.dans, 7000);
-  const passe = [{ role: 'ia', at: JOUR - 40 * MIN }, { role: 'membre', at: JOUR - 11_000 }];
+  assert.equal(d.dans, 3000);
+  const passe = [{ role: 'ia', at: JOUR - 40 * MIN }, { role: 'membre', at: JOUR - 5_000 }];
   assert.equal(decider({ ticket: t, messages: passe, etat, reglages: r, actif: true, now: JOUR }).action, 'repondre');
   // Apres sa propre reponse, l IA attend le membre ; avoir transmis ne la coupe pas.
   assert.equal(decider({ ticket: t, messages: [{ role: 'ia', at: JOUR - 40 * MIN }], etat, reglages: r, actif: true, now: JOUR }).action, 'rien');

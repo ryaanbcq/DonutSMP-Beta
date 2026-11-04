@@ -81,6 +81,7 @@ function planifier(channelId) {
 async function intervenir(channelId) {
   if (enCours.has(channelId)) return;
   enCours.add(channelId);
+  let ecrit = null;
   try {
     const ticket = store.getTicket(channelId);
     const salon = await client.channels.fetch(channelId).catch(() => null);
@@ -94,7 +95,9 @@ async function intervenir(channelId) {
     if (!budget.ok) { console.warn('[support] budget du jour atteint'); return; }
     reglagesSupport.poserCompteur(budget.suivant);
 
+    // « écrit… » tient 10 s chez Discord : on le relance pendant toute la redaction.
     await salon.sendTyping().catch(() => {});
+    ecrit = setInterval(() => salon.sendTyping().catch(() => {}), 8000);
     const faqAutorisee = reglagesSupport.categoriesFond().includes(cleDe(ticket.categorie ?? ''));
     const rep = await repondreTicket({
       connaissances: connaissancesServeur(), faq: faqTexte(), categorie: ticket.categorie,
@@ -178,6 +181,7 @@ async function intervenir(channelId) {
     echecs.set(channelId, n);
     if (n <= 2) setTimeout(() => planifier(channelId), n === 1 ? 30_000 : 120_000).unref?.();
   } finally {
+    clearInterval(ecrit);
     enCours.delete(channelId);
   }
 }

@@ -7,7 +7,7 @@ export const DEFAUTS = {
   delaiNuitMin: 3, // la nuit, elle n attend que 3 min
   nuitDebut: 0, // heures de Paris, nuit = [debut, fin[
   nuitFin: 9,
-  suiteS: 10, // une fois la conversation lancee : reponse 10 s apres le dernier message
+  suiteS: 4, // une fois la conversation lancee : reponse 4 s apres le dernier message (le temps d en envoyer un second)
   maxIaParTicket: 10,
   maxParJour: 300,
 };
@@ -54,7 +54,7 @@ export function decider({ ticket, messages, etat = {}, reglages, actif, depuis =
   const enConversation = (etat.iaCount ?? 0) > 0;
   if (enConversation && dernier?.role !== 'membre') return { action: 'rien', raison: 'attend le membre' };
   const attente = enConversation
-    ? (reglages.suiteS ?? 10) * 1000 - (now - dernier.at)
+    ? (reglages.suiteS ?? 4) * 1000 - (now - dernier.at)
     : delaiMs(now, reglages) - (now - ticket.created_at);
   return attente > 0 ? { action: 'attendre', dans: attente, raison: 'délai' } : { action: 'repondre', raison: 'staff absent' };
 }
