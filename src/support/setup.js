@@ -29,7 +29,7 @@ export function pageSupport(note = '') {
     : actif ? '🟢 **Actif**' : '🔴 **Éteint**';
   const description = 'Quand le staff ne répond pas, l\'assistant (Claude Haiku) prend le **début** du ticket : il accueille, fait préciser'
     + ' ce qui manque, et répond seul aux questions simples de support technique (connaissances du bot + FAQ validée ici).'
-    + ' Il se tait dès que le staff écrit ou prend le ticket. Pour l\'argent, les scams et les sanctions, il transmet toujours.\n\n'
+    + ' Il se tait dès que le staff écrit ou prend le ticket, sauf si une demande du membre reste 30 min sans réponse. Pour l\'argent, les scams et les sanctions, il transmet toujours.\n\n'
     + `${etat} · modèle \`${MODELE}\`\n`
     + `⏱️ **Délai** · ${r.delaiJourMin} min le jour, **${r.delaiNuitMin} min la nuit** (${r.nuitDebut} h à ${r.nuitFin} h)\n`
     + `🎯 **Répond sur le fond dans** · ${cats.filter((c) => fond.includes(c.cle)).map((c) => `${c.emoji} ${c.nom}`).join(', ') || '*aucune catégorie : accueil seulement*'}\n`

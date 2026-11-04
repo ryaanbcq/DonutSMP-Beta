@@ -8,6 +8,7 @@ export const DEFAUTS = {
   nuitDebut: 0, // heures de Paris, nuit = [debut, fin[
   nuitFin: 9,
   suiteS: 4, // une fois la conversation lancee : reponse 4 s apres le dernier message (le temps d en envoyer un second)
+  repriseMin: 30, // staff deja passe : l IA ne revient que si la derniere demande du membre attend depuis 30 min
   maxIaParTicket: 10,
   maxParJour: 300,
 };
@@ -34,8 +35,8 @@ export function delaiMs(now, r) {
  *   etat     { iaCount, transmis }
  * Rend { action: 'rien' | 'attendre' | 'repondre', dans?, raison }.
  *
- * L IA ne prend que le DEBUT : des que le staff a ecrit ou pris le ticket,
- * elle se tait pour de bon. Premiere reponse : quand le staff n a rien dit
+ * L IA prend le DEBUT : des que le staff a ecrit ou pris le ticket, elle se
+ * tait, sauf demande du membre restee 30 min sans reponse (reprise). Premiere reponse : quand le staff n a rien dit
  * pendant le delai depuis l OUVERTURE (des messages du membre ne repoussent
  * pas l echeance : vecu, un membre qui relancait toutes les minutes n etait
  * jamais servi). Ensuite elle converse : reponse quelques secondes apres le
@@ -46,9 +47,17 @@ export function decider({ ticket, messages, etat = {}, reglages, actif, depuis =
   if (!actif) return { action: 'rien', raison: 'éteint' };
   if (!ticket || ticket.etat !== 'ouvert') return { action: 'rien', raison: 'ticket fermé' };
   if (ticket.created_at < depuis) return { action: 'rien', raison: 'ouvert avant l\'assistant' };
-  if (ticket.pris_par) return { action: 'rien', raison: 'pris en charge' };
-  if (messages.some((m) => m.role === 'staff')) return { action: 'rien', raison: 'le staff a répondu' };
   if ((etat.iaCount ?? 0) >= reglages.maxIaParTicket) return { action: 'rien', raison: 'limite par ticket' };
+  // Le staff est passe (message ou prise en charge) : l IA se tait, sauf si
+  // la derniere demande du membre reste sans reponse depuis 30 min. Elle juge
+  // alors elle meme si la demande est restee en plan (mode reprise).
+  if (ticket.pris_par || messages.some((m) => m.role === 'staff')) {
+    const dernierMsg = messages.at(-1);
+    const attendDepuis = !dernierMsg ? ticket.created_at : dernierMsg.role === 'membre' ? dernierMsg.at : null;
+    if (attendDepuis == null) return { action: 'rien', raison: ticket.pris_par ? 'pris en charge' : 'le staff a répondu' };
+    const reste = (reglages.repriseMin ?? 30) * MIN - (now - attendDepuis);
+    return reste > 0 ? { action: 'attendre', dans: reste, raison: 'reprise' } : { action: 'repondre', raison: 'reprise', reprise: true };
+  }
   const dernier = messages.at(-1);
   if (dernier?.role === 'ia') return { action: 'rien', raison: 'attend le membre' };
   const enConversation = (etat.iaCount ?? 0) > 0;

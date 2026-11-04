@@ -41,7 +41,7 @@ export function connaissancesServeur() {
     `- Dans ${salon(settings.salonLink(), 'le salon de connexion')}, cliquer sur **Se connecter** puis donner son pseudo Minecraft (Bedrock : avec le point devant).`,
     `- Le bot demande d'envoyer EN JEU une petite somme exacte au compte du bot : \`/pay ${compteBot()} <montant demandé>\`. Ce n'est pas un frais : la somme est rendue automatiquement sous ${delai} minutes. Elle prouve que le compte est à soi.`,
     `- La demande expire au bout d'environ ${ttl} minutes : en refaire une si besoin. Il faut envoyer le montant EXACT, au bon compte.`,
-    '- Une fois lié : rôle Vérifié, accès au classement et à la réputation.',
+    '- La liaison se fait TOUTE SEULE dès que le bot voit le paiement : rien d\'autre à faire ni à cliquer ensuite. Une fois lié : rôle Vérifié, accès au classement et à la réputation.',
     '- Si la liaison ne passe pas : vérifier le pseudo, le montant exact, le compte destinataire, et que la demande n\'a pas expiré. Le bot en jeu peut aussi être momentanément hors ligne : dans ce cas les liaisons attendent, et il faut réessayer plus tard.',
     '- Le bouton de déliaison ou `/unlink` détache le compte.',
     '',

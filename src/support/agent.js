@@ -60,6 +60,7 @@ export function trouverLie(vise, guild, liens = store.allLinks()) {
   return { lie: { discord_id: m.id, mc_name: m.displayName, nonLie: true }, approx: !exacts.length };
 }
 const enCours = new Set();
+const reprisesVues = new Map(); // channelId -> dernier message deja juge en reprise
 const echecs = new Map(); // channelId -> nombre d echecs d affilee
 let client = null;
 
@@ -101,14 +102,21 @@ async function intervenir(channelId) {
     const messages = memoire.messages(channelId);
     const etat = memoire.etat(channelId);
     const r = reglagesSupport.reglages();
-    if (decider({ ticket, messages, etat, reglages: r, actif: supportActif(), depuis: reglagesSupport.depuis() }).action !== 'repondre') return;
+    const decision = decider({ ticket, messages, etat, reglages: r, actif: supportActif(), depuis: reglagesSupport.depuis() });
+    if (decision.action !== 'repondre') return;
+    // Reprise deja jugee inutile pour ce meme dernier message : on ne repaie pas.
+    const cleReprise = `${messages.at(-1)?.at ?? ticket.created_at}`;
+    if (decision.reprise && reprisesVues.get(channelId) === cleReprise) return;
     const budget = budgetDispo(reglagesSupport.compteur(), r.maxParJour);
     if (!budget.ok) { console.warn('[support] budget du jour atteint'); return; }
     reglagesSupport.poserCompteur(budget.suivant);
 
-    // « écrit… » tient 10 s chez Discord : on le relance pendant toute la redaction.
-    await salon.sendTyping().catch(() => {});
-    ecrit = setInterval(() => salon.sendTyping().catch(() => {}), 8000);
+    // « écrit… » tient 10 s chez Discord : on le relance pendant toute la
+    // redaction. Pas en reprise : l IA peut decider de se taire.
+    if (!decision.reprise) {
+      await salon.sendTyping().catch(() => {});
+      ecrit = setInterval(() => salon.sendTyping().catch(() => {}), 8000);
+    }
     const faqAutorisee = reglagesSupport.categoriesFond().includes(cleDe(ticket.categorie ?? ''));
     const rep = await repondreTicket({
       connaissances: connaissancesServeur(), faq: faqTexte(), categorie: ticket.categorie,
@@ -117,7 +125,13 @@ async function intervenir(channelId) {
       // categories de support technique : un signalement n en a pas besoin.
       fiche: faqAutorisee ? await ficheMembre(ticket.discord_id).catch((e) => `(fiche indisponible : ${e.message})`) : '',
       images: await imagesDuTicket(salon, ticket.discord_id).catch(() => []),
+      reprise: Boolean(decision.reprise),
     });
+    if (decision.reprise && rep.repondre === false) {
+      reprisesVues.set(channelId, cleReprise);
+      console.log(`[support] ticket #${ticket.id} : reprise jugee inutile`);
+      return;
+    }
     const texte = String(rep.message ?? '').replace(/—/g, ',').trim().slice(0, 1800);
     if (!texte) return;
     const carte = embed('💬・SUPPORT DONUTSMP FR', { couleur: FR.bleu, description: texte })

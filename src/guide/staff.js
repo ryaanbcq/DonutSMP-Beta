@@ -178,7 +178,7 @@ function supportIA() {
       + `Quand personne du staff n'a répondu depuis **${r.delaiJourMin} min** (**${r.delaiNuitMin} min la nuit**, de ${r.nuitDebut} h à ${r.nuitFin} h),`
       + ' l\'assistant prend le **début** du ticket : il accueille, fait préciser ce qui manque (pseudo, captures, dates) et répond seul'
       + ' aux questions simples de support technique. Ses messages arrivent dans un encadré « 💬 Support DonutSMP FR ».\n\n'
-      + '• **Il se tait pour de bon** dès qu\'un membre du staff écrit ou clique **Prendre en charge**.\n'
+      + '• **Il se tait** dès qu\'un membre du staff écrit ou clique **Prendre en charge**. Il ne revient que si une demande du membre reste **30 min** sans réponse, et seulement s\'il juge qu\'elle est restée en plan (un merci ou un ok ne le réveille pas).\n'
       + '• Argent, scam, sanctions, middleman, partenariat : il ne promet rien, rassemble les faits et **transmet** (alerte dans le journal).\n'
       + '• **Chaque jour à 5 h**, il relit les tickets où le staff a répondu et propose des entrées de FAQ :'
       + ' ✅ Ajouter, ✏️ Modifier ou ❌ Ignorer. Rien n\'entre dans la FAQ sans votre clic.\n'

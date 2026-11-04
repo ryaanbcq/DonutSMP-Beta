@@ -120,8 +120,9 @@ export const SCHEMA_REPONSE = {
     anciens_vouches: { type: 'boolean', description: 'true si le membre demande à récupérer ses vouches de l ancien système' },
     infos: { type: 'array', items: { type: 'string' }, description: 'Les faits déjà rassemblés pour le staff, une ligne courte chacun' },
     resolu: { type: 'boolean', description: 'true si la demande semble entièrement réglée' },
+    repondre: { type: 'boolean', description: 'false pour ne rien poster (mode reprise : la demande est déjà traitée)' },
   },
-  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches', 'infos', 'resolu'],
+  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches', 'infos', 'resolu', 'repondre'],
   additionalProperties: false,
 };
 
@@ -129,12 +130,13 @@ export const SCHEMA_REPONSE = {
  * La reponse de l assistant dans un ticket.
  * faqAutorisee : la categorie permet de repondre sur le fond (support technique).
  */
-export function repondreTicket({ connaissances, faq, categorie, sujet, transcript, faqAutorisee, fiche = '', images = [] }) {
+export function repondreTicket({ connaissances, faq, categorie, sujet, transcript, faqAutorisee, fiche = '', images = [], reprise = false }) {
   const system = `${REGLES}\n\n# Connaissances\n${connaissances}\n\n# FAQ validée par le staff\n${faq || '(vide pour le moment)'}`;
   const contenu = `Catégorie du ticket : ${categorie ?? 'inconnue'}\n`
     + (faqAutorisee
       ? 'Dans cette catégorie, tu peux répondre sur le fond aux questions simples couvertes par les connaissances ou la FAQ.\n'
       : 'Dans cette catégorie, tu ne réponds PAS sur le fond : accueille, fais préciser ce qui manque, et transmets (transmettre = true). EXCEPTION prioritaire : un signalement de scam suit la règle des signalements (scam en jeu ou type inconnu : transmettre = false, jamais « le staff prend la suite »).\n')
+    + (reprise ? "\nMODE REPRISE : le staff a déjà répondu ou pris ce ticket, mais la dernière demande du membre attend depuis plus de 30 minutes. Relis TOUTE la conversation. Si cette demande est déjà traitée, si c'est juste un merci, un ok ou une attente normale (le staff a dit qu'il revenait), mets repondre = false. Sinon, repondre = true : réponds toi même si les connaissances le permettent, ou dis en une phrase que le staff a bien vu sa demande et reviendra, sans promettre de délai. Ne contredis jamais le staff, ne refais pas son travail, sois bref.\n" : 'Hors mode reprise, repondre = true.\n')
     + (fiche ? `\nFiche du membre (faits vérifiés par le bot, à jour) :\n${fiche}\n` : '')
     + `\nDemande écrite à l'ouverture du ticket :\n<<<\n${String(sujet ?? '').slice(0, 2000)}\n>>>\n`
     + `\nConversation (la plus récente en bas) :\n<<<\n${transcript || '(aucun message encore)'}\n>>>\n`
