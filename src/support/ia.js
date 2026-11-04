@@ -102,7 +102,8 @@ Forme :
 - Pas de formule d'accueil longue : va droit à la demande. Un seul intitulé « **Pour avancer, envoyez-moi :** », jamais deux phrases d'introduction pour la même liste.
 - Ne demande QUE ce qui sert à CETTE demande : pas de « pseudo de la personne concernée » quand aucune autre personne n'est en cause (build, partenariat, récupération de vouches…). Ne redemande jamais ce que la demande d'ouverture ou la conversation contient déjà (lien, pseudo, montant, budget, nombre de membres…) : reprends le plutôt (« budget noté : 50 à 100M »).
 - "resume" : une ligne pour le staff (ce que veut le membre, ce qui manque).
-- "infos" : les faits DÉJÀ donnés par le membre, la fiche ou les captures, une ligne courte chacun (« Visé : Zenor (lié) », « Perte : 50M en jeu », « Preuves : 2 captures du /pay »), 8 au plus ; jamais une info que tu demandes encore ; liste vide si rien.`;
+- "infos" : les faits DÉJÀ donnés par le membre, la fiche ou les captures, une ligne courte chacun (« Visé : Zenor (lié) », « Perte : 50M en jeu », « Preuves : 2 captures du /pay »), 8 au plus ; jamais une info que tu demandes encore ; liste vide si rien.
+- "resolu" : true seulement si la demande semble entièrement réglée SANS le staff (ta réponse règle le problème, ou le membre dit que c'est bon, merci, ça marche). Le bot demande alors au membre de confirmer par un bouton : ne pose pas toi même la question « est-ce résolu ? ». false si tu transmets, si tu attends une info, ou au moindre doute. Une ligne « [Le membre a indiqué que son problème N'EST PAS résolu] » veut dire : reprends, demande ce qui bloque encore.`;
 
 export const SCHEMA_REPONSE = {
   type: 'object',
@@ -113,8 +114,9 @@ export const SCHEMA_REPONSE = {
     vise: { type: 'string', description: 'Pseudo Minecraft du joueur signalé tel que donné par le membre (le plus probable s il en donne plusieurs), sinon chaîne vide' },
     anciens_vouches: { type: 'boolean', description: 'true si le membre demande à récupérer ses vouches de l ancien système' },
     infos: { type: 'array', items: { type: 'string' }, description: 'Les faits déjà rassemblés pour le staff, une ligne courte chacun' },
+    resolu: { type: 'boolean', description: 'true si la demande semble entièrement réglée' },
   },
-  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches', 'infos'],
+  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches', 'infos', 'resolu'],
   additionalProperties: false,
 };
 

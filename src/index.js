@@ -49,7 +49,8 @@ import { demarrerPrefixe } from './moderation/prefixe.js';
 import { demarrerVocaux, onVoicehub } from './vocaux/hub.js';
 import { demarrerGuide } from './guide/staff.js';
 import { demarrerSuggestions } from './suggestions/salon.js';
-import { demarrerSupport, onBoutonVise } from './support/agent.js';
+import { demarrerSupport, onBoutonVise, onBoutonResolu } from './support/agent.js';
+import { demarrerFin } from './tickets/fin.js';
 import { demarrerRevue, onBoutonSupport, onModalSupport } from './support/revue.js';
 import { onBoutonImport } from './support/anciens.js';
 import { intentMembresCoche } from './tags/intent.js';
@@ -104,6 +105,7 @@ client.once('clientReady', async (c) => {
   demarrerGuide(c);
   demarrerSuggestions(c);
   demarrerSupport(c);
+  demarrerFin(c);
   demarrerRevue(c);
   // Statut et statut personnalise choisis par /statut, retenus en base.
   try { const p = appliquerPresence(c); console.log(`[statut] ${p.statut} « ${p.texte} »`); } catch (e) { console.warn('[statut] :', e.message); }
@@ -285,6 +287,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('support:faq:')) return onBoutonSupport(interaction);
   if (interaction.customId.startsWith('support:import:')) return onBoutonImport(interaction);
   if (interaction.customId.startsWith('support:vise:')) return onBoutonVise(interaction);
+  if (interaction.customId.startsWith('support:resolu:')) return onBoutonResolu(interaction);
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('antipub:')) return onBoutonAntipub(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);

@@ -22,6 +22,7 @@ import { ficheMembre } from './fiche.js';
 import { chercherFils } from './anciens.js';
 import { imagesDuTicket } from './images.js';
 import { publierRelais, marquerRelais } from './relais.js';
+import { programmerSuppression } from '../tickets/fin.js';
 
 const minuteurs = new Map(); // channelId -> timeout
 
@@ -165,6 +166,7 @@ async function intervenir(channelId) {
         texte: `<#${channelId}> · ${escapeMarkdown(ticket.categorie ?? 'sans catégorie')}\n> ${escapeMarkdown(String(rep.resume ?? '').slice(0, 300))}`,
       });
     }
+    if (rep.resolu && !rep.transmettre && !etat.transmis) await demanderResolution(salon, ticket).catch((e) => console.warn('[support] resolution :', e.message));
     echecs.delete(channelId);
   } catch (e) {
     console.warn('[support] reponse :', e.message);
@@ -263,5 +265,58 @@ export async function onBoutonVise(interaction) {
       : `[Le membre a répondu que le joueur visé n'est PAS ${ign} : il faut son pseudo Minecraft exact.]` });
   await interaction.update({ embeds: [carte], components: rangs });
   // L assistant enchaine (quelques secondes apres, comme pour un message).
+  planifier(interaction.channelId);
+}
+
+// ------------------------------------------------------------ probleme resolu ?
+
+const TITRE_RESOLU = '✅・PROBLÈME RÉSOLU ?';
+const resolutionEnAttente = new Set(); // une seule question a la fois par ticket
+
+async function demanderResolution(salon, ticket) {
+  if (resolutionEnAttente.has(salon.id)) return;
+  resolutionEnAttente.add(salon.id);
+  await salon.send({
+    embeds: [embed(TITRE_RESOLU, {
+      couleur: FR.vert,
+      description: '### Votre problème est-il résolu ?\n-# Un clic suffit : on ferme le ticket, ou on continue.',
+    })],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('support:resolu:oui').setLabel('Oui, c\'est réglé').setEmoji('✅').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('support:resolu:non').setLabel('Non, pas encore').setEmoji('💬').setStyle(ButtonStyle.Secondary),
+    )],
+  });
+  console.log(`[support] ticket #${ticket.id} : resolution demandee`);
+}
+
+/** Boutons support:resolu:oui|non (auteur du ticket ou staff). */
+export async function onBoutonResolu(interaction) {
+  const oui = interaction.customId.endsWith(':oui');
+  resolutionEnAttente.delete(interaction.channelId);
+  const ticket = store.getTicket(interaction.channelId);
+  if (!ticket || ticket.etat === 'supprime') return interaction.reply({ content: '❌ Ce salon n\'est plus un ticket.', flags: 64 });
+  if (interaction.user.id !== ticket.discord_id && !estStaff(interaction.member)) {
+    return interaction.reply({ content: '🔒 Seul l\'auteur du ticket (ou le staff) peut répondre.', flags: 64 });
+  }
+  if (oui) {
+    const fin = Math.floor((Date.now() + 60_000) / 1000);
+    await interaction.update({
+      embeds: [embed('✅・PROBLÈME RÉSOLU', {
+        couleur: FR.vert,
+        description: `### Merci, ravi d'avoir pu aider !\nBon jeu sur DonutSMP.\n\n-# Ce ticket disparaîtra <t:${fin}:R>.`,
+      })],
+      components: [],
+    });
+    clearTimeout(minuteurs.get(interaction.channelId)); minuteurs.delete(interaction.channelId);
+    programmerSuppression(interaction.channelId, 60_000);
+    console.log(`[support] ticket #${ticket.id} resolu, suppression dans 1 min`);
+    return;
+  }
+  await interaction.update({
+    embeds: [embed('💬・ON CONTINUE', { couleur: FR.bleu, description: 'D\'accord, dites-nous ce qui bloque encore.' })],
+    components: [],
+  });
+  memoire.noter({ id: `${interaction.id}`, channelId: interaction.channelId, role: 'membre', at: Date.now(),
+    content: '[Le membre a indiqué que son problème N\'EST PAS résolu.]' });
   planifier(interaction.channelId);
 }

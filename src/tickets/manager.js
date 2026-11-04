@@ -322,6 +322,20 @@ async function supprimer(interaction, ticket, { staff }) {
   await interaction.channel.delete(`Ticket #${ticket.id} supprimé par ${interaction.user.tag}`);
 }
 
+/**
+ * Suppression par le bot lui meme (ticket resolu, ou inactif 48 h). Comme une
+ * suppression staff : pas de transcript automatique (decision de Ryan), le
+ * message de log passe a « Supprime ».
+ */
+export async function supprimerTicketAuto(guild, ticket, raison) {
+  const salon = await guild.channels.fetch(ticket.channel_id).catch(() => null);
+  store.setTicketEtat(ticket.channel_id, 'supprime', guild.members.me?.id ?? null);
+  await majJournal(guild, store.getTicket(ticket.channel_id)).catch(() => {});
+  marquerRelais(guild, ticket.channel_id, 'ferme', raison).catch(() => {});
+  console.log(`[ticket] #${ticket.id} supprime automatiquement (${raison})`);
+  if (salon) await salon.delete(`Ticket #${ticket.id} : ${raison}`).catch((e) => console.warn('[ticket] suppression :', e.message));
+}
+
 // ---------------------------------------------------------------------------
 // Membres ajoutes
 // ---------------------------------------------------------------------------
