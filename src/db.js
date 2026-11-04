@@ -173,6 +173,7 @@ const q = {
   setTicketPris: db.prepare('UPDATE tickets SET pris_par = ? WHERE channel_id = ?'),
   renameTicket: db.prepare('UPDATE tickets SET channel_id = ? WHERE channel_id = ?'),
   countTicketsEtat: db.prepare('SELECT COUNT(*) AS n FROM tickets WHERE etat = ?'),
+  ticketsOuverts: db.prepare("SELECT * FROM tickets WHERE etat = 'ouvert' AND channel_id NOT LIKE 'en-creation-%'"),
 
   kvGet: db.prepare('SELECT v FROM kv WHERE k = ?'),
   kvSet: db.prepare('INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v'),
@@ -233,6 +234,7 @@ export const store = {
     return Number(info.lastInsertRowid);
   },
   getTicket: (channelId) => q.ticketBySalon.get(String(channelId)) ?? null,
+  ticketsOuverts: () => q.ticketsOuverts.all(),
   ticketEnCours: (discordId) => q.ticketOuvertDe.get(String(discordId)) ?? null,
   setTicketEtat: (channelId, etat, par = null) =>
     q.setTicketEtat.run(etat, etat === 'ouvert' ? null : Date.now(), par ? String(par) : null, String(channelId)),

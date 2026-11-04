@@ -9,6 +9,7 @@ import { estAdmin } from '../lib/admin.js';
 import { settings } from '../settings.js';
 import { reglagesTickets, slugCategorie } from './reglages.js';
 import { enteteTicket, boutonsTicket, embedLog, TITRE_TICKET } from './panel.js';
+import { surTicketOuvert } from '../support/agent.js';
 import { rendreTranscript, collecterMessages } from './transcript.js';
 
 // Cycle de vie d un ticket : menu du panneau → formulaire → salon prive.
@@ -174,6 +175,7 @@ export async function onFormulaireOuverture(interaction) {
   await salon.send({ content: mentions, ...entete, allowedMentions: { users: [interaction.user.id], roles } });
 
   console.log(`[ticket] #${id} ouvert par ${interaction.user.tag} (${categorie?.nom ?? 'sans categorie'})`);
+  surTicketOuvert(salon.id);
   await majJournal(guild, ticket);
 
   // Le membre est mentionne dans son ticket, qui apparait chez lui : la

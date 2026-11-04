@@ -21,6 +21,8 @@ import { libelle, resumeSanction } from '../tags/regles.js';
 import { reglagesTickets } from '../tickets/reglages.js';
 import { reglagesVocaux } from '../vocaux/hub.js';
 import { reglagesSuggestions } from '../suggestions/salon.js';
+import { reglagesSupport } from '../support/reglages.js';
+import { iaDisponible } from '../support/ia.js';
 
 export const reglagesGuide = {
   salon: () => store.kvGet('guide.salon') || null,
@@ -53,7 +55,7 @@ function sommaire() {
       + '1. 🔨 Sanctions et commandes rapides\n'
       + '2. 🏷️ Tags de serveur interdits\n'
       + '3. 🚫 Anti-pub\n'
-      + '4. 🎫 Tickets\n'
+      + '4. 🎫 Tickets et support IA\n'
       + '5. ⭐ Vouches, réputation et import\n'
       + '6. 🔗 Liaison, classement et dons\n'
       + '7. 🔊 Vocaux temporaires\n'
@@ -163,6 +165,25 @@ function tickets() {
   });
 }
 
+function supportIA() {
+  const r = reglagesSupport.reglages();
+  const actif = reglagesSupport.actif() && iaDisponible();
+  return embed('🤖・SUPPORT IA DES TICKETS', {
+    couleur: FR.bleu,
+    description:
+      `État : ${actif ? '🟢 **actif**' : '🔴 **éteint**'}\n\n`
+      + `Quand personne du staff n'a répondu depuis **${r.delaiJourMin} min** (**${r.delaiNuitMin} min la nuit**, de ${r.nuitDebut} h à ${r.nuitFin} h),`
+      + ' l\'assistant prend le **début** du ticket : il accueille, fait préciser ce qui manque (pseudo, captures, dates) et répond seul'
+      + ' aux questions simples de support technique. Ses messages commencent par « 🤖 Assistant DonutFR ».\n\n'
+      + '• **Il se tait pour de bon** dès qu\'un membre du staff écrit ou clique **Prendre en charge**.\n'
+      + '• Argent, scam, sanctions, middleman, partenariat : il ne promet rien, rassemble les faits et **transmet** (alerte dans le journal).\n'
+      + '• **Chaque jour à 5 h**, il relit les tickets où le staff a répondu et propose des entrées de FAQ :'
+      + ' ✅ Ajouter, ✏️ Modifier ou ❌ Ignorer. Rien n\'entre dans la FAQ sans votre clic.\n'
+      + `• FAQ actuelle : **${reglagesSupport.faq().length}** entrée(s).\n`
+      + '-# Réglages, FAQ et revue : /setup general > Support IA.',
+  });
+}
+
 function vouches() {
   return embed('⭐・VOUCHES ET RÉPUTATION', {
     couleur: FR.or,
@@ -232,7 +253,7 @@ function configuration() {
 }
 
 export function rendreGuide(guild) {
-  return [sommaire(), moderation(guild), tags(), antipub(), tickets(), vouches(), liaison(), vocaux(), configuration()];
+  return [sommaire(), moderation(guild), tags(), antipub(), tickets(), supportIA(), vouches(), liaison(), vocaux(), configuration()];
 }
 
 // ------------------------------------------------------------------ publication

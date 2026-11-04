@@ -49,6 +49,8 @@ import { demarrerPrefixe } from './moderation/prefixe.js';
 import { demarrerVocaux, onVoicehub } from './vocaux/hub.js';
 import { demarrerGuide } from './guide/staff.js';
 import { demarrerSuggestions } from './suggestions/salon.js';
+import { demarrerSupport } from './support/agent.js';
+import { demarrerRevue, onBoutonSupport, onModalSupport } from './support/revue.js';
 import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -100,6 +102,8 @@ client.once('clientReady', async (c) => {
   // Avant les fils de vouches, qui prennent plusieurs minutes au demarrage.
   demarrerGuide(c);
   demarrerSuggestions(c);
+  demarrerSupport(c);
+  demarrerRevue(c);
   // Statut et statut personnalise choisis par /statut, retenus en base.
   try { const p = appliquerPresence(c); console.log(`[statut] ${p.statut} « ${p.texte} »`); } catch (e) { console.warn('[statut] :', e.message); }
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);
@@ -277,6 +281,7 @@ function refusSetup(interaction) {
 
 async function onBouton(interaction) {
   if (interaction.customId.startsWith('voicehub:')) return onVoicehub(interaction);
+  if (interaction.customId.startsWith('support:faq:')) return onBoutonSupport(interaction);
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('antipub:')) return onBoutonAntipub(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
@@ -352,6 +357,7 @@ async function onDelier(interaction) {
 
 async function onModal(interaction) {
   if (interaction.customId.startsWith('voicehub:')) return onVoicehub(interaction);
+  if (interaction.customId.startsWith('support:faqform:')) return onModalSupport(interaction);
   if (interaction.customId.startsWith('ticket:modal:')) return onFormulaireOuverture(interaction);
   if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
   if (interaction.customId.startsWith('tsetup:')) return onSetupModal(interaction);

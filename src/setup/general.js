@@ -44,6 +44,8 @@ import {
 import { pageVocaux, onVocauxSelect, onVocauxBouton } from '../vocaux/setup.js';
 import { reglagesVocaux } from '../vocaux/hub.js';
 import { pageGuide, onGuideSelect, onGuideBouton } from '../guide/setup.js';
+import { pageSupport, onSupportSelect, onSupportBouton, onSupportModal } from '../support/setup.js';
+import { reglagesSupport } from '../support/reglages.js';
 
 const ok = (v) => (v ? '✅' : '⚠️');
 const salon = (id) => (id ? `<#${id}>` : '*à choisir*');
@@ -110,6 +112,10 @@ export async function rendreSetupGeneral(guild, note = '') {
         new ButtonBuilder().setCustomId('gsetup:page:vocaux').setLabel(`Vocaux${reglagesVocaux.hub() ? '' : ' (éteints)'}`)
           .setEmoji('🔊').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:guide').setLabel('Guide staff').setEmoji('📘').setStyle(ButtonStyle.Secondary),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('gsetup:page:support').setLabel(`Support IA${reglagesSupport.actif() ? '' : ' (éteint)'}`)
+          .setEmoji('🤖').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -367,6 +373,7 @@ export async function onGsetupSelect(interaction) {
   if (id.startsWith('antipub:')) return onAntipubSelect(interaction, id);
   if (id.startsWith('vocaux:')) return onVocauxSelect(interaction, id);
   if (id === 'guide:salon' || id === 'guide:suggestions') return onGuideSelect(interaction);
+  if (id.startsWith('support:')) return onSupportSelect(interaction, id);
 
   if (id === 'admin') {
     const avant = settings.rolesAdmin();
@@ -461,6 +468,8 @@ export async function onGsetupBouton(interaction) {
   if (id.startsWith('vocaux:')) return onVocauxBouton(interaction, id);
   if (id === 'page:guide') return interaction.update(pageGuide());
   if (id === 'guide:republier') return onGuideBouton(interaction);
+  if (id === 'page:support') return interaction.update(pageSupport());
+  if (id.startsWith('support:')) return onSupportBouton(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubBouton(interaction, id);
   if (id.startsWith('mod:')) return onModerationBouton(interaction, id);
   if (id === 'beneficiaire') {
@@ -523,6 +532,7 @@ export async function onGsetupModal(interaction) {
   if (id.startsWith('tags:')) return onTagsModal(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubModal(interaction, id);
   if (id.startsWith('mod:')) return onModerationModal(interaction, id);
+  if (id.startsWith('support:')) return onSupportModal(interaction, id);
   const pseudo = interaction.fields.getTextInputValue('pseudo').trim();
   if (pseudo && !/^\.?[A-Za-z0-9_]{1,24}$/.test(pseudo)) {
     return interaction.update(pageDons(`❌ « ${pseudo} » n'est pas un pseudo Minecraft.`));
