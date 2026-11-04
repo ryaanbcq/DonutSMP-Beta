@@ -4,9 +4,14 @@
 // Qui peut : ceux qui ont le droit de mute (/setup general > Modération).
 // Le role : kv mod.roleHabs, sinon le role Prison de la prod (ROLE_PRISON),
 // sinon le premier role dont le nom contient « prison » ou « habs » (beta).
+//
+// La prison survit a un depart : la liste des prisonniers (kv mod.prison) est
+// tenue a jour a chaque pose ou retrait du role (commande, ou a la main), et
+// le role est remis des que le membre revient sur le serveur.
 
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../db.js';
+import { config } from '../config.js';
 import { journal } from '../ops/journal.js';
 import { peutSanctionner } from './actions.js';
 
@@ -17,6 +22,18 @@ export const ROLE_PRISON = '1491851506390011924';
 export const reglagesHabs = {
   roleId: () => store.kvGet('mod.roleHabs') || null,
   poserRole: (id) => store.kvSet('mod.roleHabs', id ? String(id) : ''),
+};
+
+const lirePrison = () => { try { return new Set(JSON.parse(store.kvGet('mod.prison') ?? '[]')); } catch { return new Set(); } };
+const ecrirePrison = (set) => store.kvSet('mod.prison', JSON.stringify([...set]));
+export const prison = {
+  liste: () => [...lirePrison()],
+  a: (id) => lirePrison().has(String(id)),
+  poser: (id, dedans) => {
+    const set = lirePrison();
+    if (dedans) set.add(String(id)); else set.delete(String(id));
+    ecrirePrison(set);
+  },
 };
 
 export function roleHabs(guild) {
@@ -43,6 +60,7 @@ export async function appliquerHabs({ guild, moderateur, id, retirer = false }) 
   const par = moderateur.user?.tag ?? moderateur.id;
   if (retirer) await cible.roles.remove(role, `Retiré par ${par}`);
   else await cible.roles.add(role, `Donné par ${par}`);
+  prison.poser(cible.id, !retirer);
   console.log(`[habs] ${cible.user.tag} : role ${role.name} ${retirer ? 'retire' : 'donne'} par ${par}`);
   journal({
     niveau: 'info', titre: `Rôle ${role.name}`,
@@ -65,4 +83,44 @@ export async function execute(interaction) {
     id: interaction.options.getUser('joueur', true).id, retirer: interaction.options.getBoolean('retirer') ?? false,
   });
   return interaction.editReply({ content: r.texte, allowedMentions: { parse: [] } });
+}
+
+// ------------------------------------------------------------------ persistance
+
+async function surArrivee(membre) {
+  if (membre.guild.id !== config.discord.guildId || !prison.a(membre.id)) return;
+  const role = roleHabs(membre.guild);
+  if (!role || membre.roles.cache.has(role.id)) return;
+  await membre.roles.add(role, 'Revenu sur le serveur : toujours en prison');
+  console.log(`[habs] ${membre.user.tag} revenu : role ${role.name} remis`);
+  journal({ niveau: 'info', titre: `Rôle ${role.name}`, texte: `${membre} est revenu sur le serveur : remis en **${role.name}**.` });
+}
+
+function surMaj(ancien, membre) {
+  if (membre.guild.id !== config.discord.guildId) return;
+  const role = roleHabs(membre.guild);
+  if (!role || !ancien?.roles?.cache) return;
+  const avant = ancien.roles.cache.has(role.id);
+  const apres = membre.roles.cache.has(role.id);
+  if (avant !== apres) prison.poser(membre.id, apres);
+}
+
+/** Au demarrage : la liste suit le role (poses ou retraits faits bot eteint). Un absent reste dans la liste. */
+async function synchroniser(guild) {
+  const role = roleHabs(guild);
+  if (!role) return console.log('[habs] aucun role Prison : persistance inactive');
+  const membres = await guild.members.fetch().catch(() => guild.members.cache);
+  const set = new Set(prison.liste());
+  for (const m of membres.values()) {
+    if (m.roles.cache.has(role.id)) set.add(m.id); else set.delete(m.id);
+  }
+  ecrirePrison(set);
+  console.log(`[habs] role ${role.name} : ${set.size} prisonnier(s) suivi(s)`);
+}
+
+export function demarrerHabs(client) {
+  client.on('guildMemberAdd', (m) => surArrivee(m).catch((e) => console.warn('[habs] retour :', e.message)));
+  client.on('guildMemberUpdate', (a, b) => { try { surMaj(a, b); } catch (e) { console.warn('[habs] :', e.message); } });
+  const guild = client.guilds.cache.get(config.discord.guildId);
+  if (guild) synchroniser(guild).catch((e) => console.warn('[habs] synchro :', e.message));
 }
