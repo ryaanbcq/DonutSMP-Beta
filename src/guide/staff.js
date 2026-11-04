@@ -85,6 +85,7 @@ function moderation(guild) {
       + '### 🔇 Mute\n'
       + `\`${p}mute @membre [durée] [raison]\` · sans durée : mute d'1 h (28 jours au plus)\n`
       + `\`${p}unmute @membre\`\n`
+      + `\`${p}habs @membre\` / \`${p}unhabs @membre\` · donne ou retire le rôle habs (aussi \`/habs\`)\n`
       + `${qui('mute')}\n`
       + '### 👢 Expulser\n'
       + `\`${p}kick @membre [raison]\`\n`
@@ -158,7 +159,7 @@ function tickets() {
       + '**Les boutons du ticket**\n'
       + '🙋 **Prendre en charge** · ton nom s\'affiche, les autres savent que c\'est géré\n'
       + '➕ **Ajouter un membre** · l\'autre partie d\'un trade, un témoin…\n'
-      + '🔒 **Fermer** / 🔓 **Rouvrir** · le membre n\'écrit plus, le salon reste\n'
+      + '🔒 **Fermer** (ou `/close`) / 🔓 **Rouvrir** · le membre n\'écrit plus, le salon reste\n'
       + '📄 **Sauvegarder les logs** · transcript dans le salon des logs\n'
       + '🗑️ **Supprimer** · pas de transcript automatique : clique **Sauvegarder les logs** avant si la conversation compte\n\n'
       + '**Fin automatique**\n'
@@ -237,7 +238,7 @@ function vocaux() {
       + '💎 = boosters seulement. Si le propriétaire part, le vocal passe à quelqu\'un qui est dedans. Les rôles protégés ne peuvent être ni expulsés ni refusés.\n'
       + 'Le staff peut tout faire sur n\'importe quel vocal. Le vocal est supprimé quand il se vide.'
       + `${reglagesVocaux.salonLogs() ? ` Ouvertures et fermetures (durée, participants) dans ${salon(reglagesVocaux.salonLogs())}.` : ''}\n`
-      + '💎 **Super Booster** : un membre qui booste 2 fois reçoit le rôle tout seul (le bot compte les messages de boost du salon système), et le perd s\'il ne booste plus, sauf si le rôle a été donné à la main.\n'
+      + '💎 **Super Booster** : le rôle n\'existe qu\'avec 2 boosts actifs : le bot le donne tout seul (il compte les messages de boost du salon système) et le retire à quiconque ne les a pas, même s\'il a été donné à la main.\n'
       + '-# Hub, catégorie, logs, rôles protégés, nom et limite par défaut : /setup general > Vocaux.',
   });
 }

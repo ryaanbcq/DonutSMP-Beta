@@ -134,8 +134,11 @@ async function intervenir(channelId) {
     }
     const texte = String(rep.message ?? '').replace(/—/g, ',').trim().slice(0, 1800);
     if (!texte) return;
-    const carte = embed('💬・SUPPORT DONUTSMP FR', { couleur: FR.bleu, description: texte })
-      .setFooter({ text: rep.transmettre ? 'Un membre du staff prend le relais dès que possible' : 'Le staff peut reprendre la main à tout moment' });
+    // Ryan (04/11) : la conversation se lit en texte brut, comme un humain.
+    // L encadre ne sert plus qu aux questions a boutons (bonne personne ?,
+    // anciens vouches) : il n est joint que s il porte quelque chose.
+    let contenu = texte;
+    const carte = embed('💬・SUPPORT DONUTSMP FR', { couleur: FR.bleu });
     // Joueur signale : s il a lie son compte, un bouton ouvre le formulaire de
     // signalement de scam sur son profil (une seule fois par ticket).
     const components = [];
@@ -153,7 +156,7 @@ async function intervenir(channelId) {
         aConfirmer = lie;
         scamOffert = `propose:${lie.discord_id}`;
       } else if (!lie) {
-        carte.addFields({ name: '⚠️ Réputation', value: `Personne sur le Discord ne correspond à **${escapeMarkdown(vise)}**. Donnez son pseudo Minecraft exact ou son nom Discord ; s'il n'est pas sur le Discord, il ne peut pas encore être signalé sur sa réputation.` });
+        contenu += `\n\n-# ⚠️ Personne sur le Discord ne correspond à **${escapeMarkdown(vise)}**. Donnez son pseudo Minecraft exact ou son nom Discord ; s'il n'est pas sur le Discord, il ne peut pas encore être signalé sur sa réputation.`;
         scamOffert = cleNonLie;
       }
     }
@@ -179,7 +182,8 @@ async function intervenir(channelId) {
       }
     }
     if (aConfirmer) await ajouterConfirmation(salon.guild, carte, components, aConfirmer);
-    const m = await salon.send({ embeds: [carte], components, allowedMentions: { parse: [] } });
+    const avecCarte = Boolean(carte.data.fields?.length);
+    const m = await salon.send({ content: contenu.slice(0, 2000), embeds: avecCarte ? [carte] : [], components, allowedMentions: { parse: [] } });
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
     memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume, scamOffert, anciensOffert });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
@@ -348,10 +352,7 @@ export async function onBoutonResolu(interaction) {
     console.log(`[support] ticket #${ticket.id} resolu, suppression dans 1 min`);
     return;
   }
-  await interaction.update({
-    embeds: [embed('💬・ON CONTINUE', { couleur: FR.bleu, description: 'D\'accord, dites-nous ce qui bloque encore.' })],
-    components: [],
-  });
+  await interaction.update({ content: 'D\'accord, dites-nous ce qui bloque encore.', embeds: [], components: [] });
   memoire.noter({ id: `${interaction.id}`, channelId: interaction.channelId, role: 'membre', at: Date.now(),
     content: '[Le membre a indiqué que son problème N\'EST PAS résolu.]' });
   planifier(interaction.channelId);

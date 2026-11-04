@@ -216,7 +216,27 @@ async function majEntete(interaction, ticket, { prisPar }) {
   // interaction.message est ce message et on le met a jour sur place.
   const categorie = reglagesTickets.categories().find((c) => c.nom === ticket.categorie) ?? null;
   const entete = enteteTicket({ ticket, categorie, membreId: ticket.discord_id, prisPar });
-  await interaction.message.edit(entete).catch(() => {});
+  const message = interaction.message ?? await trouverEntete(interaction.channel);
+  await message?.edit(entete).catch(() => {});
+}
+
+/** L en tete du ticket (message du bot qui porte les boutons), pour /close. */
+async function trouverEntete(salon) {
+  // L en tete est un des premiers messages : on lit depuis la creation du salon.
+  const msgs = await salon?.messages?.fetch({ after: salon.id, limit: 20 }).catch(() => null);
+  if (!msgs) return null;
+  const moi = salon.client.user.id;
+  const aBouton = (m) => m.components?.some((r) => r.components?.some((c) => /^ticket:(close|reopen)$/.test(c.customId ?? '')));
+  return [...msgs.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp).find((m) => m.author.id === moi && aBouton(m)) ?? null;
+}
+
+/** /close : meme chose que le bouton Fermer, depuis le salon du ticket. */
+export async function fermerParCommande(interaction) {
+  const ticket = store.getTicket(interaction.channelId);
+  if (!ticket || ticket.etat === 'supprime') {
+    return interaction.reply({ content: "❌ Cette commande s'utilise dans un ticket.", ...EPH });
+  }
+  return fermer(interaction, ticket, { staff: estStaff(interaction.member), auteur: interaction.user.id === ticket.discord_id });
 }
 
 async function fermer(interaction, ticket, { staff, auteur }) {

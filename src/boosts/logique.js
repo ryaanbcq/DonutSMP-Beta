@@ -26,10 +26,15 @@ export function compterBoosts(messages, debuts) {
   return out;
 }
 
-/** Que faire du role : 'donner', 'retirer' (seulement s il vient du bot) ou null. */
-export function decisionRole({ boosts, booste, aLeRole, donneParBot }) {
-  if (booste && boosts >= SEUIL && !aLeRole) return 'donner';
-  if (!booste && aLeRole && donneParBot) return 'retirer';
+/**
+ * Que faire du role : 'donner', 'retirer' ou null. Ryan (04/11) : le role
+ * n existe qu avec 2 boosts actifs, qu il ait ete pose par le bot ou a la main.
+ * Seul le proprietaire du serveur garde un role pose a la main.
+ */
+export function decisionRole({ boosts, booste, aLeRole, proprietaire = false }) {
+  const merite = booste && boosts >= SEUIL;
+  if (merite && !aLeRole) return 'donner';
+  if (!merite && aLeRole && !proprietaire) return 'retirer';
   return null;
 }
 

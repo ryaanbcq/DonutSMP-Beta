@@ -25,7 +25,11 @@ test('boosts : role donne a 2 boosts, retire seulement s il vient du bot', () =>
   assert.equal(decisionRole({ boosts: 2, booste: true, aLeRole: false, donneParBot: false }), 'donner');
   assert.equal(decisionRole({ boosts: 1, booste: true, aLeRole: false, donneParBot: false }), null);
   assert.equal(decisionRole({ boosts: 0, booste: false, aLeRole: true, donneParBot: true }), 'retirer');
-  assert.equal(decisionRole({ boosts: 0, booste: false, aLeRole: true, donneParBot: false }), null);
+  // Pose a la main sans 2 boosts actifs : retire aussi (Ryan, 04/11), sauf proprietaire.
+  assert.equal(decisionRole({ boosts: 0, booste: false, aLeRole: true, donneParBot: false }), 'retirer');
+  assert.equal(decisionRole({ boosts: 1, booste: true, aLeRole: true }), 'retirer');
+  assert.equal(decisionRole({ boosts: 0, booste: false, aLeRole: true, proprietaire: true }), null);
+  assert.equal(decisionRole({ boosts: 2, booste: true, aLeRole: true }), null);
 });
 
 test('boosts : remerciement, salon des avantages et passage Super Booster', async () => {

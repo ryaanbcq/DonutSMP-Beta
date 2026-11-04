@@ -6,8 +6,8 @@
 //   - a chaque boost : +1 (ou le nombre indique si plusieurs d un coup) ;
 //   - au demarrage : recomptage depuis l historique du salon systeme, en ne
 //     gardant que les boosts posterieurs au debut du boost actuel du membre ;
-//   - le membre arrete de booster : compteur remis a zero, role retire
-//     SEULEMENT si c est le bot qui l avait donne (un role pose a la main reste).
+//   - le role n existe qu avec 2 boosts actifs : retire a tout membre qui ne
+//     les a pas, meme pose a la main (Ryan, 04/11), sauf au proprietaire.
 // Limites : il faut que les messages de boost soient actives dans les
 // parametres du serveur ; un boost retire sur deux n est pas visible (Discord
 // ne previent que quand le membre ne booste plus du tout).
@@ -84,7 +84,7 @@ async function appliquer(membre, c) {
   const role = roleSuper(membre.guild);
   if (!role) return null;
   const e = c[membre.id] ?? { n: 0, bot: false };
-  const d = decisionRole({ boosts: e.n, booste: Boolean(membre.premiumSinceTimestamp), aLeRole: membre.roles.cache.has(role.id), donneParBot: e.bot });
+  const d = decisionRole({ boosts: e.n, booste: Boolean(membre.premiumSinceTimestamp), aLeRole: membre.roles.cache.has(role.id), proprietaire: membre.id === membre.guild.ownerId });
   if (d === 'donner') {
     await membre.roles.add(role, `A boosté le serveur ${e.n} fois`);
     c[membre.id] = { ...e, bot: true };
@@ -92,8 +92,11 @@ async function appliquer(membre, c) {
     journal({ niveau: 'ok', titre: '💎 Super Booster', texte: `**${membre.displayName}** a boosté le serveur ${e.n} fois : rôle **${role.name}** donné.` });
     return 'donne';
   } else if (d === 'retirer') {
-    await membre.roles.remove(role, 'Ne booste plus le serveur');
-    console.log(`[boosts] ${membre.user.tag} ne booste plus, role ${role.name} retire`);
+    const pourquoi = membre.premiumSinceTimestamp ? `${e.n} boost actif` : 'ne booste pas';
+    await membre.roles.remove(role, `Pas 2 boosts actifs (${pourquoi})`);
+    console.log(`[boosts] ${membre.user.tag} : ${pourquoi}, role ${role.name} retire`);
+    journal({ niveau: 'info', titre: '💎 Super Booster', texte: `**${membre.displayName}** n'a pas 2 boosts actifs (${pourquoi}) : rôle **${role.name}** retiré.` });
+    return 'retire';
   }
   return null;
 }
@@ -126,7 +129,10 @@ async function surMembre(ancien, membre) {
   if (membre.guild.id !== config.discord.guildId) return;
   const avant = ancien?.premiumSinceTimestamp ?? null;
   const apres = membre.premiumSinceTimestamp ?? null;
-  if (avant === apres) return;
+  // Role pose a la main a quelqu un qui n a pas 2 boosts actifs : retire aussi.
+  const role = roleSuper(membre.guild);
+  const roleAjoute = role && !ancien?.roles?.cache?.has(role.id) && membre.roles.cache.has(role.id);
+  if (avant === apres && !roleAjoute) return;
   const c = lire();
   if (!apres) c[membre.id] = { n: 0, bot: c[membre.id]?.bot ?? false };
   await appliquer(membre, c).catch((err) => console.warn('[boosts] role :', err.message));
@@ -152,8 +158,9 @@ export async function recompter(guild) {
   const comptes = compterBoosts(messages, debuts);
   const c = lire();
   for (const [id, n] of comptes) c[id] = { n: Math.max(n, c[id]?.n ?? 0), bot: c[id]?.bot ?? false };
+  const role = roleSuper(guild);
   for (const m of membres.values()) {
-    if (!m.premiumSinceTimestamp && !c[m.id]?.bot) continue;
+    if (!m.premiumSinceTimestamp && !(role && m.roles.cache.has(role.id))) continue;
     await appliquer(m, c).catch((err) => console.warn('[boosts] role :', err.message));
   }
   ecrire(c);
