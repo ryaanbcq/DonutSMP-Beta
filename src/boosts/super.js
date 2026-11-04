@@ -23,7 +23,7 @@ import { embed, FR } from '../lib/brand.js';
 import { TYPES_BOOST, boostsDuMessage, compterBoosts, decisionRole, texteMerci } from './logique.js';
 
 // GIF « on te met sur le podium » (Chad, W, winner), un au hasard a chaque boost.
-// kv boosts.gifs = liste JSON d URLs pour remplacer cette liste, « aucun » pour ne plus en mettre.
+// ETEINT par defaut (Ryan, 04/11) : kv boosts.gifs = « on » pour cette liste, ou une liste JSON d URLs.
 export const GIFS = [
   'https://media.tenor.com/dhnCFJ_FZ8YAAAAC/look-at-the-size-of-this-w-spongebob.gif',
   'https://media.tenor.com/IJ2ayn1zPOkAAAAC/bigw.gif',
@@ -67,7 +67,7 @@ export const reglagesBoosts = {
   },
   gif: () => {
     const v = store.kvGet('boosts.gifs');
-    if (v === 'aucun') return null;
+    if (!v || v === 'aucun') return null;
     let liste = GIFS;
     try { const l = JSON.parse(v ?? 'null'); if (Array.isArray(l) && l.length) liste = l.filter((u) => /^https:\/\//.test(u)); } catch { /* liste par defaut */ }
     return liste.length ? liste[Math.floor(Math.random() * liste.length)] : null;
