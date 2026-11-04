@@ -25,20 +25,31 @@ test('support : attend le delai, plus court la nuit, puis repond', () => {
   assert.equal(decider({ ticket: ouvert(NUIT - 4 * MIN), messages: [], reglages: r, actif: true, now: NUIT }).action, 'repondre');
 });
 
-test('support : le delai part du dernier message du membre', () => {
-  const t = ouvert(JOUR - 60 * MIN);
-  const messages = [{ role: 'ia', at: JOUR - 40 * MIN }, { role: 'membre', at: JOUR - 5 * MIN }];
-  assert.equal(decider({ ticket: t, messages, reglages: r, actif: true, now: JOUR }).action, 'attendre');
-  // Apres sa propre reponse, l IA attend le membre.
-  assert.equal(decider({ ticket: t, messages: [{ role: 'ia', at: JOUR - 40 * MIN }], reglages: r, actif: true, now: JOUR }).action, 'rien');
+test('support : un membre qui relance ne repousse pas la premiere reponse', () => {
+  const t = ouvert(JOUR - 16 * MIN);
+  const messages = [{ role: 'membre', at: JOUR - 60_000 }, { role: 'membre', at: JOUR - 5000 }];
+  assert.equal(decider({ ticket: t, messages, reglages: r, actif: true, now: JOUR }).action, 'repondre');
 });
 
-test('support : se tait si staff, prise en charge, transmis, limite, eteint, ancien ticket', () => {
+test('support : en conversation, reponse 10 s apres le dernier message du membre', () => {
+  const t = ouvert(JOUR - 60 * MIN);
+  const etat = { iaCount: 1 };
+  const vient = [{ role: 'ia', at: JOUR - 40 * MIN }, { role: 'membre', at: JOUR - 3000 }];
+  const d = decider({ ticket: t, messages: vient, etat, reglages: r, actif: true, now: JOUR });
+  assert.equal(d.action, 'attendre');
+  assert.equal(d.dans, 7000);
+  const passe = [{ role: 'ia', at: JOUR - 40 * MIN }, { role: 'membre', at: JOUR - 11_000 }];
+  assert.equal(decider({ ticket: t, messages: passe, etat, reglages: r, actif: true, now: JOUR }).action, 'repondre');
+  // Apres sa propre reponse, l IA attend le membre ; avoir transmis ne la coupe pas.
+  assert.equal(decider({ ticket: t, messages: [{ role: 'ia', at: JOUR - 40 * MIN }], etat, reglages: r, actif: true, now: JOUR }).action, 'rien');
+  assert.equal(decider({ ticket: t, messages: passe, etat: { iaCount: 1, transmis: true }, reglages: r, actif: true, now: JOUR }).action, 'repondre');
+});
+
+test('support : se tait si staff, prise en charge, limite, eteint, ancien ticket', () => {
   const t = ouvert(JOUR - 60 * MIN);
   const base = { ticket: t, reglages: r, actif: true, now: JOUR };
   assert.equal(decider({ ...base, messages: [{ role: 'staff', at: JOUR - 50 * MIN }, { role: 'membre', at: JOUR - 30 * MIN }] }).action, 'rien');
   assert.equal(decider({ ...base, ticket: { ...t, pris_par: '1' }, messages: [] }).action, 'rien');
-  assert.equal(decider({ ...base, messages: [], etat: { transmis: true } }).action, 'rien');
   assert.equal(decider({ ...base, messages: [], etat: { iaCount: r.maxIaParTicket } }).action, 'rien');
   assert.equal(decider({ ...base, actif: false, messages: [] }).action, 'rien');
   assert.equal(decider({ ...base, ticket: { ...t, etat: 'ferme' }, messages: [] }).action, 'rien');

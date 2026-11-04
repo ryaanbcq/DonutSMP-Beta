@@ -77,9 +77,9 @@ async function intervenir(channelId) {
       .setFooter({ text: rep.transmettre ? 'Un membre du staff prend le relais dès que possible' : 'Le staff peut reprendre la main à tout moment' });
     const m = await salon.send({ embeds: [carte], allowedMentions: { parse: [] } });
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
-    memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: rep.transmettre, resume: rep.resume });
+    memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
-    if (rep.transmettre) {
+    if (rep.transmettre && !etat.transmis) {
       journal({
         niveau: 'info',
         titre: `Support IA : ticket #${ticket.id} à reprendre`,

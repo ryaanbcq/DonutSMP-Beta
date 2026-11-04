@@ -7,7 +7,8 @@ export const DEFAUTS = {
   delaiNuitMin: 3, // la nuit, elle n attend que 3 min
   nuitDebut: 0, // heures de Paris, nuit = [debut, fin[
   nuitFin: 9,
-  maxIaParTicket: 6,
+  suiteS: 10, // une fois la conversation lancee : reponse 10 s apres le dernier message
+  maxIaParTicket: 10,
   maxParJour: 300,
 };
 
@@ -34,8 +35,12 @@ export function delaiMs(now, r) {
  * Rend { action: 'rien' | 'attendre' | 'repondre', dans?, raison }.
  *
  * L IA ne prend que le DEBUT : des que le staff a ecrit ou pris le ticket,
- * elle se tait pour de bon. Elle repond au dernier message du membre (ou a
- * l ouverture du ticket) quand le staff n a rien dit pendant le delai.
+ * elle se tait pour de bon. Premiere reponse : quand le staff n a rien dit
+ * pendant le delai depuis l OUVERTURE (des messages du membre ne repoussent
+ * pas l echeance : vecu, un membre qui relancait toutes les minutes n etait
+ * jamais servi). Ensuite elle converse : reponse quelques secondes apres le
+ * dernier message du membre (le temps qu il finisse d ecrire). Avoir transmis
+ * au staff ne la coupe pas : elle continue d aider en attendant.
  */
 export function decider({ ticket, messages, etat = {}, reglages, actif, depuis = 0, now = Date.now() }) {
   if (!actif) return { action: 'rien', raison: 'éteint' };
@@ -43,12 +48,14 @@ export function decider({ ticket, messages, etat = {}, reglages, actif, depuis =
   if (ticket.created_at < depuis) return { action: 'rien', raison: 'ouvert avant l\'assistant' };
   if (ticket.pris_par) return { action: 'rien', raison: 'pris en charge' };
   if (messages.some((m) => m.role === 'staff')) return { action: 'rien', raison: 'le staff a répondu' };
-  if (etat.transmis) return { action: 'rien', raison: 'transmis au staff' };
   if ((etat.iaCount ?? 0) >= reglages.maxIaParTicket) return { action: 'rien', raison: 'limite par ticket' };
   const dernier = messages.at(-1);
   if (dernier?.role === 'ia') return { action: 'rien', raison: 'attend le membre' };
-  const reference = dernier?.role === 'membre' ? dernier.at : ticket.created_at;
-  const attente = delaiMs(now, reglages) - (now - reference);
+  const enConversation = (etat.iaCount ?? 0) > 0;
+  if (enConversation && dernier?.role !== 'membre') return { action: 'rien', raison: 'attend le membre' };
+  const attente = enConversation
+    ? (reglages.suiteS ?? 10) * 1000 - (now - dernier.at)
+    : delaiMs(now, reglages) - (now - ticket.created_at);
   return attente > 0 ? { action: 'attendre', dans: attente, raison: 'délai' } : { action: 'repondre', raison: 'staff absent' };
 }
 
