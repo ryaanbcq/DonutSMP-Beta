@@ -18,7 +18,7 @@ import { RefundLedger, dayKey } from './refunds.js';
 import { Reversements } from './dons.js';
 import { creerVerificateur } from './verifications.js';
 import nbt from 'prismarine-nbt';
-import { lireDialogueStats } from '../src/minecraft/dialog.js';
+import { lireDialogueStats, boutonProfilComplet, lireProfilComplet, lignesLibellees, rendreComposant } from '../src/minecraft/dialog.js';
 
 const cfg = {
   host: process.env.MC_HOST ?? 'donutsmp.net',
@@ -258,6 +258,7 @@ function connect() {
 
   // Sonde : DEBUG_WINDOW=true vide le contenu de toute interface qui s ouvre.
   ceBot.on('windowOpen', (fenetre) => {
+    const profil = lireMenuProfil(fenetre);
     if (process.env.DEBUG_WINDOW === 'true') {
       console.log(`[gui] titre=${JSON.stringify(fenetre.title)} slots=${fenetre.slots.length}`);
       fenetre.slots.forEach((item, i) => {
@@ -274,6 +275,7 @@ function connect() {
     // bot parait en ligne et ne fait plus rien. On referme donc tout de suite
     // ce qu on n a pas demande.
     try { ceBot.closeWindow(fenetre); } catch { /* deja fermee */ }
+    if (profil) return;
     console.warn('[gui] fenetre fermee (une fenetre ouverte bloque les commandes)');
     note('warn', 'Fenetre ouverte en jeu',
       'Un menu s est ouvert sur le bot et a ete referme aussitot : une fenetre ouverte'
@@ -594,25 +596,116 @@ async function ecrireLigneStats(objet) {
   await appendFile(cfg.soldes.statsSortie, JSON.stringify({ ...objet, at: Date.now() }) + '\n');
 }
 
+// Page « profil complet » : on lui laisse ce delai, sinon la fiche part avec ses 4 lignes.
+const SUITE_STATS_MS = 8_000;
+
+/** Garde le dernier dialogue recu par etape, pour comprendre un changement de DonutSMP. */
+function garderDialogueBrut(etape, contenu) {
+  writeFile(cfg.soldes.statsSortie.replace(/[^/]+$/, `stats-dialogue-${etape}.json`), JSON.stringify(contenu, null, 1))
+    .catch(() => {});
+}
+
+/** Valeur simplifiee (prismarine-nbt) -> NBT type, pour renvoyer un payload de bouton. */
+function versNbt(v) {
+  if (typeof v === 'string') return nbt.string(v);
+  if (typeof v === 'boolean') return nbt.byte(v ? 1 : 0);
+  if (typeof v === 'number') return Number.isInteger(v) ? nbt.int(v) : nbt.double(v);
+  if (Array.isArray(v)) {
+    const l = v.map(versNbt);
+    return nbt.list(l.length ? { type: l[0].type, value: l.map((x) => x.value) } : { type: 'end', value: [] });
+  }
+  if (v && typeof v === 'object') return nbt.comp(Object.fromEntries(Object.entries(v).map(([k, x]) => [k, versNbt(x)])));
+  return nbt.string(String(v ?? ''));
+}
+
+function finirStats(fiche, plus = {}) {
+  if (demande?.suite) clearTimeout(demande.suite);
+  const lignes = { ...fiche.lignes, ...plus };
+  console.log(`[stats] ${fiche.nom} : ${Object.keys(lignes).join(', ')}`);
+  ecrireLigneStats({ name: fiche.nom, lignes })
+    .catch((e) => console.error('[stats] ecriture :', e.message));
+  demande = null;
+}
+
 /**
- * DonutSMP repond a /stats par un dialogue vanilla. On ne le lit que si une
- * demande de fiche est en cours : le serveur ouvre aussi des dialogues pour
- * d autres choses, qui n ont rien a faire dans le flux.
+ * Clique « voir le profil complet ». Rend 'attendre' (la page arrive par un
+ * nouveau dialogue ou un menu), un objet de lignes (sous-dialogue deja dans le
+ * paquet) ou null (bouton inconnu).
+ */
+function suivreBouton(action) {
+  const type = String(action?.type ?? '').replace(/^minecraft:/, '');
+  if (type === 'show_dialog' && action.dialog && typeof action.dialog === 'object') return lireProfilComplet(action.dialog);
+  if (type === 'run_command' && action.command) {
+    commander(String(action.command).startsWith('/') ? action.command : `/${action.command}`);
+    return 'attendre';
+  }
+  if ((type === 'custom' || type === 'dynamic/custom') && action.id) {
+    try {
+      bot._client.write('custom_click_action', { id: action.id, nbt: action.payload !== undefined ? versNbt(action.payload) : undefined });
+      return 'attendre';
+    } catch (e) {
+      console.warn('[stats] clic du bouton refuse :', e.message);
+    }
+  }
+  console.warn(`[stats] bouton profil complet non suivi (action ${type || 'inconnue'})`);
+  return null;
+}
+
+/**
+ * DonutSMP repond a /stats par un dialogue vanilla (argent, kills, morts,
+ * temps de jeu) avec un bouton « profil complet » pour le reste (shards,
+ * blocs, mobs, derniere connexion). On ne le lit que si une demande de fiche
+ * est en cours : le serveur ouvre aussi des dialogues pour d autres choses.
  */
 function traiterDialogue(paquet) {
   if (!demande || demande.type !== 'stats') return;
-  let fiche = null;
+  let simplifie = null;
   try {
-    fiche = lireDialogueStats(nbt.simplify(paquet?.dialog?.data ?? paquet?.dialog));
+    simplifie = nbt.simplify(paquet?.dialog?.data ?? paquet?.dialog);
   } catch (e) {
     console.error('[stats] dialogue illisible :', e.message);
+    return;
   }
-  if (!fiche) return;
+  garderDialogueBrut(demande.fiche ? 'complet' : 'fiche', simplifie);
 
-  console.log(`[stats] ${fiche.nom} : ${Object.keys(fiche.lignes).join(', ')}`);
-  ecrireLigneStats({ name: fiche.nom, lignes: fiche.lignes })
-    .catch((e) => console.error('[stats] ecriture :', e.message));
-  demande = null;
+  // Deuxieme page : le profil complet.
+  if (demande.fiche) return finirStats(demande.fiche, lireProfilComplet(simplifie));
+
+  const fiche = lireDialogueStats(simplifie);
+  if (!fiche) return;
+  const bouton = boutonProfilComplet(simplifie);
+  const suite = bouton ? suivreBouton(bouton.action) : null;
+  if (suite && typeof suite === 'object') return finirStats(fiche, suite);
+  if (suite === 'attendre') {
+    demande.fiche = fiche;
+    demande.a = Date.now();
+    demande.suite = setTimeout(() => {
+      if (demande?.fiche === fiche) {
+        console.warn('[stats] profil complet sans reponse, fiche courte');
+        finirStats(fiche);
+      }
+    }, SUITE_STATS_MS);
+    return;
+  }
+  finirStats(fiche);
+}
+
+/** Le profil complet arrive peut-etre en menu : on lit les objets avant de le fermer. */
+function lireMenuProfil(fenetre) {
+  if (!demande?.fiche) return false;
+  const lignes = {};
+  const texte = (x) => { try { return rendreComposant(typeof x === 'string' && x.startsWith('{') ? JSON.parse(x) : x); } catch { return String(x ?? ''); } };
+  for (const item of fenetre.slots) {
+    if (!item) continue;
+    const nom = texte(item.customName ?? item.displayName ?? '');
+    const lore = (item.customLore ?? []).map(texte);
+    lignesLibellees([nom, ...lore].join('\n'), lignes);
+    // « Shards » en nom et « 1K » seul en lore
+    if (nom && lore.length && !nom.includes(':') && lore[0] && !lore[0].includes(':')) lignes[nom.replace(/[^A-Za-z ]/g, '').trim()] ??= lore[0].trim();
+  }
+  garderDialogueBrut('menu', fenetre.slots.filter(Boolean).map((i) => ({ nom: i.customName ?? i.displayName, lore: i.customLore ?? null })));
+  finirStats(demande.fiche, lignes);
+  return true;
 }
 
 const memeJoueur = (a, b) =>

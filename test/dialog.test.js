@@ -44,3 +44,19 @@ test('convertit les montants abreges', () => {
   assert.equal(valeurNumerique('4d 7h'), null);
   assert.equal(valeurNumerique(''), null);
 });
+
+test('profil complet : trouve le bouton et lit la page suivante', async () => {
+  const { boutonProfilComplet, lireProfilComplet, lignesLibellees } = await import('../src/minecraft/dialog.js');
+  const fiche = { ...REEL, type: 'minecraft:multi_action', actions: [
+    { label: { text: 'Close' }, action: { type: 'minecraft:custom', id: 'x:close' } },
+    { label: { text: 'View Full Profile' }, action: { type: 'minecraft:run_command', command: '/profile SentiaZz' } },
+  ] };
+  assert.deepEqual(boutonProfilComplet(fiche), { label: 'View Full Profile', action: { type: 'minecraft:run_command', command: '/profile SentiaZz' } });
+  assert.equal(boutonProfilComplet(REEL), null);
+  const page = { title: { text: 'SentiaZz' }, body: [
+    { type: 'minecraft:plain_message', contents: { text: 'Shards: ', extra: [{ text: '1K' }] } },
+    { type: 'minecraft:plain_message', contents: { text: 'Blocks Placed: 8.2K\nBlocks Broken: 23K\nMobs Killed: 170' } },
+  ] };
+  assert.deepEqual(lireProfilComplet(page), { Shards: '1K', 'Blocks Placed': '8.2K', 'Blocks Broken': '23K', 'Mobs Killed': '170' });
+  assert.deepEqual(lignesLibellees('Last Seen: Online now'), { 'Last Seen': 'Online now' });
+});

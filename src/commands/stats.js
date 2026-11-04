@@ -81,13 +81,22 @@ export async function execute(interaction) {
   if (fiche.invalide) return interaction.editReply('❌ Pseudo invalide.');
   if (fiche.inconnu) return interaction.editReply(`Aucun joueur nommé **${pseudo}** sur DonutSMP.`);
 
-  const L = fiche.lignes;
+  const L = { ...fiche.lignes };
+  const prendre = (...cles) => { for (const c of cles) if (L[c] !== undefined) { const x = L[c]; delete L[c]; return x; } return undefined; };
   const lien = store.getLinkByName(fiche.nom);
-  return interaction.editReply({ embeds: [carte(fiche.nom, {
-    argent: L.Money, shards: L.Shards ? valeurNumerique(L.Shards) : null,
-    kills: valeurNumerique(L.Kills) ?? undefined, morts: valeurNumerique(L.Deaths) ?? undefined,
-    killsTexte: L.Kills, mortsTexte: L.Deaths, temps: L.Playtime, discordId: lien?.discord_id,
-  }, '/stats en jeu')] });
+  const f = {
+    argent: prendre('Money', 'Balance'), shardsTexte: prendre('Shards'),
+    killsTexte: prendre('Kills'), mortsTexte: prendre('Deaths'), temps: prendre('Playtime'),
+    posesTexte: prendre('Blocks Placed', 'Placed Blocks'), cassesTexte: prendre('Blocks Broken', 'Broken Blocks'),
+    mobsTexte: prendre('Mobs Killed', 'Mobs'), vu: prendre('Last Seen', 'Last Online', 'Status'),
+    discordId: lien?.discord_id,
+  };
+  f.kills = valeurNumerique(f.killsTexte) ?? undefined;
+  f.morts = valeurNumerique(f.mortsTexte) ?? undefined;
+  // Discord est deja notre ligne a nous ; le reste de ce que DonutSMP ajoute s affiche tel quel.
+  prendre('Discord');
+  f.autres = L;
+  return interaction.editReply({ embeds: [carte(fiche.nom, f, '/stats en jeu')] });
 }
 
 function carte(nom, f, source) {

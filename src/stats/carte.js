@@ -21,7 +21,8 @@ export function lignesStats(f) {
   const l = [];
   const v = (x) => `\`${x}\``;
   if (f.argent) l.push(`💰 **Argent** ${v(f.argent)}`);
-  if (f.shards !== undefined && f.shards !== null) l.push(`💎 **Shards** ${v(fr(f.shards))}`);
+  const shards = f.shardsTexte ?? (Number.isFinite(f.shards) ? fr(f.shards) : null);
+  if (shards) l.push(`💎 **Shards** ${v(shards)}`);
   const kills = f.killsTexte ?? fr(f.kills);
   const morts = f.mortsTexte ?? fr(f.morts);
   if (kills) l.push(`⚔️ **Kills** ${v(kills)}`);
@@ -29,10 +30,13 @@ export function lignesStats(f) {
   const kd = ratio(f.kills, f.morts);
   if (kd) l.push(`📈 **K/D** ${v(kd)}`);
   if (f.temps) l.push(`⏱️ **Temps de jeu** ${v(tempsFr(f.temps))}`);
-  if (Number.isFinite(f.poses)) l.push(`🧱 **Blocs posés** ${v(fr(f.poses))}`);
-  if (Number.isFinite(f.casses)) l.push(`⛏️ **Blocs cassés** ${v(fr(f.casses))}`);
-  if (Number.isFinite(f.mobs)) l.push(`🧟 **Mobs tués** ${v(fr(f.mobs))}`);
-  if (f.enLigne === true) l.push(`🟢 **En ligne**${f.rang ? ` · ${f.rang}` : ''}`);
+  const t = (texte, n) => texte ?? (Number.isFinite(n) ? fr(n) : null);
+  if (t(f.posesTexte, f.poses)) l.push(`🧱 **Blocs posés** ${v(t(f.posesTexte, f.poses))}`);
+  if (t(f.cassesTexte, f.casses)) l.push(`⛏️ **Blocs cassés** ${v(t(f.cassesTexte, f.casses))}`);
+  if (t(f.mobsTexte, f.mobs)) l.push(`🧟 **Mobs tués** ${v(t(f.mobsTexte, f.mobs))}`);
+  for (const [k, x] of Object.entries(f.autres ?? {})) l.push(`▫️ **${k}** ${v(x)}`);
+  if (f.vu) l.push(/online|en ligne/i.test(f.vu) ? '🟢 **En ligne** maintenant' : `👀 **Vu** ${f.vu}`);
+  else if (f.enLigne === true) l.push(`🟢 **En ligne**${f.rang ? ` · ${f.rang}` : ''}`);
   else if (f.enLigne === false) l.push('⚫ **Hors ligne**');
   l.push(f.discordId ? `🔗 **Discord** <@${f.discordId}>` : '🔗 **Discord** pas lié');
   return l.join('\n');

@@ -50,3 +50,48 @@ export function valeurNumerique(texte) {
   const mult = { k: 1e3, m: 1e6, b: 1e9 }[String(m[2] ?? '').toLowerCase()] ?? 1;
   return base * mult;
 }
+
+/** Toutes les lignes « Libelle: valeur » d un texte multi-lignes. */
+export function lignesLibellees(texte, dans = {}) {
+  for (const brut of String(texte ?? '').split('\n')) {
+    const m = brut.trim().match(/^([A-Za-z][A-Za-z ]{0,30}):\s*(.+)$/);
+    if (m && !(m[1].trim() in dans)) dans[m[1].trim()] = m[2].trim();
+  }
+  return dans;
+}
+
+/** Boutons d un dialogue (notice, confirmation, multi_action, dialog_list). */
+function boutons(d) {
+  const out = [];
+  for (const cle of ['action', 'yes', 'no', 'exit_action']) if (d?.[cle]) out.push(d[cle]);
+  for (const cle of ['actions', 'dialogs']) if (Array.isArray(d?.[cle])) out.push(...d[cle]);
+  return out.filter((b) => b && typeof b === 'object');
+}
+
+/**
+ * Le bouton « voir le profil complet » d une fiche /stats, ou null.
+ * Rend { label, action } avec l action telle que le serveur l a envoyee.
+ */
+export function boutonProfilComplet(simplifie) {
+  const d = simplifie?.data ?? simplifie;
+  for (const b of boutons(d)) {
+    const label = rendreComposant(b.label).trim();
+    if (/profil|profile|full|complet|more|plus|detail/i.test(label) && b.action) return { label, action: b.action };
+  }
+  return null;
+}
+
+/**
+ * Lit la page « profil complet » : un dialogue (corps, et sous-dialogue
+ * inline) dont on garde toutes les lignes « Libelle: valeur ».
+ */
+export function lireProfilComplet(simplifie) {
+  const d = simplifie?.data ?? simplifie;
+  if (!d) return {};
+  const lignes = {};
+  for (const bloc of Array.isArray(d.body) ? d.body : []) {
+    lignesLibellees(rendreComposant(bloc?.contents), lignes);
+    lignesLibellees(rendreComposant(bloc?.description?.contents ?? bloc?.description), lignes);
+  }
+  return lignes;
+}

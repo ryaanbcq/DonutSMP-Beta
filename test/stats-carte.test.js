@@ -22,3 +22,13 @@ test('stats : fiche de l API (tout)', () => {
   assert.equal(tempsFr('26d 16h'), '26j 16h');
   assert.equal(ratio(1, null), null);
 });
+
+test('stats : profil complet lu en jeu (valeurs du jeu telles quelles)', () => {
+  const t = lignesStats({ argent: '$ 2.2B', shardsTexte: '1K', killsTexte: '93', mortsTexte: '312', kills: 93, morts: 312, temps: '8d 9h', posesTexte: '8.2K', cassesTexte: '23K', mobsTexte: '170', vu: 'Online now', autres: { Rank: 'Elite' } });
+  assert.match(t, /Shards\*\* `1K`/);
+  assert.match(t, /Blocs posés\*\* `8\.2K`/);
+  assert.match(t, /Mobs tués\*\* `170`/);
+  assert.match(t, /▫️ \*\*Rank\*\* `Elite`/);
+  assert.match(t, /🟢 \*\*En ligne\*\* maintenant/);
+  assert.match(lignesStats({ vu: '2h ago' }), /👀 \*\*Vu\*\* 2h ago/);
+});
