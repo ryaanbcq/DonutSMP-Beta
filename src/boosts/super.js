@@ -33,6 +33,14 @@ export const GIFS = [
   'https://media.tenor.com/nQafJ4ISWj4AAAAC/wario-w.gif',
   'https://media.tenor.com/3G2tzd1u-pcAAAAC/dub-bossman.gif',
   'https://media.tenor.com/6VQiZcfJsCMAAAAC/f1-fernando-alonso.gif',
+  // memes de chats
+  'https://media.tenor.com/Dtbh5RBNNvUAAAAC/happy-catto-cats.gif',
+  'https://media.tenor.com/3IYpyDhud_YAAAAC/cat-dancing-gif-dancing-cat.gif',
+  'https://media.tenor.com/aNKgtdT5ymEAAAAC/cat-dance-cat.gif',
+  'https://media.tenor.com/TsVXIAMBZXoAAAAC/cat-thumbs-up-thumbs-up.gif',
+  'https://media.tenor.com/ZhkSXEZ24UUAAAAC/sad-thump-up-cat-sad-cat.gif',
+  'https://media.tenor.com/2gBB2vAD2ZAAAAAC/cat-cat-memes.gif',
+  'https://media.tenor.com/6KK7L1KeV_IAAAAC/mochi-mochimons.gif',
 ];
 
 const PAGES_MAX = 30; // 3 000 messages du salon systeme au demarrage
