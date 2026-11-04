@@ -78,7 +78,7 @@ export function rendre(b, note = '') {
   if (!cible) description += '\n1️⃣ Choisissez le membre ci-dessous.';
   else {
     description += `\n**${cible.mc_name}** · <@${cible.discord_id}>\n`
-      + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t)} · ${t.n} avis\n\n`
+      + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t) ? `${ligneScore(t)} · ` : ''}${t.n} avis\n\n`
       + `2️⃣ Verdict : ${b.verdict ? (scam ? '⚠️ **Signalement**' : '✅ **Vouch**') : '*à choisir*'}\n`
       + `3️⃣ Note : ${scam ? '*sans objet pour un signalement*' : b.etoiles ? `**${etoiles(b.etoiles)}**` : '*à choisir*'}\n`
       + `4️⃣ Message : ${b.message ? `\n> ${b.message.replace(/\n/g, '\n> ')}` : scam ? `*obligatoire, ${MIN_SCAM} caractères minimum*` : '*facultatif*'}`
@@ -463,7 +463,7 @@ async function publier(interaction, b) {
       couleur: scam ? FR.rouge : FR.vert,
       image: cible.mc_name,
       description: `Votre avis sur **${cible.mc_name}** est publié${fil ? ` dans ${fil}` : ''}.\n`
-        + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t)}`,
+        + `${t.palier.emoji} ${t.palier.nom}${ligneScore(t) ? ` · ${ligneScore(t)}` : ''}`,
     })],
     components: fil ? [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setLabel(`Voir le profil de ${cible.mc_name}`).setEmoji('👀').setStyle(ButtonStyle.Link)
@@ -501,7 +501,7 @@ async function prevenirVouch(client, cible, auteur, nb, t, fil) {
     couleur: FR.vert,
     image: cible.mc_name,
     description: `**${auteur}** vous a laissé ${etoiles(nb)} sur **${cible.mc_name}**.\n`
-      + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t)} · ${t.n} avis${lien}`,
+      + `${t.palier.emoji} ${t.palier.nom} · ${ligneScore(t) ? `${ligneScore(t)} · ` : ''}${t.n} avis${lien}`,
   })] });
 }
 

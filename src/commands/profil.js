@@ -39,7 +39,7 @@ export async function execute(interaction) {
     image: link.mc_name,
     description: `**${link.mc_name}**\n<@${target.id}>`,
   }).addFields(
-    { name: 'Réputation', value: `${t.palier.emoji} ${t.palier.nom}\n${ligneScore(t, 8)} · ${t.n} avis`, inline: true },
+    { name: 'Réputation', value: `${t.palier.emoji} ${t.palier.nom}\n${ligneScore(t, 8) ? `${ligneScore(t, 8)} · ` : ''}${t.n} avis`, inline: true },
     { name: 'Vérifié', value: `<t:${Math.floor(link.linked_at / 1000)}:R>`, inline: true },
   );
 

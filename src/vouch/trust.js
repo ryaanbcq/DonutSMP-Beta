@@ -23,7 +23,7 @@ export const PALIERS = [
 export const PALIER_NOUVEAU = { emoji: '🌱', nom: 'Nouveau' };
 export const PALIER_SIGNALE = { emoji: '☠️', nom: 'Signalé' };
 export const SEUIL_TRUSTED = 85;
-export const MIN_AVIS = 10;
+export const MIN_AVIS = 5;
 export const SCAMS_SIGNALE = 2;
 
 function recence(createdAt, now) {
@@ -85,7 +85,8 @@ export function etoiles(n) {
 export function ligneScore(t, largeur = 10) {
   // Signale : un score de 93 a cote d'une tete de mort se contredisait.
   if (t.palier === PALIER_SIGNALE) return `*☠️ Trust score suspendu : ${t.neg} signalements*`;
-  if (t.n < MIN_AVIS) return `*Trust score dès ${MIN_AVIS} avis (${t.n} / ${MIN_AVIS})*`;
+  // Pas encore assez d avis : rien (Ryan, 04/11 : pas d indication de la condition).
+  if (t.n < MIN_AVIS) return '';
   return `\`${barre(t.score, largeur)}\` **${t.score} / 100**`;
 }
 

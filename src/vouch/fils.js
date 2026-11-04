@@ -155,7 +155,7 @@ export function carteReputation(link) {
   const score = t.palier === PALIER_SIGNALE
     ? `☠️ Trust score suspendu (${pluriel(t.neg, 'signalement')})`
     : t.n < MIN_AVIS
-      ? `-# 📊 Trust score à partir de ${MIN_AVIS} avis · ${t.n} / ${MIN_AVIS}`
+      ? null
       : `📊 \`${barre(t.score, 12)}\`  **${t.score}** / 100`;
   const contenu = embed(TITRE_REPUTATION, {
     couleur: t.palier === PALIER_SIGNALE ? FR.rouge : t.trusted ? FR.or : FR.bleu,
@@ -166,7 +166,7 @@ export function carteReputation(link) {
       '',
       note,
       `✅ **${t.pos}** vouch${t.pos > 1 ? 'es' : ''}${t.neg ? `  ·  ☠️ ${pluriel(t.neg, 'signalement')}` : '  ·  aucun signalement'}`,
-      score,
+      ...(score ? [score] : []),
       '',
       `-# ${dernier ? `Dernier avis <t:${Math.floor(dernier.created_at / 1000)}:R>` : 'Aucun avis pour le moment'}`,
     ].join('\n'),
