@@ -45,6 +45,7 @@ import { demarrerSurveillanceTags } from './tags/surveillance.js';
 import { suivreMembres } from './lib/membres.js';
 import { demarrerModeration } from './moderation/actions.js';
 import { demarrerAntipub, onBoutonAntipub } from './moderation/antipub.js';
+import { demarrerPrefixe } from './moderation/prefixe.js';
 import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -92,6 +93,7 @@ client.once('clientReady', async (c) => {
   console.log(`[bot] connecte en tant que ${c.user.tag}`);
   demarrerModeration(c);
   demarrerAntipub(c);
+  demarrerPrefixe(c);
   // Statut et statut personnalise choisis par /statut, retenus en base.
   try { const p = appliquerPresence(c); console.log(`[statut] ${p.statut} « ${p.texte} »`); } catch (e) { console.warn('[statut] :', e.message); }
   console.log(`[bot] ${client.commands.size} commandes, ${store.countLinks()} comptes lies`);

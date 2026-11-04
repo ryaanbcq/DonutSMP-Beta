@@ -38,20 +38,20 @@ test('registre : avertissements comptes, ban temporaire pose puis retire', () =>
 test('permission de sanctionner : la liste d ids posee fait seule foi', async () => {
   const { peutSanctionner } = await import('../src/moderation/actions.js');
   const liste = '689896112383066156, 777943506458247198,1544749036823646341';
-  assert.equal(peutSanctionner({ id: '777943506458247198' }, liste), true);
-  assert.equal(peutSanctionner({ user: { id: '1544749036823646341' } }, liste), true);
+  assert.equal(peutSanctionner({ id: '777943506458247198' }, null, liste), true);
+  assert.equal(peutSanctionner({ user: { id: '1544749036823646341' } }, null, liste), true);
   // Meme avec « Gerer le serveur », hors liste = refus.
-  assert.equal(peutSanctionner({ id: '1', permissions: { has: () => true } }, liste), false);
+  assert.equal(peutSanctionner({ id: '1', permissions: { has: () => true } }, null, liste), false);
 });
 
 test('permission de sanctionner : par role choisi, et admins du bot quand rien n est choisi', async () => {
   const { peutSanctionner } = await import('../src/moderation/actions.js');
   const avecRole = { id: '5', roles: { cache: { has: (r) => r === 'modos' } }, permissions: { has: () => false } };
-  assert.equal(peutSanctionner(avecRole, { membres: [], roles: ['modos'] }), true);
-  assert.equal(peutSanctionner(avecRole, { membres: ['9'], roles: [] }), false);
+  assert.equal(peutSanctionner(avecRole, null, { membres: [], roles: ['modos'] }), true);
+  assert.equal(peutSanctionner(avecRole, null, { membres: ['9'], roles: [] }), false);
   // Rien de choisi : « Gerer le serveur » suffit (admin du bot).
   const gerant = { id: '6', roles: { cache: { has: () => false } }, permissions: { has: () => true } };
-  assert.equal(peutSanctionner(gerant, { membres: [], roles: [] }), true);
+  assert.equal(peutSanctionner(gerant, null, { membres: [], roles: [] }), true);
 });
 
 test('/warns : retirer un avertissement par numero, ou tous', () => {
@@ -71,4 +71,17 @@ test('autorises : membres et roles enregistres separement', () => {
   assert.deepEqual(registre.autorises(), { membres: ['1', '2'], roles: ['r'] });
   registre.poserAutorises({ membres: [], roles: [] });
   assert.deepEqual(registre.autorises(), { membres: [], roles: [] });
+});
+
+test('permissions par action : un role mute ne peut pas bannir, le proprietaire peut tout', async () => {
+  const { peutSanctionner } = await import('../src/moderation/actions.js');
+  const modo = { id: '5', roles: { cache: { has: (r) => r === 'modos' } }, permissions: { has: () => true }, guild: { ownerId: 'o' } };
+  const r = { membres: [], roles: [], perms: { mute: ['modos'], ban: ['admins'] } };
+  assert.equal(peutSanctionner(modo, 'mute', r), true);
+  assert.equal(peutSanctionner(modo, 'unmute', r), true);   // unmute va avec mute
+  assert.equal(peutSanctionner(modo, 'ban', r), false);     // Gerer le serveur ne suffit plus une fois regle
+  assert.equal(peutSanctionner(modo, 'warn', r), false);
+  assert.equal(peutSanctionner({ id: 'o', roles: { cache: { has: () => false } }, guild: { ownerId: 'o' } }, 'ban', r), true);
+  // Un role « peut tout faire » passe partout.
+  assert.equal(peutSanctionner(modo, 'ban', { membres: [], roles: ['modos'], perms: {} }), true);
 });

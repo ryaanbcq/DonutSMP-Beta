@@ -1,6 +1,6 @@
-// /warn, /kick, /mute, /unmute, /ban, /unban : moderation reservee aux ids de
-// mod.autorises si la liste est posee, sinon aux admins du bot (role choisi
-// dans /setup general, ou « Gerer le serveur »).
+// Sanctions : /warn, /kick, /mute, /unmute, /ban, /unban, /warns, et les memes
+// en commandes ecrites a prefixe (prefixe.js). Qui peut quoi : /setup general
+// > Modération (roles par action), sinon les admins du bot.
 //
 // Garde-fous, verifies cote serveur a chaque commande :
 //   - jamais soi-meme, jamais le proprietaire, jamais un bot ;
@@ -25,6 +25,7 @@ import {
 } from './outils.js';
 
 const EPH = { flags: MessageFlags.Ephemeral };
+export const MUTE_DEFAUT_MS = 3_600_000;
 
 // ------------------------------------------------------------------ base
 
@@ -62,6 +63,16 @@ export const registre = {
     if (membres) store.kvSet('mod.autorises', membres.join(','));
     if (roles) store.kvSet('mod.rolesAutorises', roles.join(','));
   },
+  // Roles autorises par action : { warn, mute, kick, ban } -> [ids].
+  perms: () => json('mod.perms', {}),
+  poserPerms: (action, roles) => {
+    const p = json('mod.perms', {});
+    if (roles.length) p[action] = roles; else delete p[action];
+    store.kvSet('mod.perms', JSON.stringify(p));
+  },
+  // Prefixe des commandes ecrites (+ban @x raison).
+  prefixe: () => store.kvGet('mod.prefixe') || '+',
+  poserPrefixe: (p) => store.kvSet('mod.prefixe', p),
   bansTemp: () => json('mod.bansTemp', {}),
   poserBanTemp: (id, ban) => {
     const tous = json('mod.bansTemp', {});
@@ -75,7 +86,7 @@ export const registre = {
 const DEF = {
   warn: { desc: 'Avertir un membre', duree: false },
   kick: { desc: 'Expulser un membre du serveur', duree: false },
-  mute: { desc: 'Rendre un membre muet (timeout, 28 jours max)', duree: 'obligatoire' },
+  mute: { desc: 'Rendre un membre muet (timeout, 28 jours max)', duree: 'facultative' },
   unmute: { desc: 'Rendre la parole à un membre', duree: false },
   ban: { desc: 'Bannir un membre, pour une durée ou définitivement', duree: 'facultative' },
   unban: { desc: 'Débannir un utilisateur (ID ou @mention)', duree: false },
@@ -88,17 +99,14 @@ function construire(nom) {
     b.addStringOption((o) => o.setName('joueur').setDescription('ID Discord ou @mention de l\'utilisateur banni').setRequired(true));
   }
   // L ordre Discord impose les options obligatoires d abord.
-  if (d.duree === 'obligatoire') {
-    b.addStringOption((o) => o.setName('temps').setDescription('Ex. 10m, 2h, 3j, 1sem').setRequired(true));
-  }
-  b.addStringOption((o) => o.setName('raison').setDescription('Raison, envoyée au membre et au journal').setRequired(true).setMaxLength(400));
+  b.addStringOption((o) => o.setName('raison').setDescription('Raison, envoyée au membre et au journal').setRequired(false).setMaxLength(400));
   if (nom !== 'unban') {
     // Deux facons de designer le membre : la liste de Discord, ou son ID colle.
     b.addUserOption((o) => o.setName('joueur').setDescription('Le membre (ou utilise l\'option id)').setRequired(false));
     b.addStringOption((o) => o.setName('id').setDescription('ID Discord du membre, à la place de joueur').setRequired(false));
   }
-  if (d.duree === 'facultative') {
-    b.addStringOption((o) => o.setName('temps').setDescription('Ex. 3j, 1sem. Vide = définitif').setRequired(false));
+  if (d.duree) {
+    b.addStringOption((o) => o.setName('temps').setDescription(nom === 'mute' ? 'Ex. 10m, 2h, 3j. Vide = 1 h' : 'Ex. 3j, 1sem. Vide = définitif').setRequired(false));
   }
   return b;
 }
@@ -127,74 +135,65 @@ export function refusHierarchie({ moderateur, cible, guild }) {
 
 // ------------------------------------------------------------------ execution
 
+// Chaque commande releve d une permission : unmute va avec mute, unban avec
+// ban, warns avec warn.
+export const PERMISSION = {
+  warn: 'warn', warns: 'warn', mute: 'mute', unmute: 'mute', kick: 'kick', ban: 'ban', unban: 'ban',
+};
+
 /**
- * Qui peut sanctionner. Si des membres ou des roles sont choisis (/setup
- * general > Modération), eux seuls passent, admins du bot compris ; sinon les
- * admins du bot. `autorises` : { membres, roles } (tests), ou une chaine d ids.
+ * Qui peut lancer cette commande. Le proprietaire toujours. Ensuite, si rien
+ * n est regle dans /setup general > Modération, les admins du bot. Sinon :
+ * les membres autorises a tout, les roles autorises a tout, et les roles de
+ * cette action. `reglages` : { membres, roles, perms } (tests).
  */
-export function peutSanctionner(membre, autorises = registre.autorises()) {
-  const a = typeof autorises === 'string'
-    ? { membres: autorises.split(',').map((x) => x.trim()).filter(Boolean), roles: [] }
-    : autorises;
-  if (!a.membres.length && !a.roles.length) return estAdmin(membre);
+export function peutSanctionner(membre, action = null, reglages = null) {
+  const r = reglages ?? { ...registre.autorises(), perms: registre.perms() };
+  if (typeof r === 'string') return peutSanctionner(membre, action, { membres: r.split(',').map((x) => x.trim()).filter(Boolean), roles: [], perms: {} });
   const id = membre?.id ?? membre?.user?.id;
-  if (a.membres.includes(id)) return true;
-  const r = membre?.roles;
-  const aRole = (x) => (typeof r?.cache?.has === 'function' ? r.cache.has(x) : Array.isArray(r) && r.includes(x));
-  return a.roles.some(aRole);
+  if (id && membre?.guild?.ownerId === id) return true;
+  const perms = r.perms ?? {};
+  const regle = r.membres.length || r.roles.length || Object.values(perms).some((x) => x?.length);
+  if (!regle) return estAdmin(membre);
+  if (r.membres.includes(id)) return true;
+  const roles = membre?.roles;
+  const aRole = (x) => (typeof roles?.cache?.has === 'function' ? roles.cache.has(x) : Array.isArray(roles) && roles.includes(x));
+  if (r.roles.some(aRole)) return true;
+  const cle = action ? PERMISSION[action] ?? action : null;
+  if (cle) return (perms[cle] ?? []).some(aRole);
+  return Object.values(perms).flat().some(aRole);
 }
 
-async function executer(nom, interaction) {
-  if (!peutSanctionner(interaction.member)) {
-    return interaction.reply({ content: '🔒 Tu n\'as pas la permission de sanctionner.', ...EPH });
-  }
-  const { guild } = interaction;
-  const raison = interaction.options.getString('raison', true).trim();
-  const tempsTexte = interaction.options.getString('temps');
-  const moderateur = interaction.member;
-  const par = `${interaction.user.tag} (${interaction.user.id})`;
-  const raisonAudit = `${raison} · par ${interaction.user.tag}`.slice(0, 500);
-
-  if (nom === 'unban') return unban(interaction, { raison, raisonAudit });
-
-  const idSaisi = interaction.options.getString('id');
-  let utilisateur = interaction.options.getUser('joueur');
-  if (!utilisateur && idSaisi) {
-    const id = lireIdUtilisateur(idSaisi);
-    if (!id) return interaction.reply({ content: `❌ « ${idSaisi} » n'est pas un ID Discord.`, ...EPH });
-    utilisateur = await interaction.client.users.fetch(id).catch(() => null);
-    if (!utilisateur) return interaction.reply({ content: `❌ Aucun utilisateur Discord avec l'ID \`${id}\`.`, ...EPH });
-  }
-  if (!utilisateur) return interaction.reply({ content: '❌ Indique le membre : option **joueur**, ou son ID dans l\'option **id**.', ...EPH });
+/**
+ * Applique une sanction. Utilise par les slash commands et par les commandes
+ * a prefixe. Rend { ok, texte } (texte = reponse au moderateur).
+ */
+export async function appliquerSanction({ nom, guild, moderateur, utilisateur, raison, duree }) {
+  raison = (raison || 'Aucune raison donnée').slice(0, 400);
+  const raisonAudit = `${raison} · par ${moderateur.user.tag}`.slice(0, 500);
+  const par = `${moderateur.user.tag} (${moderateur.id})`;
   const cible = await guild.members.fetch(utilisateur.id).catch(() => null);
   // Ban d un utilisateur deja parti : possible, sans controle de role.
-  if (!cible && nom !== 'ban') return interaction.reply({ content: `❌ <@${utilisateur.id}> n'est pas sur le serveur.`, ...EPH });
+  if (!cible && nom !== 'ban') return { ok: false, texte: `❌ <@${utilisateur.id}> n'est pas sur le serveur.` };
   if (cible) {
     const refus = refusHierarchie({ moderateur, cible, guild });
-    if (refus) return interaction.reply({ content: `❌ Impossible : ${refus}.`, ...EPH });
-  }
-
-  let duree = null;
-  if (tempsTexte) {
-    duree = lireDuree(tempsTexte);
-    if (!duree) return interaction.reply({ content: `❌ Durée illisible : « ${tempsTexte} ». Exemples : 10m, 2h, 3j, 1sem, 1j12h.`, ...EPH });
+    if (refus) return { ok: false, texte: `❌ Impossible : ${refus}.` };
   }
   if (nom === 'mute' && duree > MUTE_MAX_MS) {
-    return interaction.reply({ content: '❌ Discord limite un mute à 28 jours. Pour plus long, utilise /ban avec une durée.', ...EPH });
+    return { ok: false, texte: '❌ Discord limite un mute à 28 jours. Pour plus long, utilise un ban avec une durée.' };
   }
 
-  await interaction.deferReply(EPH);
   const mp = (texte) => utilisateur.send(texte).then(() => true, () => false);
   const nomServeur = guild.name;
   const qui = `<@${utilisateur.id}> (**${utilisateur.tag}**)`;
   let resultat;
   let titre;
-  const champs = { Raison: raison, Par: `<@${interaction.user.id}>` };
+  const champs = { Raison: raison, Par: `<@${moderateur.id}>` };
 
   try {
     switch (nom) {
       case 'warn': {
-        const n = registre.ajouterWarn(utilisateur.id, { at: Date.now(), par: interaction.user.id, raison });
+        const n = registre.ajouterWarn(utilisateur.id, { at: Date.now(), par: moderateur.id, raison });
         const recu = await mp(`⚠️ Tu as reçu un avertissement sur **${nomServeur}** : ${raison}\n(avertissement n°${n})`);
         titre = 'Modération : avertissement';
         champs.Total = `${n} avertissement${n > 1 ? 's' : ''}`;
@@ -220,9 +219,7 @@ async function executer(nom, interaction) {
         break;
       }
       case 'unmute': {
-        if (!cible.isCommunicationDisabled()) {
-          return interaction.editReply(`➖ ${qui} n'est pas mute.`);
-        }
+        if (!cible.isCommunicationDisabled()) return { ok: false, texte: `➖ ${qui} n'est pas mute.` };
         if (!cible.moderatable) throw new Error('je ne peux pas lui rendre la parole (rôle au-dessus du mien)');
         await cible.timeout(null, raisonAudit);
         await mp(`🔊 Tu peux de nouveau parler sur **${nomServeur}**.`);
@@ -236,7 +233,7 @@ async function executer(nom, interaction) {
           ? `⛔ Tu es banni ${ecrireDuree(duree)} de **${nomServeur}** : ${raison}`
           : `⛔ Tu es banni définitivement de **${nomServeur}** : ${raison}`);
         await guild.bans.create(utilisateur.id, { reason: duree ? `${raisonAudit} (${ecrireDuree(duree)})` : raisonAudit });
-        if (duree) registre.poserBanTemp(utilisateur.id, { jusqua: Date.now() + duree, raison, par: interaction.user.id });
+        if (duree) registre.poserBanTemp(utilisateur.id, { jusqua: Date.now() + duree, raison, par: moderateur.id });
         else registre.poserBanTemp(utilisateur.id, null);
         titre = duree ? 'Modération : ban temporaire' : 'Modération : ban définitif';
         champs.Durée = duree ? ecrireDuree(duree) : 'définitif';
@@ -245,40 +242,75 @@ async function executer(nom, interaction) {
         break;
       }
       default:
-        return interaction.editReply('Commande inconnue.');
+        return { ok: false, texte: 'Commande inconnue.' };
     }
   } catch (e) {
-    console.warn(`[mod] /${nom} ${utilisateur.tag} par ${par} : ${e.message}`);
-    return interaction.editReply(`❌ ${e.message}.`);
+    console.warn(`[mod] ${nom} ${utilisateur.tag} par ${par} : ${e.message}`);
+    return { ok: false, texte: `❌ ${e.message}.` };
   }
-
-  console.log(`[mod] /${nom} ${utilisateur.tag} par ${par}${duree ? ` (${ecrireDuree(duree)})` : ''} : ${raison}`);
+  console.log(`[mod] ${nom} ${utilisateur.tag} par ${par}${duree ? ` (${ecrireDuree(duree)})` : ''} : ${raison}`);
   journal({ niveau: 'warn', titre, texte: resultat, champs });
-  return interaction.editReply(resultat);
+  return { ok: true, texte: resultat };
 }
 
-async function unban(interaction, { raison, raisonAudit }) {
-  const saisie = interaction.options.getString('joueur', true);
-  const id = lireIdUtilisateur(saisie);
-  if (!id) return interaction.reply({ content: `❌ « ${saisie} » n'est ni un ID Discord ni une @mention.`, ...EPH });
-  await interaction.deferReply(EPH);
-  const ban = await interaction.guild.bans.fetch(id).catch(() => null);
-  if (!ban) return interaction.editReply(`➖ <@${id}> n'est pas banni.`);
+/** Debannit. Rend { ok, texte }. */
+export async function appliquerUnban({ guild, moderateur, id, raison }) {
+  raison = (raison || 'Aucune raison donnée').slice(0, 400);
+  const ban = await guild.bans.fetch(id).catch(() => null);
+  if (!ban) return { ok: false, texte: `➖ <@${id}> n'est pas banni.` };
   try {
-    await interaction.guild.bans.remove(id, raisonAudit);
+    await guild.bans.remove(id, `${raison} · par ${moderateur.user.tag}`.slice(0, 500));
   } catch (e) {
-    return interaction.editReply(`❌ ${e.message}.`);
+    return { ok: false, texte: `❌ ${e.message}.` };
   }
   registre.poserBanTemp(id, null);
   const qui = `<@${id}> (**${ban.user.tag}**)`;
-  console.log(`[mod] /unban ${ban.user.tag} par ${interaction.user.tag} : ${raison}`);
+  console.log(`[mod] unban ${ban.user.tag} par ${moderateur.user.tag} : ${raison}`);
   journal({
     niveau: 'info',
     titre: 'Modération : débannissement',
     texte: `✅ ${qui} débanni.`,
-    champs: { Raison: raison, Par: `<@${interaction.user.id}>`, 'Raison du ban': ban.reason ?? '—' },
+    champs: { Raison: raison, Par: `<@${moderateur.id}>`, 'Raison du ban': ban.reason ?? '—' },
   });
-  return interaction.editReply(`✅ ${qui} débanni. Il peut revenir avec une invitation.`);
+  return { ok: true, texte: `✅ ${qui} débanni. Il peut revenir avec une invitation.` };
+}
+
+async function executer(nom, interaction) {
+  if (!peutSanctionner(interaction.member, nom)) {
+    return interaction.reply({ content: '🔒 Tu n\'as pas la permission pour cette sanction.', ...EPH });
+  }
+  const { guild } = interaction;
+  const raison = interaction.options.getString('raison')?.trim() ?? '';
+  const tempsTexte = interaction.options.getString('temps');
+
+  if (nom === 'unban') {
+    const saisie = interaction.options.getString('joueur', true);
+    const id = lireIdUtilisateur(saisie);
+    if (!id) return interaction.reply({ content: `❌ « ${saisie} » n'est ni un ID Discord ni une @mention.`, ...EPH });
+    await interaction.deferReply(EPH);
+    return interaction.editReply((await appliquerUnban({ guild, moderateur: interaction.member, id, raison })).texte);
+  }
+
+  const idSaisi = interaction.options.getString('id');
+  let utilisateur = interaction.options.getUser('joueur');
+  if (!utilisateur && idSaisi) {
+    const id = lireIdUtilisateur(idSaisi);
+    if (!id) return interaction.reply({ content: `❌ « ${idSaisi} » n'est pas un ID Discord.`, ...EPH });
+    utilisateur = await interaction.client.users.fetch(id).catch(() => null);
+    if (!utilisateur) return interaction.reply({ content: `❌ Aucun utilisateur Discord avec l'ID \`${id}\`.`, ...EPH });
+  }
+  if (!utilisateur) return interaction.reply({ content: '❌ Indique le membre : option **joueur**, ou son ID dans l\'option **id**.', ...EPH });
+
+  let duree = null;
+  if (tempsTexte) {
+    duree = lireDuree(tempsTexte);
+    if (!duree) return interaction.reply({ content: `❌ Durée illisible : « ${tempsTexte} ». Exemples : 10m, 2h, 3j, 1sem, 1j12h.`, ...EPH });
+  }
+  if (nom === 'mute' && !duree) duree = MUTE_DEFAUT_MS;
+
+  await interaction.deferReply(EPH);
+  const r = await appliquerSanction({ nom, guild, moderateur: interaction.member, utilisateur, raison, duree });
+  return interaction.editReply(r.texte);
 }
 
 // ------------------------------------------------------------------ bans temporaires
@@ -320,8 +352,8 @@ export const commandeWarns = {
     .addStringOption((o) => o.setName('retirer').setDescription('Numéro de l\'avertissement à retirer, ou « tout »').setRequired(false)),
   requiresLink: false,
   async execute(interaction) {
-    if (!peutSanctionner(interaction.member)) {
-      return interaction.reply({ content: '🔒 Tu n\'as pas la permission de sanctionner.', ...EPH });
+    if (!peutSanctionner(interaction.member, 'warns')) {
+      return interaction.reply({ content: '🔒 Tu n\'as pas la permission pour cette sanction.', ...EPH });
     }
     const id = interaction.options.getUser('joueur')?.id ?? lireIdUtilisateur(interaction.options.getString('id') ?? '');
     if (!id) return interaction.reply({ content: '❌ Indique le membre : option **joueur**, ou son ID dans l\'option **id**.', ...EPH });

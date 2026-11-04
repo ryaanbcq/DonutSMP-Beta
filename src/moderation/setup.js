@@ -1,6 +1,6 @@
-// /setup general > Modération : qui peut utiliser /warn, /kick, /mute,
-// /unmute, /ban, /unban et /warns. Membres et roles au choix ; rien de choisi
-// = les admins du bot.
+// /setup general > Modération : quels roles peuvent avertir, mute, expulser,
+// bannir ; les membres et roles autorises a tout ; le prefixe des commandes
+// ecrites (+ban @x 3j raison). Rien de regle = les admins du bot.
 
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, RoleSelectMenuBuilder,
@@ -10,41 +10,103 @@ import { embed, FR } from '../lib/brand.js';
 import { registre } from './actions.js';
 import { reglagesAntipub, statsModele } from './antipub.js';
 
+const ACTIONS = [
+  ['warn', '⚠️', 'avertir', '+warn, +warns'],
+  ['mute', '🔇', 'mute', '+mute, +unmute'],
+  ['kick', '👢', 'expulser', '+kick'],
+  ['ban', '⛔', 'bannir', '+ban, +unban'],
+];
+const roles = (ids) => (ids?.length ? ids.map((id) => `<@&${id}>`).join(' ') : '*personne*');
+
 export function pageModeration(note = '') {
-  const { membres, roles } = registre.autorises();
-  const libre = !membres.length && !roles.length;
-  const menuMembres = new UserSelectMenuBuilder().setCustomId('gsetup:mod:membres')
-    .setPlaceholder('👤 Membres autorisés à sanctionner').setMinValues(0).setMaxValues(25);
-  if (membres.length) menuMembres.setDefaultUsers(...membres.slice(0, 25));
-  const menuRoles = new RoleSelectMenuBuilder().setCustomId('gsetup:mod:roles')
-    .setPlaceholder('🛡️ Rôles autorisés à sanctionner').setMinValues(0).setMaxValues(25);
-  if (roles.length) menuRoles.setDefaultRoles(...roles.slice(0, 25));
+  const perms = registre.perms();
+  const { membres, roles: tout } = registre.autorises();
+  const p = registre.prefixe();
+  const regle = membres.length || tout.length || ACTIONS.some(([a]) => perms[a]?.length);
+  const lignes = ACTIONS.map(([a, emoji, verbe, cmds]) => `${emoji} **Peut ${verbe}** (\`${cmds.replace(/\+/g, p)}\`) · ${roles(perms[a])}`);
+  const menus = ACTIONS.map(([a, emoji, verbe]) => {
+    const m = new RoleSelectMenuBuilder().setCustomId(`gsetup:mod:perm:${a}`)
+      .setPlaceholder(`${emoji} Rôles qui peuvent ${verbe}`).setMinValues(0).setMaxValues(25);
+    if (perms[a]?.length) m.setDefaultRoles(...perms[a].slice(0, 25));
+    return new ActionRowBuilder().addComponents(m);
+  });
   return {
     embeds: [embed('🔨・MODÉRATION', {
       couleur: FR.bleu,
-      description: 'Qui peut utiliser **/warn**, **/kick**, **/mute**, **/unmute**, **/ban**, **/unban** et **/warns**.\n\n'
-        + (libre
-          ? '👥 **Aucun choix** : les admins du bot (rôle de /setup general, ou « Gérer le serveur »).'
-          : `👤 **Membres** · ${membres.length ? membres.map((id) => `<@${id}>`).join(' ') : '*aucun*'}\n`
-            + `🛡️ **Rôles** · ${roles.length ? roles.map((id) => `<@&${id}>`).join(' ') : '*aucun*'}\n\n`
-            + 'Eux seuls peuvent sanctionner, admins du bot compris. Videz les deux menus pour revenir aux admins du bot.')
+      description: '**Qui peut sanctionner**, action par action. Le propriétaire du serveur peut toujours tout.\n\n'
+        + `${lignes.join('\n')}\n`
+        + `👑 **Peut tout faire** · ${[...membres.map((id) => `<@${id}>`), ...tout.map((id) => `<@&${id}>`)].join(' ') || '*personne*'}\n\n`
+        + (regle ? '' : '➖ Rien de réglé : pour l\'instant, les admins du bot peuvent tout faire.\n\n')
+        + `### Commandes rapides\nDans n'importe quel salon, préfixe **\`${p}\`** :\n`
+        + `\`${p}ban @membre 3j pub\` · \`${p}mute 1234567890 1h spam\` · \`${p}kick @membre\` · \`${p}warn @membre insulte\`\n`
+        + `\`${p}unban 1234567890\` · \`${p}unmute @membre\` · \`${p}warns @membre\`\n`
+        + 'Mention ou ID, puis la durée (facultative : sans elle, ban définitif et mute 1 h), puis la raison (facultative).'
+        + ' Le message de commande est effacé, la réponse aussi au bout de 10 s ; tout reste dans le journal.'
         + (note ? `\n\n${note}` : ''),
     })],
     components: [
-      new ActionRowBuilder().addComponents(menuMembres),
-      new ActionRowBuilder().addComponents(menuRoles),
+      ...menus,
       new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('gsetup:mod:prefixe').setLabel(`Préfixe : ${p}`).setEmoji('⌨️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:mod:tout').setLabel('Qui peut tout faire').setEmoji('👑').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:accueil').setLabel('Retour').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
 }
 
+function pageTout(note = '') {
+  const { membres, roles: tout } = registre.autorises();
+  const menuMembres = new UserSelectMenuBuilder().setCustomId('gsetup:mod:membres')
+    .setPlaceholder('👤 Membres qui peuvent tout faire').setMinValues(0).setMaxValues(25);
+  if (membres.length) menuMembres.setDefaultUsers(...membres.slice(0, 25));
+  const menuRoles = new RoleSelectMenuBuilder().setCustomId('gsetup:mod:roles')
+    .setPlaceholder('🛡️ Rôles qui peuvent tout faire').setMinValues(0).setMaxValues(25);
+  if (tout.length) menuRoles.setDefaultRoles(...tout.slice(0, 25));
+  return {
+    embeds: [embed('👑・PEUT TOUT FAIRE', {
+      couleur: FR.bleu,
+      description: 'Ces membres et ces rôles ont **toutes** les sanctions (avertir, mute, expulser, bannir), en plus des rôles réglés action par action.'
+        + (note ? `\n\n${note}` : ''),
+    })],
+    components: [
+      new ActionRowBuilder().addComponents(menuMembres),
+      new ActionRowBuilder().addComponents(menuRoles),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('gsetup:page:mod').setLabel('Retour').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
 export async function onModerationSelect(interaction, id) {
+  if (id.startsWith('mod:perm:')) {
+    registre.poserPerms(id.slice('mod:perm:'.length), interaction.values);
+    return interaction.update(pageModeration('✅ Enregistré, effectif tout de suite.'));
+  }
   if (id === 'mod:membres') registre.poserAutorises({ membres: interaction.values });
   else if (id === 'mod:roles') registre.poserAutorises({ roles: interaction.values });
   else return null;
-  return interaction.update(pageModeration('✅ Enregistré, effectif tout de suite.'));
+  return interaction.update(pageTout('✅ Enregistré, effectif tout de suite.'));
+}
+
+export async function onModerationBouton(interaction, id) {
+  if (id === 'mod:tout') return interaction.update(pageTout());
+  if (id === 'mod:prefixe') {
+    return interaction.showModal(new ModalBuilder().setCustomId('gsetup:mod:prefixe').setTitle('Préfixe des commandes')
+      .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('p')
+        .setLabel('1 à 3 caractères, ex. + ! ?').setStyle(TextInputStyle.Short).setRequired(true)
+        .setMinLength(1).setMaxLength(3).setValue(registre.prefixe()))));
+  }
+  return null;
+}
+
+export async function onModerationModal(interaction, id) {
+  if (id !== 'mod:prefixe') return null;
+  const p = interaction.fields.getTextInputValue('p').trim();
+  if (!p || /\s|[@#<>`*_~|]/.test(p)) return interaction.update(pageModeration('❌ Préfixe refusé : pas d\'espace ni de @ # < > ` * _ ~ |.'));
+  registre.poserPrefixe(p);
+  return interaction.update(pageModeration(`✅ Préfixe : \`${p}\`. Exemple : \`${p}ban @membre 3j pub\`.`));
 }
 
 // ------------------------------------------------------------------ anti-pub

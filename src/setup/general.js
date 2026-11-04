@@ -39,7 +39,7 @@ import { duree } from '../../ingame/diagnostic.js';
 import { pageTags, onTagsSelect, onTagsBouton, onTagsModal } from '../tags/setup.js';
 import { reglagesTags } from '../tags/surveillance.js';
 import {
-  pageModeration, onModerationSelect, pageAntipub, onAntipubSelect, onAntipubBouton, onAntipubModal,
+  pageModeration, onModerationSelect, onModerationBouton, onModerationModal, pageAntipub, onAntipubSelect, onAntipubBouton, onAntipubModal,
 } from '../moderation/setup.js';
 
 const ok = (v) => (v ? '✅' : '⚠️');
@@ -450,6 +450,7 @@ export async function onGsetupBouton(interaction) {
   if (id === 'page:mod') return interaction.update(pageModeration());
   if (id === 'page:antipub') return interaction.update(pageAntipub());
   if (id.startsWith('antipub:')) return onAntipubBouton(interaction, id);
+  if (id.startsWith('mod:')) return onModerationBouton(interaction, id);
   if (id === 'beneficiaire') {
     return interaction.showModal(new ModalBuilder().setCustomId('gsetup:beneficiaire').setTitle('Bénéficiaire des dons')
       .addComponents(new ActionRowBuilder().addComponents(
@@ -509,6 +510,7 @@ export async function onGsetupModal(interaction) {
   const id = interaction.customId.slice('gsetup:'.length);
   if (id.startsWith('tags:')) return onTagsModal(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubModal(interaction, id);
+  if (id.startsWith('mod:')) return onModerationModal(interaction, id);
   const pseudo = interaction.fields.getTextInputValue('pseudo').trim();
   if (pseudo && !/^\.?[A-Za-z0-9_]{1,24}$/.test(pseudo)) {
     return interaction.update(pageDons(`❌ « ${pseudo} » n'est pas un pseudo Minecraft.`));
