@@ -11,7 +11,7 @@ import { registre } from './actions.js';
 import { reglagesAntipub, statsModele } from './antipub.js';
 
 const ACTIONS = [
-  ['warn', '⚠️', 'avertir', '+warn, +warns'],
+  ['warn', '⚠️', 'avertir', '+warn, +unwarn, +warns'],
   ['mute', '🔇', 'mute', '+mute, +unmute'],
   ['kick', '👢', 'expulser', '+kick'],
   ['ban', '⛔', 'bannir', '+ban, +unban'],
@@ -39,7 +39,7 @@ export function pageModeration(note = '') {
         + (regle ? '' : '➖ Rien de réglé : pour l\'instant, les admins du bot peuvent tout faire.\n\n')
         + `### Commandes rapides\nDans n'importe quel salon, préfixe **\`${p}\`** :\n`
         + `\`${p}ban @membre 3j pub\` · \`${p}mute 1234567890 1h spam\` · \`${p}kick @membre\` · \`${p}warn @membre insulte\`\n`
-        + `\`${p}unban 1234567890\` · \`${p}unmute @membre\` · \`${p}warns @membre\`\n`
+        + `\`${p}unban 1234567890\` · \`${p}unmute @membre\` · \`${p}unwarn @membre\` · \`${p}warns @membre\`\n`
         + 'Mention ou ID, puis la durée (facultative : sans elle, ban définitif et mute 1 h), puis la raison (facultative).'
         + ' Le message de commande est effacé, la réponse aussi au bout de 10 s ; tout reste dans le journal.'
         + (note ? `\n\n${note}` : ''),

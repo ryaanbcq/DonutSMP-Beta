@@ -29,3 +29,16 @@ test('prefixe : autres messages ignores, prefixe reglable', () => {
   assert.equal(lireCommande(`+BAN ${ID}`).nom, 'ban');
   assert.equal(lireCommande('+ban pseudo').cible, null);
 });
+
+test('unwarn : commande reconnue, numero, tout ou le dernier par defaut', async () => {
+  const { lireRetrait } = await import('../src/moderation/actions.js');
+  const c = lireCommande(`+unwarn <@${ID}> 2 erreur de modo`);
+  assert.equal(c.nom, 'unwarn');
+  assert.equal(c.cible, ID);
+  assert.equal(c.raison, '2 erreur de modo');
+  assert.deepEqual(lireRetrait('', 3), { n: 3 });
+  assert.deepEqual(lireRetrait('dernier', 3), { n: 3 });
+  assert.deepEqual(lireRetrait('Tout', 3), { n: null });
+  assert.deepEqual(lireRetrait(' 1 ', 3), { n: 1 });
+  assert.ok(lireRetrait('abc', 3).erreur);
+});

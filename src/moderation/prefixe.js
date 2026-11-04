@@ -4,6 +4,7 @@
 //   +mute @membre [temps] [raison]     (sans temps : 1 h)
 //   +kick @membre [raison]
 //   +warn @membre [raison]
+//   +unwarn @membre [numero|tout] [raison]   (sans numero : le dernier)
 //   +unmute @membre [raison]
 //   +unban <id ou @mention> [raison]
 //   +warns @membre
@@ -15,7 +16,7 @@
 
 import { config } from '../config.js';
 import {
-  registre, peutSanctionner, appliquerSanction, appliquerUnban, MUTE_DEFAUT_MS, PERMISSION,
+  registre, peutSanctionner, appliquerSanction, appliquerUnban, appliquerUnwarn, MUTE_DEFAUT_MS, PERMISSION,
 } from './actions.js';
 import { lireDuree, lireIdUtilisateur } from './outils.js';
 
@@ -58,6 +59,16 @@ export async function surMessage(message) {
     return repondre(message, `❌ Indique le membre par une mention ou son ID : \`${p}${c.nom} @membre${AVEC_DUREE.has(c.nom) ? ' [temps]' : ''} [raison]\``);
   }
   const { guild, member: moderateur } = message;
+
+  if (c.nom === 'unwarn') {
+    // Le premier mot apres la cible est le numero s il en a la forme.
+    const [premier = '', ...suite] = c.raison.split(/\s+/);
+    const estNumero = /^(\d+|tout|tous|dernier)$/i.test(premier);
+    const r = await appliquerUnwarn({
+      guild, moderateur, id: c.cible, quoi: estNumero ? premier : '', raison: (estNumero ? suite.join(' ') : c.raison).trim(),
+    });
+    return repondre(message, r.texte);
+  }
 
   if (c.nom === 'unban') return repondre(message, (await appliquerUnban({ guild, moderateur, id: c.cible, raison: c.raison })).texte);
 

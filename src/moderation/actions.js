@@ -138,7 +138,7 @@ export function refusHierarchie({ moderateur, cible, guild }) {
 // Chaque commande releve d une permission : unmute va avec mute, unban avec
 // ban, warns avec warn.
 export const PERMISSION = {
-  warn: 'warn', warns: 'warn', mute: 'mute', unmute: 'mute', kick: 'kick', ban: 'ban', unban: 'ban',
+  warn: 'warn', warns: 'warn', unwarn: 'warn', mute: 'mute', unmute: 'mute', kick: 'kick', ban: 'ban', unban: 'ban',
 };
 
 /**
@@ -270,7 +270,7 @@ export async function appliquerUnban({ guild, moderateur, id, raison }) {
     niveau: 'info',
     titre: 'Modération : débannissement',
     texte: `✅ ${qui} débanni.`,
-    champs: { Raison: raison, Par: `<@${moderateur.id}>`, 'Raison du ban': ban.reason ?? '—' },
+    champs: { Raison: raison, Par: `<@${moderateur.id}>`, 'Raison du ban': ban.reason ?? 'aucune' },
   });
   return { ok: true, texte: `✅ ${qui} débanni. Il peut revenir avec une invitation.` };
 }
@@ -342,6 +342,62 @@ export function demarrerModeration(client) {
   leverBansEchus(client).catch((e) => console.warn('[mod] bans temporaires :', e.message));
   setInterval(() => leverBansEchus(client).catch((e) => console.warn('[mod] bans temporaires :', e.message)), 60_000).unref();
 }
+
+// ------------------------------------------------------------------ /unwarn
+
+/**
+ * Lit ce qu il faut retirer : vide = le dernier avertissement, « tout »,
+ * ou un numero (1 = le plus ancien). Rend { n } (null = tout) ou { erreur }.
+ */
+export function lireRetrait(saisie, total) {
+  const t = String(saisie ?? '').trim().toLowerCase();
+  if (!t || t === 'dernier') return { n: total || 0 };
+  if (t === 'tout' || t === 'tous') return { n: null };
+  if (!/^\d+$/.test(t)) return { erreur: 'un numéro, « dernier » ou « tout »' };
+  return { n: Number(t) };
+}
+
+/** Retire un ou plusieurs avertissements, journal et MP. Rend { texte }. */
+export async function appliquerUnwarn({ guild, moderateur, id, quoi = '', raison = '' }) {
+  const total = registre.warns(id).length;
+  if (!total) return { texte: `➖ <@${id}> n'a aucun avertissement.` };
+  const r = lireRetrait(quoi, total);
+  if (r.erreur) return { texte: `❌ Quel avertissement retirer : ${r.erreur}.` };
+  const retires = registre.retirerWarns(id, r.n);
+  if (!retires) return { texte: `❌ <@${id}> n'a pas d'avertissement n°${r.n} (il en a ${total}).` };
+  const reste = registre.warns(id).length;
+  const quoiTexte = r.n === null ? `tous ses avertissements (${retires})` : `l'avertissement n°${r.n}`;
+  journal({
+    niveau: 'info',
+    titre: 'Modération : avertissement retiré',
+    texte: `${quoiTexte[0].toUpperCase()}${quoiTexte.slice(1)} de <@${id}> retiré${retires > 1 ? 's' : ''}.`,
+    champs: { Par: `<@${moderateur.id}>`, Restants: String(reste), ...(raison ? { Raison: raison.slice(0, 400) } : {}) },
+  });
+  const membre = await guild.members.fetch(id).catch(() => null);
+  await membre?.send(`✅ Sur **${guild.name}**, ${quoiTexte} ${retires > 1 ? 'ont été retirés' : 'a été retiré'}${raison ? ` : ${raison}` : '.'}`).catch(() => {});
+  return { texte: `✅ ${quoiTexte[0].toUpperCase()}${quoiTexte.slice(1)} retiré${retires > 1 ? 's' : ''} à <@${id}> (reste ${reste}).` };
+}
+
+export const commandeUnwarn = {
+  data: new SlashCommandBuilder().setName('unwarn').setDescription('Retirer un avertissement (le dernier par défaut)')
+    .addUserOption((o) => o.setName('joueur').setDescription('Le membre').setRequired(false))
+    .addStringOption((o) => o.setName('id').setDescription('ID Discord, à la place de joueur').setRequired(false))
+    .addStringOption((o) => o.setName('numero').setDescription('Numéro de l\'avertissement (voir /warns), ou « tout ». Vide = le dernier').setRequired(false))
+    .addStringOption((o) => o.setName('raison').setDescription('Raison, envoyée au membre et au journal').setRequired(false).setMaxLength(400)),
+  requiresLink: false,
+  async execute(interaction) {
+    if (!peutSanctionner(interaction.member, 'unwarn')) {
+      return interaction.reply({ content: '🔒 Tu n\'as pas la permission pour cette sanction.', ...EPH });
+    }
+    const id = interaction.options.getUser('joueur')?.id ?? lireIdUtilisateur(interaction.options.getString('id') ?? '');
+    if (!id) return interaction.reply({ content: '❌ Indique le membre : option **joueur**, ou son ID dans l\'option **id**.', ...EPH });
+    const r = await appliquerUnwarn({
+      guild: interaction.guild, moderateur: interaction.member, id,
+      quoi: interaction.options.getString('numero') ?? '', raison: interaction.options.getString('raison') ?? '',
+    });
+    return interaction.reply({ content: r.texte, allowedMentions: { parse: [] }, ...EPH });
+  },
+};
 
 // ------------------------------------------------------------------ /warns
 
