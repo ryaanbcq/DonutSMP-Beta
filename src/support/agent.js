@@ -171,7 +171,9 @@ async function intervenir(channelId) {
       });
     }
     // Meme apres une transmission : le membre peut dire que c est regle.
-    if (rep.resolu && !rep.transmettre) await demanderResolution(salon, ticket).catch((e) => console.warn('[support] resolution :', e.message));
+    // Pas tant que la reponse porte ses propres boutons (bonne personne ?,
+    // signalement, import) : une question a la fois.
+    if (rep.resolu && !rep.transmettre && !components.length) await demanderResolution(salon, ticket).catch((e) => console.warn('[support] resolution :', e.message));
     echecs.delete(channelId);
   } catch (e) {
     console.warn('[support] reponse :', e.message);
