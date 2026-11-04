@@ -248,7 +248,7 @@ function configuration() {
       + `**Journal du bot** : ${salon(settings.salonJournal())} (pannes, erreurs, sanctions automatiques)\n`
       + `**Logs des liaisons** : ${salon(settings.salonLogs())}\n`
       + `**Idées et bugs du bot** : ${salon(reglagesSuggestions.salon())} (un ✅ = un vote)\n`
-      + '-# Un souci avec le bot : prévenir Ryan.',
+      + `-# Un souci avec le bot : prévenir **NotRyzn**${reglagesSuggestions.salon() ? ` ou le poster dans ${salon(reglagesSuggestions.salon())}` : ''}.`,
   });
 }
 
