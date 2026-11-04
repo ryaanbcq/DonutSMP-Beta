@@ -19,7 +19,7 @@ test('hierarchie : soi-meme, proprietaire, bot, role egal ou au-dessus refuses',
   assert.match(refusHierarchie({ moderateur: mod, cible: mod, guild }), /toi-même/);
   assert.match(refusHierarchie({ moderateur: mod, cible: membre('owner', 1), guild }), /propriétaire/);
   assert.match(refusHierarchie({ moderateur: mod, cible: membre('b', 1, { bot: true }), guild }), /bot/);
-  assert.match(refusHierarchie({ moderateur: mod, cible: membre('x', 10), guild }), /niveau/);
+  assert.match(refusHierarchie({ moderateur: mod, cible: membre('x', 10), guild }), /même niveau/);
   assert.equal(refusHierarchie({ moderateur: mod, cible: membre('y', 9), guild }), null);
   // Le proprietaire passe au-dessus de la hierarchie.
   assert.equal(refusHierarchie({ moderateur: membre('owner', 1), cible: membre('z', 50), guild }), null);

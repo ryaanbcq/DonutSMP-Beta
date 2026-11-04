@@ -47,6 +47,7 @@ import { demarrerModeration } from './moderation/actions.js';
 import { demarrerAntipub, onBoutonAntipub } from './moderation/antipub.js';
 import { demarrerPrefixe } from './moderation/prefixe.js';
 import { demarrerVocaux, onVoicehub } from './vocaux/hub.js';
+import { demarrerGuide } from './guide/staff.js';
 import { intentMembresCoche } from './tags/intent.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -149,6 +150,7 @@ client.once('clientReady', async (c) => {
   setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();
   demarrerSurveillanceTags(c);
   await demarrerVocaux(c).catch((e) => console.error('[vocaux] demarrage :', e.message));
+  demarrerGuide(c);
 });
 
 // Coupures de la passerelle Discord : discord.js reprend seul, on annonce la

@@ -43,6 +43,7 @@ import {
 } from '../moderation/setup.js';
 import { pageVocaux, onVocauxSelect, onVocauxBouton } from '../vocaux/setup.js';
 import { reglagesVocaux } from '../vocaux/hub.js';
+import { pageGuide, onGuideSelect, onGuideBouton } from '../guide/setup.js';
 
 const ok = (v) => (v ? '✅' : '⚠️');
 const salon = (id) => (id ? `<#${id}>` : '*à choisir*');
@@ -108,6 +109,7 @@ export async function rendreSetupGeneral(guild, note = '') {
         new ButtonBuilder().setCustomId('gsetup:page:antipub').setLabel('Anti-pub').setEmoji('🚫').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:vocaux').setLabel(`Vocaux${reglagesVocaux.hub() ? '' : ' (éteints)'}`)
           .setEmoji('🔊').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:page:guide').setLabel('Guide staff').setEmoji('📘').setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -364,6 +366,7 @@ export async function onGsetupSelect(interaction) {
   if (id.startsWith('mod:')) return onModerationSelect(interaction, id);
   if (id.startsWith('antipub:')) return onAntipubSelect(interaction, id);
   if (id.startsWith('vocaux:')) return onVocauxSelect(interaction, id);
+  if (id === 'guide:salon') return onGuideSelect(interaction);
 
   if (id === 'admin') {
     const avant = settings.rolesAdmin();
@@ -456,6 +459,8 @@ export async function onGsetupBouton(interaction) {
   if (id === 'page:antipub') return interaction.update(pageAntipub());
   if (id === 'page:vocaux') return interaction.update(pageVocaux(guild));
   if (id.startsWith('vocaux:')) return onVocauxBouton(interaction, id);
+  if (id === 'page:guide') return interaction.update(pageGuide());
+  if (id === 'guide:republier') return onGuideBouton(interaction);
   if (id.startsWith('antipub:')) return onAntipubBouton(interaction, id);
   if (id.startsWith('mod:')) return onModerationBouton(interaction, id);
   if (id === 'beneficiaire') {

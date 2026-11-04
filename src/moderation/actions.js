@@ -17,7 +17,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
 import { store } from '../db.js';
-import { settings } from '../settings.js';
 import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
 import {
@@ -118,17 +117,17 @@ export function commande(nom) {
 
 // ------------------------------------------------------------------ controles
 
-const estStaff = (membre) => estAdmin(membre, { ...config.discord, adminRoleId: settings.rolesAdmin() });
 
 /** Raison du refus, ou null si le moderateur peut agir sur la cible. */
 export function refusHierarchie({ moderateur, cible, guild }) {
-  if (cible.id === moderateur.id) return 'tu ne peux pas te viser toi-même';
-  if (cible.id === guild.ownerId) return 'c\'est le propriétaire du serveur';
-  if (cible.user?.bot) return 'c\'est un bot';
+  if (cible.id === moderateur.id) return 'tu ne peux pas te sanctionner toi-même';
+  if (cible.id === guild.ownerId) return 'on ne touche pas au propriétaire du serveur';
+  if (cible.user?.bot) return 'on ne sanctionne pas un bot';
   if (moderateur.id === guild.ownerId) return null;
-  if (estStaff(cible)) return 'c\'est un membre du staff du bot';
+  // Le staff se sanctionne comme les autres : seule la hierarchie des roles
+  // decide (avant, tout admin du bot etait intouchable, meme par un superieur).
   if (cible.roles.highest.position >= moderateur.roles.highest.position) {
-    return 'son rôle le plus haut est au même niveau ou au-dessus du tien';
+    return `**${cible.displayName ?? cible.user?.username ?? 'ce membre'}** a un rôle au même niveau ou au-dessus du tien`;
   }
   return null;
 }
@@ -177,7 +176,7 @@ export async function appliquerSanction({ nom, guild, moderateur, utilisateur, r
   if (!cible && nom !== 'ban') return { ok: false, texte: `❌ <@${utilisateur.id}> n'est pas sur le serveur.` };
   if (cible) {
     const refus = refusHierarchie({ moderateur, cible, guild });
-    if (refus) return { ok: false, texte: `❌ Impossible : ${refus}.` };
+    if (refus) return { ok: false, texte: `🛡️ Pas possible : ${refus}.` };
   }
   if (nom === 'mute' && duree > MUTE_MAX_MS) {
     return { ok: false, texte: '❌ Discord limite un mute à 28 jours. Pour plus long, utilise un ban avec une durée.' };
