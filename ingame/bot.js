@@ -18,6 +18,8 @@ import { RefundLedger, dayKey } from './refunds.js';
 import { Reversements } from './dons.js';
 import { creerVerificateur } from './verifications.js';
 import nbt from 'prismarine-nbt';
+import minecraftData from 'minecraft-data';
+import { paquetClicCustom } from '../src/minecraft/clic.js';
 import { lireDialogueStats, boutonProfilComplet, lireProfilComplet, lignesLibellees, rendreComposant } from '../src/minecraft/dialog.js';
 
 const cfg = {
@@ -449,6 +451,10 @@ function connect() {
 
   ceBot.on('kicked', (reason) => {
     console.warn(`[mc] kick : ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
+    if (JSON.stringify(reason ?? '').includes('custom_click_action')) {
+      clicCustomCoupe = true;
+      console.warn('[stats] kick sur le clic du profil complet : clics coupes jusqu au redemarrage');
+    }
     saveStatus({ online: false }).catch(() => {});
     signaler(diagnostiquerKick(reason));
   });
@@ -596,6 +602,9 @@ async function ecrireLigneStats(objet) {
   await appendFile(cfg.soldes.statsSortie, JSON.stringify({ ...objet, at: Date.now() }) + '\n');
 }
 
+// Un kick sur ce paquet coupe les clics jusqu au prochain redemarrage (pas de boucle de kicks).
+let clicCustomCoupe = false;
+
 // Page « profil complet » : on lui laisse ce delai, sinon la fiche part avec ses 4 lignes.
 const SUITE_STATS_MS = 8_000;
 
@@ -639,9 +648,14 @@ function suivreBouton(action) {
     commander(String(action.command).startsWith('/') ? action.command : `/${action.command}`);
     return 'attendre';
   }
-  if ((type === 'custom' || type === 'dynamic/custom') && action.id) {
+  if ((type === 'custom' || type === 'dynamic/custom') && action.id && !clicCustomCoupe) {
     try {
-      bot._client.write('custom_click_action', { id: action.id, nbt: action.payload !== undefined ? versNbt(action.payload) : undefined });
+      const mappings = minecraftData(bot.version).protocol.play.toServer.types.packet[1][0].type[1].mappings;
+      const idPaquet = Number(Object.entries(mappings).find(([, nom]) => nom === 'custom_click_action')?.[0]);
+      if (!Number.isInteger(idPaquet)) throw new Error(`paquet inconnu en ${bot.version}`);
+      // dynamic/custom : le client renvoie les « additions » (plus les champs saisis, aucun ici).
+      const charge = type === 'custom' ? action.payload : action.additions;
+      bot._client.writeRaw(paquetClicCustom(idPaquet, action.id, charge && typeof charge === 'object' ? versNbt(charge) : null));
       return 'attendre';
     } catch (e) {
       console.warn('[stats] clic du bouton refuse :', e.message);
