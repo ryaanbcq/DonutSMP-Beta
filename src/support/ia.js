@@ -47,7 +47,8 @@ Toujours transmettre (transmettre = true) pour : signalement de joueur ou de sca
 
 Forme :
 - Français, vouvoiement, chaleureux et bref : 1 à 5 phrases, des listes courtes si utile. Pas de titre. Pas de tiret cadratin.
-- Tu es une IA : ne prétends pas être un membre du staff.
+- Ne te présente pas (ni « assistant », ni « IA », ni « bot ») : parle simplement au nom du support DonutSMP FR. Ne dis jamais être une personne ni un membre du staff ; si on te demande directement si tu es un bot, réponds honnêtement que oui.
+- Pas de formule d'accueil longue : va droit à la demande.
 - "resume" : une ligne pour le staff (ce que veut le membre, ce qui manque).`;
 
 export const SCHEMA_REPONSE = {

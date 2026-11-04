@@ -8,6 +8,7 @@
 // jours) : la revue quotidienne en tire des propositions de FAQ.
 
 import { escapeMarkdown } from 'discord.js';
+import { embed, FR } from '../lib/brand.js';
 import { store } from '../db.js';
 import { config } from '../config.js';
 import { journal } from '../ops/journal.js';
@@ -18,16 +19,17 @@ import { memoire, reglagesSupport, faqTexte } from './reglages.js';
 import { connaissancesServeur } from './connaissances.js';
 import { repondreTicket, iaDisponible } from './ia.js';
 
-const MARQUE = '🤖 **Assistant DonutFR** · IA, en attendant le staff';
 const minuteurs = new Map(); // channelId -> timeout
 const enCours = new Set();
 let client = null;
 
 export const supportActif = () => reglagesSupport.actif() && iaDisponible();
 
-function role(message) {
+function role(message, ticket) {
   if (message.author.id === client?.user?.id) return null; // nos messages sont notes a l envoi
   if (message.author.bot) return null;
+  // Dans son propre ticket, l auteur est le membre, meme s il est staff.
+  if (message.author.id === ticket.discord_id) return 'membre';
   return estStaff(message.member) ? 'staff' : 'membre';
 }
 
@@ -71,8 +73,9 @@ async function intervenir(channelId) {
     });
     const texte = String(rep.message ?? '').replace(/—/g, ',').trim().slice(0, 1800);
     if (!texte) return;
-    const fin = rep.transmettre ? '\n\n-# Un membre du staff prendra le relais dès que possible.' : '\n\n-# Le staff peut reprendre la main à tout moment.';
-    const m = await salon.send({ content: `${MARQUE}\n${texte}${fin}`, allowedMentions: { parse: [] } });
+    const carte = embed('💬・SUPPORT DONUTSMP FR', { couleur: FR.bleu, description: texte })
+      .setFooter({ text: rep.transmettre ? 'Un membre du staff prend le relais dès que possible' : 'Le staff peut reprendre la main à tout moment' });
+    const m = await salon.send({ embeds: [carte], allowedMentions: { parse: [] } });
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
     memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: rep.transmettre, resume: rep.resume });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
@@ -99,7 +102,7 @@ async function surMessage(message) {
   if (!message.inGuild() || message.guildId !== config.discord.guildId) return;
   const ticket = store.getTicket(message.channelId);
   if (!ticket || ticket.etat !== 'ouvert') return;
-  const r = role(message);
+  const r = role(message, ticket);
   if (!r) return;
   memoire.noter({
     id: message.id, channelId: message.channelId, role: r, content: message.content,

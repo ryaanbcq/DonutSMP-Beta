@@ -174,7 +174,7 @@ function supportIA() {
       `État : ${actif ? '🟢 **actif**' : '🔴 **éteint**'}\n\n`
       + `Quand personne du staff n'a répondu depuis **${r.delaiJourMin} min** (**${r.delaiNuitMin} min la nuit**, de ${r.nuitDebut} h à ${r.nuitFin} h),`
       + ' l\'assistant prend le **début** du ticket : il accueille, fait préciser ce qui manque (pseudo, captures, dates) et répond seul'
-      + ' aux questions simples de support technique. Ses messages commencent par « 🤖 Assistant DonutFR ».\n\n'
+      + ' aux questions simples de support technique. Ses messages arrivent dans un encadré « 💬 Support DonutSMP FR ».\n\n'
       + '• **Il se tait pour de bon** dès qu\'un membre du staff écrit ou clique **Prendre en charge**.\n'
       + '• Argent, scam, sanctions, middleman, partenariat : il ne promet rien, rassemble les faits et **transmet** (alerte dans le journal).\n'
       + '• **Chaque jour à 5 h**, il relit les tickets où le staff a répondu et propose des entrées de FAQ :'
