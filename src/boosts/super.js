@@ -7,7 +7,8 @@
 //   - au demarrage : recomptage depuis l historique du salon systeme, en ne
 //     gardant que les boosts posterieurs au debut du boost actuel du membre ;
 //   - le role n existe qu avec 2 boosts actifs : retire a tout membre qui ne
-//     les a pas, meme pose a la main (Ryan, 04/11), sauf au proprietaire.
+//     les a pas, meme pose a la main (Ryan, 04/11), sauf au proprietaire
+//     et aux membres gardes (GARDES, kv boosts.gardes).
 // Limites : il faut que les messages de boost soient actives dans les
 // parametres du serveur ; un boost retire sur deux n est pas visible (Discord
 // ne previent que quand le membre ne booste plus du tout).
@@ -74,6 +75,10 @@ export const reglagesBoosts = {
   },
 };
 
+// Gardent le role sans 2 boosts actifs : cctsuyo (Ryan, 04/11), plus kv boosts.gardes (IDs separes par des virgules).
+const GARDES = ['689896112383066156'];
+const garde = (id) => GARDES.includes(id) || String(store.kvGet('boosts.gardes') ?? '').split(',').map((x) => x.trim()).includes(id);
+
 function roleSuper(guild) {
   const id = reglagesBoosts.roleId();
   if (id) return guild.roles.cache.get(id) ?? null;
@@ -84,7 +89,7 @@ async function appliquer(membre, c) {
   const role = roleSuper(membre.guild);
   if (!role) return null;
   const e = c[membre.id] ?? { n: 0, bot: false };
-  const d = decisionRole({ boosts: e.n, booste: Boolean(membre.premiumSinceTimestamp), aLeRole: membre.roles.cache.has(role.id), proprietaire: membre.id === membre.guild.ownerId });
+  const d = decisionRole({ boosts: e.n, booste: Boolean(membre.premiumSinceTimestamp), aLeRole: membre.roles.cache.has(role.id), proprietaire: membre.id === membre.guild.ownerId || garde(membre.id) });
   if (d === 'donner') {
     await membre.roles.add(role, `A boosté le serveur ${e.n} fois`);
     c[membre.id] = { ...e, bot: true };
