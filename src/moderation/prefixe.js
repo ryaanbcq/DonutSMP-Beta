@@ -8,7 +8,7 @@
 //   +unmute @membre [raison]
 //   +unban <id ou @mention> [raison]
 //   +warns @membre
-//   +habs @membre / +unhabs @membre     (role Prison, voir habs.js)
+//   +hebs @membre / +unhebs @membre     (role Prison, voir hebs.js)
 //
 // Le prefixe se regle dans /setup general > Modération (« + » par defaut).
 // Memes droits, memes garde-fous et meme journal que les slash commands. Le
@@ -20,7 +20,7 @@ import {
   registre, peutSanctionner, appliquerSanction, appliquerUnban, appliquerUnwarn, MUTE_DEFAUT_MS, PERMISSION,
 } from './actions.js';
 import { lireDuree, lireIdUtilisateur } from './outils.js';
-import { appliquerHabs, PERM_HABS } from './habs.js';
+import { appliquerHebs, PERM_HEBS } from './hebs.js';
 
 const REPONSE_MS = 10_000;
 const AVEC_DUREE = new Set(['ban', 'mute']);
@@ -44,21 +44,21 @@ export function lireCommande(texte, prefixe = '+') {
   return { nom, cible: lireIdUtilisateur(cible), cibleBrute: cible, duree, raison: reste.join(' ').trim() };
 }
 
-/** « +habs @x » ou « +unhabs @x » : { retirer, cible, cibleBrute }, sinon null. */
-export function lireHabs(texte, prefixe = '+') {
+/** « +hebs @x » ou « +unhebs @x » : { retirer, cible, cibleBrute }, sinon null. */
+export function lireHebs(texte, prefixe = '+') {
   const t = String(texte ?? '').trim();
   if (!prefixe || !t.startsWith(prefixe)) return null;
   const [mot, cible = ''] = t.slice(prefixe.length).trim().split(/\s+/);
   const nom = mot?.toLowerCase();
-  if (nom !== 'habs' && nom !== 'unhabs') return null;
-  return { retirer: nom === 'unhabs', cible: lireIdUtilisateur(cible), cibleBrute: cible };
+  if (nom !== 'hebs' && nom !== 'unhebs') return null;
+  return { retirer: nom === 'unhebs', cible: lireIdUtilisateur(cible), cibleBrute: cible };
 }
 
-async function surHabs(message, h) {
-  if (!peutSanctionner(message.member, PERM_HABS)) return; // on ne revele rien
+async function surHebs(message, h) {
+  if (!peutSanctionner(message.member, PERM_HEBS)) return; // on ne revele rien
   await message.delete().catch(() => {});
-  if (!h.cible) return repondre(message, `❌ Indique le membre : \`${registre.prefixe()}${h.retirer ? 'unhabs' : 'habs'} @membre\``);
-  const r = await appliquerHabs({ guild: message.guild, moderateur: message.member, id: h.cible, retirer: h.retirer });
+  if (!h.cible) return repondre(message, `❌ Indique le membre : \`${registre.prefixe()}${h.retirer ? 'unhebs' : 'hebs'} @membre\``);
+  const r = await appliquerHebs({ guild: message.guild, moderateur: message.member, id: h.cible, retirer: h.retirer });
   return repondre(message, r.texte);
 }
 
@@ -69,8 +69,8 @@ async function repondre(message, texte) {
 
 export async function surMessage(message) {
   if (!message.inGuild() || message.author.bot || message.guildId !== config.discord.guildId) return;
-  const h = lireHabs(message.content, registre.prefixe());
-  if (h) return surHabs(message, h);
+  const h = lireHebs(message.content, registre.prefixe());
+  if (h) return surHebs(message, h);
   const c = lireCommande(message.content, registre.prefixe());
   if (!c) return;
   if (!peutSanctionner(message.member, c.nom)) return; // pas de reponse : on ne revele rien

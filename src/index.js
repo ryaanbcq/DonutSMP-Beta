@@ -46,7 +46,7 @@ import { suivreMembres } from './lib/membres.js';
 import { demarrerModeration } from './moderation/actions.js';
 import { demarrerAntipub, onBoutonAntipub } from './moderation/antipub.js';
 import { demarrerPrefixe } from './moderation/prefixe.js';
-import { demarrerHabs } from './moderation/habs.js';
+import { demarrerHebs } from './moderation/hebs.js';
 import { demarrerVocaux, onVoicehub } from './vocaux/hub.js';
 import { demarrerGuide } from './guide/staff.js';
 import { demarrerSuggestions } from './suggestions/salon.js';
@@ -104,7 +104,7 @@ client.once('clientReady', async (c) => {
   demarrerModeration(c);
   demarrerAntipub(c);
   demarrerPrefixe(c);
-  demarrerHabs(c);
+  demarrerHebs(c);
   // Avant les fils de vouches, qui prennent plusieurs minutes au demarrage.
   demarrerGuide(c);
   demarrerSuggestions(c);

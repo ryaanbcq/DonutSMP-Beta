@@ -12,7 +12,7 @@ import { reglagesAntipub, statsModele } from './antipub.js';
 
 const ACTIONS = [
   ['warn', '⚠️', 'avertir', '+warn, +unwarn, +warns'],
-  ['mute', '🔇', 'mute', '+mute, +unmute, +habs, +unhabs'],
+  ['mute', '🔇', 'mute', '+mute, +unmute, +hebs, +unhebs'],
   ['kick', '👢', 'expulser', '+kick'],
   ['ban', '⛔', 'bannir', '+ban, +unban'],
 ];
