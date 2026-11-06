@@ -1,3 +1,4 @@
+import { ouvrirPanneau } from './brouillon.js';
 // Repris d'Orbit (src/modules/giveaways/commands.ts) et adapte a DonutSMP FR.
 import { ActionRowBuilder, ApplicationCommandType, ChannelType, ContextMenuCommandBuilder, EmbedBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, SlashCommandBuilder, TextInputBuilder, TextInputStyle, } from 'discord.js';
 import { hexToInt } from './outils/couleurs.js';
@@ -227,21 +228,12 @@ const gdrop = {
     },
 };
 const gcreate = {
-    data: new SlashCommandBuilder().setName('gcreate').setDescription('Crée un giveaway pas à pas, dans une fenêtre'),
+    data: new SlashCommandBuilder().setName('gcreate').setDescription('Crée un giveaway depuis un panneau (lot, rôles requis, rôles bonus)'),
     async execute(interaction, ctx) {
         if (!interaction.inCachedGuild() || !(await guard(interaction, ctx)))
             return;
-        const field = (id, label, style, required, placeholder, max, value) => {
-            const input = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setPlaceholder(placeholder).setMaxLength(max);
-            if (value)
-                input.setValue(value);
-            return new ActionRowBuilder().addComponents(input);
-        };
-        const modal = new ModalBuilder()
-            .setCustomId(`gcreate:${interaction.channelId}`)
-            .setTitle('Nouveau giveaway')
-            .addComponents(field('prize', 'Prix', TextInputStyle.Short, true, 'Nitro 1 mois', 256), field('duration', 'Durée', TextInputStyle.Short, true, '30m, 2h, 3d…', 20, '1d'), field('winners', 'Nombre de gagnants', TextInputStyle.Short, true, '1', 2, '1'), field('description', 'Description (facultatif)', TextInputStyle.Paragraph, false, 'Détails, règles…', 1000), field('image', 'Image (lien https, facultatif)', TextInputStyle.Short, false, 'https://…/image.png', 500));
-        return interaction.showModal(modal);
+        // Panneau de creation, dans le style des panneaux de config du bot (brouillon.js).
+        return ouvrirPanneau(interaction, ctx);
     },
 };
 // ───────────────────────────── /gparticipants (modérateurs) ─────────────────────────────

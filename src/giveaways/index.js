@@ -1,4 +1,4 @@
-import { ouvrirBrouillon, surBrouillon } from './brouillon.js';
+import { surBrouillon } from './brouillon.js';
 // Repris d'Orbit (src/modules/giveaways/index.ts) : boutons, formulaire /gcreate
 // et tache de fond (fin des giveaways, programmes, rappels, reclamations).
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, MessageFlags, PermissionFlagsBits, } from 'discord.js';
@@ -153,21 +153,14 @@ export const giveawaysModule = {
             const image = imageLink ? normalizeImageRef(imageLink) : '';
             if (imageLink && !image)
                 return interaction.reply({ content: '❌ Lien d\'image invalide : il faut un lien https direct vers une image.', flags: ephemeral });
-            // Etape 2 : brouillon prive avec les roles requis et bonus (brouillon.js).
-            return ouvrirBrouillon(interaction, ctx, {
-                prize: v('prize'),
-                winners,
-                dureeTexte: v('duration'),
-                lancement: {
-                    channelId: channelId ?? interaction.channelId ?? undefined,
-                    hostId: interaction.user.id,
-                    prize: v('prize'),
-                    description: v('description'),
-                    durationMs: duration,
-                    winners,
-                    options: image ? { image } : {},
-                },
+            // Ancien formulaire /gcreate (avant le panneau du 06/11) : lancement direct.
+            await interaction.deferReply({ flags: ephemeral });
+            const g = await startGiveaway(ctx, interaction.guild, {
+                channelId: channelId ?? interaction.channelId ?? undefined, hostId: interaction.user.id,
+                prize: v('prize'), description: v('description'), durationMs: duration, winners,
+                options: image ? { image } : {},
             });
+            return interaction.editReply(`🎉 Giveaway #${g.id} lancé dans <#${g.channel_id}> !`);
         },
     },
     setup(ctx) {

@@ -414,6 +414,7 @@ async function onModal(interaction) {
   if (interaction.customId.startsWith('dons:')) return onModalDons(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
   if (interaction.customId === 'scan:modal' || interaction.customId.startsWith('scan:modal:')) return onModalScan(interaction);
+  if (interaction.customId.startsWith('gdraft:')) return giveawaysModule.brouillon(interaction, ctxGiveaways);
   if (interaction.customId.startsWith('gcreate:')) return giveawaysModule.modals.gcreate(interaction, ctxGiveaways, interaction.customId.split(':').slice(1));
   if (interaction.customId === 'rat:modal') return onModalRat(interaction);
   if (interaction.customId !== 'link:modal') return;
