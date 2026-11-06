@@ -118,8 +118,8 @@ test('classement : nom Discord en texte, pas de mention brute', async () => {
   assert.ok(!/<@\d/.test(texte), 'aucune mention <@id> dans le classement');
 });
 
-test('classement : mention + pseudo quand le membre est present (06/11)', async () => {
+test('classement : nom Discord en texte, jamais de mention (06/11)', async () => {
   const { qui } = await import('../src/lib/membres.js');
-  assert.equal(qui('ZKR5', 'NotRyzn', (s) => s, '123'), '<@123> · **ZKR5**');
+  assert.equal(qui('ZKR5', 'NotRyzn', (s) => s, '123'), 'NotRyzn · **ZKR5**');
   assert.equal(qui('ZKR5', undefined, (s) => s, '123'), '**ZKR5**'); // parti du serveur : pas de mention
 });
