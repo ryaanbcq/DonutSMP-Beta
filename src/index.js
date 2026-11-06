@@ -18,6 +18,7 @@ import { onReclamationBouton, onReclamationSelect } from './vouch/reclamation.js
 import { duree } from '../ingame/diagnostic.js';
 import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
+import { chargerUuids, resoudreUuids } from './lib/uuids.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
 import { balances, demarrerRafraichissement } from './donut/balances.js';
 import { publierSuivis, surveillerSoldes, demanderSolde, attendreSolde } from './donut/ingame-balances.js';
@@ -96,6 +97,7 @@ client.commands = await loadCommands();
 
 client.once('clientReady', async (c) => {
   setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
+  chargerUuids();
   // Le salon des dons d abord : le journal relit le flux des son demarrage.
   await demarrerLogDons(c);
   await demarrerJournal(c, settings.salonJournal());
@@ -171,6 +173,7 @@ client.once('clientReady', async (c) => {
     await verifierPanneau?.().catch(() => {});
   }
   await startWatcher(c);
+  await resoudreUuids(store.allLinks().map((l) => l.mc_name)).then((n) => n && console.log(`[skin] ${n} UUID resolu(s)`)).catch(() => {});
   const fils = await assurerFils(c).catch((e) => { console.error('[vouch] fils :', e.message); return 0; });
   if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
   setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();

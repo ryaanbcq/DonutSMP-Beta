@@ -3,6 +3,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { store } from '../src/db.js';
 import { config } from '../src/config.js';
 import { setLogo } from '../src/lib/brand.js';
+import { chargerUuids, resoudreUuids } from '../src/lib/uuids.js';
 import { posterAvis } from '../src/vouch/fils.js';
 
 // Outil admin : reecrit toutes les cartes d avis (apres un changement de
@@ -10,6 +11,8 @@ import { posterAvis } from '../src/vouch/fils.js';
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.once('clientReady', async (c) => {
   setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
+  chargerUuids();
+  await resoudreUuids(store.allLinks().map((l) => l.mc_name));
   let n = 0;
   for (const toId of store.vouchTargets()) {
     for (const v of store.vouchAll(toId)) {

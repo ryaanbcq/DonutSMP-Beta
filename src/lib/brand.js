@@ -24,10 +24,20 @@ export function logo() {
   return logoUrl;
 }
 
+// Tete de skin : mc-heads PAR UUID. Par pseudo, mc-heads comme minotar
+// renvoyaient Steve pour de vrais comptes (ZKR5, Unagsuti, 06/11). Les UUID
+// sont resolus aupres de Mojang par lib/uuids.js et poses ici ; sans UUID
+// connu (Bedrock, pseudo inconnu), repli sur le pseudo.
+const uuids = new Map();
+export function poserUuid(name, uuid) {
+  if (name && uuid) uuids.set(String(name).toLowerCase(), uuid);
+}
+
 export function skin(name) {
   const clean = String(name ?? '').replace(/^\./, '');
-  // minotar et non mc-heads : mc-heads renvoyait Steve pour de vrais comptes (Unagsuti, t3ph, 06/11).
-  return clean ? `https://minotar.net/helm/${encodeURIComponent(clean)}/128` : null;
+  if (!clean) return null;
+  const uuid = uuids.get(clean.toLowerCase());
+  return `https://mc-heads.net/avatar/${encodeURIComponent(uuid ?? clean)}/128`;
 }
 
 /**

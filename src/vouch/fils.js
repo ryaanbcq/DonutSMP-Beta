@@ -2,6 +2,7 @@ import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ThreadAutoArchiveDuration, ChannelType, EmbedBuilder, AttachmentBuilder, escapeMarkdown,
 } from 'discord.js';
 import { config } from '../config.js';
+import { resoudreUuids } from '../lib/uuids.js';
 import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
@@ -312,6 +313,7 @@ export async function rafraichir(client, discordId) {
   if (!link) return;
   // Un non lie n a plus de post (06/11) : ses avis attendent en base son link.
   if (link.nonLie) return;
+  await resoudreUuids([link.mc_name]).catch(() => {});
   const fil = await filDe(client, link);
   if (fil) {
     await reveiller(fil);
