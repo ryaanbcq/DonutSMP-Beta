@@ -41,7 +41,7 @@ const formateur = (categorie) =>
 // en id brut chez qui n a pas charge le membre.
 function ligne(r, i, fmt, noms = null) {
   const rang = MEDALS[i] ?? `\`${String(r.rank).padStart(2, ' ')}\``;
-  return `${rang} ${qui(r.name, noms?.get(String(r.discordId)), escapeMarkdown)} · ${fmt(r.value)}`;
+  return `${rang} ${qui(r.name, noms?.get(String(r.discordId)), escapeMarkdown, r.discordId)} · ${fmt(r.value)}`;
 }
 
 function depuis(ms) {

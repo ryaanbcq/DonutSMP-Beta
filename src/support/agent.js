@@ -25,6 +25,7 @@ import { imagesDuTicket } from './images.js';
 import { publierRelais, marquerRelais } from './relais.js';
 import { programmerSuppression } from '../tickets/fin.js';
 import { demarrerDoc } from './doc-donut.js';
+import { guideRat } from '../scan/guide-rat.js';
 
 const minuteurs = new Map(); // channelId -> timeout
 
@@ -185,6 +186,16 @@ async function intervenir(channelId) {
     const avecCarte = Boolean(carte.data.fields?.length);
     const m = await salon.send({ content: contenu.slice(0, 2000), embeds: avecCarte ? [carte] : [], components, allowedMentions: { parse: [] } });
     memoire.noter({ id: m.id, channelId, role: 'ia', content: texte, at: m.createdTimestamp });
+    // Victime d un rat : guide a boutons sous la reponse, une seule fois par ticket.
+    // Guide deja poste plus haut : un lien vers lui sous la reponse, plutot qu un deuxieme guide.
+    const guideUrl = store.kvGet(`support.ratguide:${channelId}`);
+    if (rep.rat && /^https:\/\//.test(guideUrl ?? '')) {
+      await m.edit({ content: `${contenu}\n\n-# 🛡️ [Ouvrir le guide anti-rat](${guideUrl})`.slice(0, 2000), allowedMentions: { parse: [] } }).catch(() => {});
+    } else if (rep.rat && !guideUrl) {
+      await salon.send({ ...guideRat(), allowedMentions: { parse: [] } })
+        .then((g) => { store.kvSet(`support.ratguide:${channelId}`, g.url); console.log(`[support] ticket #${ticket.id} : guide anti-rat poste`); })
+        .catch((e) => console.warn('[support] guide rat :', e.message));
+    }
     memoire.poserEtat(channelId, { iaCount: etat.iaCount + 1, transmis: etat.transmis || rep.transmettre, resume: rep.resume, scamOffert, anciensOffert });
     console.log(`[support] ticket #${ticket.id} : reponse IA${rep.transmettre ? ', transmis au staff' : ''}`);
     // Relais humain : carte dans le salon du staff, mise a jour a chaque

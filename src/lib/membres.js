@@ -163,8 +163,11 @@ export async function nomsAffiches(guild, ids) {
  * « Nom Discord · **Pseudo** », ou le pseudo seul quand le nom Discord est
  * inconnu ou identique. `echapper` = escapeMarkdown de discord.js.
  */
-export function qui(pseudo, nomDiscord, echapper = (s) => s) {
+export function qui(pseudo, nomDiscord, echapper = (s) => s, discordId = null) {
   const p = `**${echapper(pseudo)}**`;
+  // Membre present : la mention, comme avant (Tsuyo et Nozz, 06/11). Une
+  // mention dans un embed ne notifie personne.
+  if (nomDiscord && discordId) return `<@${discordId}> · ${p}`;
   if (!nomDiscord) return p;
   const pareil = nomDiscord.trim().toLowerCase().replace(/^\./, '') === String(pseudo).trim().toLowerCase().replace(/^\./, '');
   return pareil ? p : `${echapper(nomDiscord)} · ${p}`;

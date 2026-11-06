@@ -6,7 +6,7 @@ import { store } from '../db.js';
 import { settings } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import {
-  calculerTrust, etoiles, ligneScore, barre, MIN_AVIS, PALIER_SIGNALE,
+  calculerTrust, etoiles, ligneScore, PALIER_SIGNALE,
 } from './trust.js';
 import { journal } from '../ops/journal.js';
 
@@ -183,37 +183,30 @@ export function trustDe(discordId) {
 }
 
 export function carteReputation(link, client = null) {
-  const nom = nomDiscord(client, link.discord_id);
   const t = trustDe(link.discord_id);
   const dernier = store.vouchAll(link.discord_id)[0];
-  const pluriel = (n, mot) => `**${n}** ${mot}${n > 1 ? 's' : ''}`;
+  const pct = t.n ? Math.round((t.pos / t.n) * 100) : null;
+  const pseudo = link.nonLie ? escapeMarkdown(link.mc_name) : link.mc_name;
 
-  // Une ligne par idee, des blancs entre les blocs, pas de colonnes : les
-  // champs « inline » tombaient de travers et le ✅ devant 0 signalement
-  // se lisait comme un vouch.
-  const note = t.pos ? `${etoiles(t.moyenne)}  **${t.moyenne.toFixed(1)}**` : '☆☆☆☆☆  pas encore de note';
-  const score = t.palier === PALIER_SIGNALE
-    ? `☠️ Trust score suspendu (${pluriel(t.neg, 'signalement')})`
-    : t.n < MIN_AVIS
-      ? null
-      : `📊 \`${barre(t.score, 12)}\`  **${t.score}** / 100`;
+  // Ancien rendu (avant le 04/11), retabli le 06/11 a la demande du staff :
+  // pseudo · mention, palier en gros, note, trust score, trois colonnes.
   const contenu = embed(TITRE_REPUTATION, {
-    couleur: t.palier === PALIER_SIGNALE ? FR.rouge : t.trusted ? FR.or : FR.bleu,
+    couleur: t.palier === PALIER_SIGNALE || t.neg ? FR.rouge : t.trusted ? FR.or : FR.bleu,
     image: link.image ?? link.mc_name,
-    description: [
-      `### ${t.palier.emoji} ${link.nonLie ? escapeMarkdown(link.mc_name) : link.mc_name}`,
-      link.nonLie ? `${t.palier.nom} · *compte Minecraft pas encore lié*` : nom ? `${nom} · ${t.palier.nom}` : t.palier.nom,
-      '',
-      note,
-      `✅ **${t.pos}** vouch${t.pos > 1 ? 'es' : ''}${t.neg ? `  ·  ☠️ ${pluriel(t.neg, 'signalement')}` : '  ·  aucun signalement'}`,
-      ...(score ? [score] : []),
-      '',
-      `-# ${dernier ? `Dernier avis <t:${Math.floor(dernier.created_at / 1000)}:R>` : 'Aucun avis pour le moment'}`,
-    ].join('\n'),
-  });
+    description:
+      `**${pseudo}** · <@${link.discord_id}>${link.nonLie ? ' · *compte Minecraft pas encore lié*' : ''}\n`
+      + `## ${t.palier.emoji} ${t.palier.nom}\n`
+      + `${etoiles(t.moyenne)} ${t.pos ? t.moyenne.toFixed(1) : 'sans note'} · `
+      + `${t.n} avis${pct === null ? '' : ` · ${pct} % positifs`}\n`
+      + ligneScore(t),
+  }).addFields(
+    { name: 'Vouches', value: `✅ ${t.pos}`, inline: true },
+    { name: 'Signalements', value: t.neg ? `☠️ **${t.neg}**` : '0', inline: true },
+    { name: 'Dernier avis', value: dernier ? `<t:${Math.floor(dernier.created_at / 1000)}:R>` : 'Aucun', inline: true },
+  );
   const boutons = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`vouch:noter:${link.discord_id}`)
-      .setLabel(`Donner un avis sur ${link.mc_name}`).setEmoji('⭐').setStyle(ButtonStyle.Primary),
+      .setLabel(`Donner un avis sur ${link.mc_name}`.slice(0, 80)).setEmoji('⭐').setStyle(ButtonStyle.Primary),
   );
   return { embeds: [contenu], components: [boutons] };
 }
@@ -261,7 +254,7 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
     couleur: positif ? FR.vert : FR.rouge,
     image: auteurLink?.mc_name ?? 'aucune',
     description:
-      `**${auteurLink?.mc_name ?? 'Membre'}** ${nomAuteur ? `(${nomAuteur}) ` : ''}`
+      `**${auteurLink?.mc_name ?? nomAuteur ?? 'Membre'}** <@${vouch.from_id}> `
       + (positif ? `· ${etoiles(vouch.stars ?? 5)}` : '· signale **' + cibleLink.mc_name + '**')
       + (vouch.comment ? `\n> ${vouch.comment.replace(/\n/g, '\n> ')}` : ''),
   }).setTimestamp(vouch.created_at);

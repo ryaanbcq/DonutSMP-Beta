@@ -39,7 +39,7 @@ export function rendre(noms = null) {
       : '');
 
   const lignes = top.length
-    ? top.map((r, i) => `${rang(i)} ${qui(r.name, noms?.get(String(r.discordId)), escapeMarkdown)}`
+    ? top.map((r, i) => `${rang(i)} ${qui(r.name, noms?.get(String(r.discordId)), escapeMarkdown, r.discordId)}`
       + ` : \`\`${shortMoney(r.value)}\`\``).join('\n')
     : '*Aucun solde relevé pour le moment.*';
 

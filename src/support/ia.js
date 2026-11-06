@@ -55,8 +55,8 @@ La fiche du membre ne sert QUE si la demande touche à la liaison du compte, à 
 
 Signalements : commence par identifier le TYPE, c'est lui qui décide de ce que tu demandes.
 - « rat », « ratz », « ratter », « il m'a rat » = un RAT (Remote Access Trojan), un VIRUS envoyé par quelqu'un (faux client, faux mod, fichier, lien) qui prend le contrôle du PC ou vole les comptes. Ce n'est JAMAIS un scam en jeu : c'est le cas 2 (ban définitif), même dans une catégorie de support technique. Ne pose pas la question de l'argent réel.
-  - Commence par la SÉCURITÉ, en étapes courtes : ne plus ouvrir le fichier ; depuis un AUTRE appareil sain, changer les mots de passe (Microsoft/Minecraft, Discord, mail) et déconnecter toutes les sessions ; activer la double authentification ; faire analyser le PC par un antivirus (ou le réinitialiser).
-  - Puis le dossier : qui a envoyé le fichier (Discord et pseudo Minecraft), par où (MP, salon, lien), quand, captures des messages, comptes touchés. Ne demande JAMAIS le fichier lui même ni de cliquer sur le lien. transmettre = true.
+  - Mets "rat" à true. Le bot affiche alors SOUS ton message un guide à boutons : il demande si le membre a encore le fichier et s'il l'a lancé, donne les étapes de sécurité adaptées (mots de passe depuis un autre appareil, déconnexion partout, antivirus), propose le scan DonutScan du fichier et un formulaire pour dénoncer l'envoyeur. Ne répète PAS ces étapes : une phrase d'empathie, une phrase qui dit de suivre le guide anti-rat (n'écris jamais « ci-dessous », « en dessous » ni « au-dessus » : le bot ajoute lui même le lien vers le guide), puis demande seulement ce que le guide ne couvre pas (captures des messages, comptes ou biens perdus).
+  - Les lignes « [Guide anti-rat : …] » et « [Formulaire « dénoncer l'envoyeur » : …] » viennent du guide : ne redemande pas ces informations. Ne demande JAMAIS le fichier lui même ni de cliquer sur le lien. transmettre = true.
 - Des montants comme 500K, 50M, 2B, 1T, des spawners, des objets, un /pay : c'est de l'argent ou des biens DU JEU, donc un scam EN JEU (cas 1), sauf si le membre parle explicitement d'argent réel, d'euros, de PayPal, de crypto, de cartes cadeaux ou d'un échange hors du jeu.
 - Seulement si c'est vraiment impossible à dire : ta réponse ne contient QUE la question « De l'argent réel (PayPal, crypto, cartes cadeaux, virement) ou un échange hors du jeu était-il en jeu ? », une phrase d'accroche au plus, aucune liste, et transmettre = false.
 
@@ -117,12 +117,13 @@ export const SCHEMA_REPONSE = {
     transmettre: { type: 'boolean', description: 'true si le staff doit prendre la suite' },
     resume: { type: 'string', description: 'Une ligne pour le staff' },
     vise: { type: 'string', description: 'Pseudo Minecraft du joueur signalé tel que donné par le membre (le plus probable s il en donne plusieurs), sinon chaîne vide' },
+    rat: { type: 'boolean', description: 'true si le membre s est fait rat (faux mod, faux client, grabber, fichier piégé) ou en parle comme victime' },
     anciens_vouches: { type: 'boolean', description: 'true si le membre demande à récupérer ses vouches de l ancien système' },
     infos: { type: 'array', items: { type: 'string' }, description: 'Les faits déjà rassemblés pour le staff, une ligne courte chacun' },
     resolu: { type: 'boolean', description: 'true si la demande semble entièrement réglée' },
     repondre: { type: 'boolean', description: 'false pour ne rien poster (mode reprise : la demande est déjà traitée)' },
   },
-  required: ['message', 'transmettre', 'resume', 'vise', 'anciens_vouches', 'infos', 'resolu', 'repondre'],
+  required: ['message', 'transmettre', 'resume', 'vise', 'rat', 'anciens_vouches', 'infos', 'resolu', 'repondre'],
   additionalProperties: false,
 };
 

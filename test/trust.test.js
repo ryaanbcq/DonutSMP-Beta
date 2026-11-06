@@ -65,3 +65,12 @@ test('un profil signale n affiche plus de score', async () => {
   assert.match(ligneScore(t), /suspendu/);
   assert.doesNotMatch(ligneScore(t), /\/ 100/);
 });
+
+test('un seul scam : Douteux, jamais Nouveau (06/11)', async () => {
+  const { calculerTrust } = await import('../src/vouch/trust.js');
+  const now = Date.now();
+  const t = calculerTrust([{ value: 1, stars: 5, created_at: now }, { value: -1, created_at: now }], now);
+  assert.equal(t.palier.nom, 'Douteux');
+  const sain = calculerTrust([{ value: 1, stars: 5, created_at: now }], now);
+  assert.equal(sain.palier.nom, 'Nouveau');
+});

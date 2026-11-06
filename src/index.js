@@ -1,3 +1,6 @@
+import { demarrerSyncOfficiels } from './scan/officiels.js';
+import { onBoutonRat, onModalRat } from './scan/guide-rat.js';
+import { demarrerSyncMembres } from './scan/membres.js';
 import { readdir } from 'node:fs/promises';
 import { compteBot } from './ingame/compte.js';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -172,6 +175,8 @@ client.once('clientReady', async (c) => {
   if (settings.salonVouch()) console.log(`[vouch] fils verifies, ${fils} ouvert(s)`);
   setInterval(() => reveillerFils(c).catch((e) => console.warn('[vouch] reveil :', e.message)), 6 * 3_600_000).unref();
   demarrerSurveillanceTags(c);
+  demarrerSyncMembres();
+  demarrerSyncOfficiels();
 });
 
 // Coupures de la passerelle Discord : discord.js reprend seul, on annonce la
@@ -313,8 +318,9 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('dsetup:')) return onDsetupBouton(interaction);
   if (interaction.customId.startsWith('gsetup:')) return onGsetupBouton(interaction);
   if (interaction.customId.startsWith('dons:')) return onBoutonDons(interaction);
-  if (interaction.customId === 'scan:start') return onBoutonScan(interaction);
+  if (interaction.customId === 'scan:start' || interaction.customId.startsWith('scan:start:')) return onBoutonScan(interaction);
   if (interaction.customId === 'scan:non') return onBoutonScanNon(interaction);
+  if (interaction.customId.startsWith('rat:')) return onBoutonRat(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 
@@ -388,7 +394,8 @@ async function onModal(interaction) {
   if (interaction.customId.startsWith('embed:')) return onModalEmbed(interaction);
   if (interaction.customId.startsWith('dons:')) return onModalDons(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
-  if (interaction.customId === 'scan:modal') return onModalScan(interaction);
+  if (interaction.customId === 'scan:modal' || interaction.customId.startsWith('scan:modal:')) return onModalScan(interaction);
+  if (interaction.customId === 'rat:modal') return onModalRat(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
 }

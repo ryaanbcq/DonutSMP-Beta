@@ -46,7 +46,7 @@ export function rendreDonateurs(noms = null) {
       const p = palierPour(r.total, liste);
       const id = p >= 0 ? roleDuPalier(liste[p]) : null;
       const role = p >= 0 ? ` · ${id ? `<@&${id}>` : nomRole(liste[p])}` : '';
-      const nom = qui(r.name, r.discordId ? noms?.get(String(r.discordId)) : null, escapeMarkdown);
+      const nom = qui(r.name, r.discordId ? noms?.get(String(r.discordId)) : null, escapeMarkdown, r.discordId);
       return `${rang(i)} ${nom} : \`\`${shortMoney(r.total)}\`\`${role}`;
     }).join('\n')
     : '*Aucun don pour le moment : soyez le premier !*';

@@ -22,8 +22,9 @@ export const PALIERS = [
 ];
 export const PALIER_NOUVEAU = { emoji: '🌱', nom: 'Nouveau' };
 export const PALIER_SIGNALE = { emoji: '☠️', nom: 'Signalé' };
+export const PALIER_DOUTEUX = PALIERS.find((p) => p.nom === 'Douteux');
 export const SEUIL_TRUSTED = 85;
-export const MIN_AVIS = 5;
+export const MIN_AVIS = 10;
 export const SCAMS_SIGNALE = 2;
 
 function recence(createdAt, now) {
@@ -66,6 +67,8 @@ export function calculerTrust(avis, now = Date.now()) {
 
   let palier;
   if (neg >= SCAMS_SIGNALE) palier = PALIER_SIGNALE;
+  // Un scam ne se cache jamais derriere « Nouveau » (Tsuyo et Nozz, 06/11).
+  else if (neg > 0 && (n < MIN_AVIS || score < 50)) palier = PALIER_DOUTEUX;
   else if (n < MIN_AVIS) palier = PALIER_NOUVEAU;
   else palier = PALIERS.find((p) => score >= p.min);
 
@@ -85,8 +88,8 @@ export function etoiles(n) {
 export function ligneScore(t, largeur = 10) {
   // Signale : un score de 93 a cote d'une tete de mort se contredisait.
   if (t.palier === PALIER_SIGNALE) return `*☠️ Trust score suspendu : ${t.neg} signalements*`;
-  // Pas encore assez d avis : rien (Ryan, 04/11 : pas d indication de la condition).
-  if (t.n < MIN_AVIS) return '';
+  // Pas encore assez d avis : on dit ou on en est (ancien rendu, retabli le 06/11).
+  if (t.n < MIN_AVIS) return `*Trust score dès ${MIN_AVIS} avis (${t.n} / ${MIN_AVIS})*`;
   return `\`${barre(t.score, largeur)}\` **${t.score} / 100**`;
 }
 
