@@ -251,6 +251,7 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isAnySelectMenu()) {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
       if (interaction.customId.startsWith('voicehub:')) return await onVoicehub(interaction);
+      if (interaction.customId.startsWith('gdraft:')) return await giveawaysModule.brouillon(interaction, ctxGiveaways);
       if (interaction.customId.startsWith('recl:')) return await onReclamationSelect(interaction);
       if (interaction.customId === 'ticket:cat') return await onSelectionCategorie(interaction);
       if (interaction.customId.startsWith('ticket:add:')) return await onSelectTicket(interaction);
@@ -336,6 +337,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('dons:')) return onBoutonDons(interaction);
   if (interaction.customId === 'scan:start' || interaction.customId.startsWith('scan:start:')) return onBoutonScan(interaction);
   if (interaction.customId === 'scan:non') return onBoutonScanNon(interaction);
+  if (interaction.customId.startsWith('gdraft:')) return giveawaysModule.brouillon(interaction, ctxGiveaways);
   if (interaction.customId.startsWith('giveaway:')) return giveawaysModule.buttons.giveaway(interaction, ctxGiveaways, interaction.customId.split(':').slice(1));
   if (interaction.customId.startsWith('rat:')) return onBoutonRat(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);

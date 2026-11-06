@@ -139,12 +139,14 @@ export function checkRules(rules, m, now = Date.now()) {
     return null;
 }
 /** Nombre de tickets d'un membre : le meilleur bonus de ses rôles, sinon 1. */
+// Bonus CUMULES (comme Giveaway Boat, Ryan 06/11) : 1 entree de base, plus
+// (entries - 1) par role bonus que le membre possede.
 export function entryWeight(bonus, roleIds) {
-    let best = 1;
+    let total = 1;
     for (const b of bonus)
-        if (roleIds.has(b.roleId) && b.entries > best)
-            best = b.entries;
-    return best;
+        if (roleIds.has(b.roleId))
+            total += Math.max(0, b.entries - 1);
+    return total;
 }
 /**
  * Nombre de tickets d'un membre = tickets du meilleur rôle bonus (1 sans rôle)
@@ -202,7 +204,7 @@ export function describeRules(o) {
 }
 /** Lignes « Entrées bonus » affichées sous le giveaway. */
 export function describeBonus(o) {
-    const lines = o.bonusEntries.map((b) => `<@&${b.roleId}> : ${b.entries} entrées`);
+    const lines = o.bonusEntries.map((b) => `<@&${b.roleId}> : +${b.entries - 1} entrée${b.entries - 1 > 1 ? 's' : ''}`);
     if (o.entriesPerInvite) {
         lines.push(`+${o.entriesPerInvite} par invitation restée sur le serveur${o.maxInviteEntries ? ` (max +${o.maxInviteEntries})` : ''}`);
     }

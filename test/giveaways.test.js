@@ -42,3 +42,11 @@ test('giveaway : messages minimum comptes par membre', () => {
   const o = normalizeOptions({ minMessages: 10 });
   assert.match(checkRules(o, membre({ messages: stats.messagesDe(g, 'u1') })), /10 messages/);
 });
+
+test('giveaway : les roles bonus s additionnent (06/11)', () => {
+  const R1 = '1491851506390011925'; const R2 = '1491851506390011926';
+  const o = normalizeOptions({ bonusEntries: [{ roleId: R1, entries: 2 }, { roleId: R2, entries: 3 }] });
+  assert.equal(ticketCount(o, membre({ roleIds: new Set([R1, R2]) })).total, 4); // 1 + 1 + 2
+  assert.equal(ticketCount(o, membre({ roleIds: new Set([R2]) })).total, 3);
+  assert.equal(ticketCount(o, membre()).total, 1);
+});

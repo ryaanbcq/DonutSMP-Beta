@@ -1,3 +1,4 @@
+import { ouvrirBrouillon, surBrouillon } from './brouillon.js';
 // Repris d'Orbit (src/modules/giveaways/index.ts) : boutons, formulaire /gcreate
 // et tache de fond (fin des giveaways, programmes, rappels, reclamations).
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, MessageFlags, PermissionFlagsBits, } from 'discord.js';
@@ -133,6 +134,7 @@ export const giveawaysModule = {
             }
         },
     },
+    brouillon: surBrouillon,
     modals: {
         gcreate: async (interaction, ctx, [channelId]) => {
             if (!interaction.inCachedGuild())
@@ -147,13 +149,16 @@ export const giveawaysModule = {
                 errors.push(`Nombre de gagnants invalide (1 à ${MAX_WINNERS}).`);
             if (errors.length)
                 return interaction.reply({ content: `❌ ${errors.join(' ')}`, flags: ephemeral });
-            await interaction.deferReply({ flags: ephemeral });
             const imageLink = v('image');
             const image = imageLink ? normalizeImageRef(imageLink) : '';
             if (imageLink && !image)
-                return interaction.editReply('❌ Lien d\'image invalide : il faut un lien https direct vers une image.');
-            try {
-                const g = await startGiveaway(ctx, interaction.guild, {
+                return interaction.reply({ content: '❌ Lien d\'image invalide : il faut un lien https direct vers une image.', flags: ephemeral });
+            // Etape 2 : brouillon prive avec les roles requis et bonus (brouillon.js).
+            return ouvrirBrouillon(interaction, ctx, {
+                prize: v('prize'),
+                winners,
+                dureeTexte: v('duration'),
+                lancement: {
                     channelId: channelId ?? interaction.channelId ?? undefined,
                     hostId: interaction.user.id,
                     prize: v('prize'),
@@ -161,13 +166,8 @@ export const giveawaysModule = {
                     durationMs: duration,
                     winners,
                     options: image ? { image } : {},
-                });
-                return interaction.editReply(`🎉 Giveaway #${g.id} lancé dans <#${g.channel_id}> !`);
-            }
-            catch (err) {
-                log.warn('Lancement de giveaway impossible', err);
-                return interaction.editReply('❌ Impossible de publier le giveaway : vérifie que je peux créer des salons et écrire dedans.');
-            }
+                },
+            });
         },
     },
     setup(ctx) {
