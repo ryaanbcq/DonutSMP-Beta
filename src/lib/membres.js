@@ -165,9 +165,11 @@ export async function nomsAffiches(guild, ids) {
  */
 export function qui(pseudo, nomDiscord, echapper = (s) => s, discordId = null) {
   const p = `**${echapper(pseudo)}**`;
-  // Membre present : la mention, comme avant (Tsuyo et Nozz, 06/11). Une
-  // mention dans un embed ne notifie personne.
-  if (nomDiscord && discordId) return `<@${discordId}> · ${p}`;
+  // Pas de mention <@id> (essayee le 06/11 a 18h44, retiree a 19h15 par
+  // Ryan) : dans un embed elle s affiche en id brut chez tout lecteur dont le
+  // client n a pas charge le membre, soit la moitie du classement. Le nom en
+  // texte se lit partout. `discordId` reste accepte pour les appelants.
+  void discordId;
   if (!nomDiscord) return p;
   const pareil = nomDiscord.trim().toLowerCase().replace(/^\./, '') === String(pseudo).trim().toLowerCase().replace(/^\./, '');
   return pareil ? p : `${echapper(nomDiscord)} · ${p}`;
