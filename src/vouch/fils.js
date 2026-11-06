@@ -178,6 +178,16 @@ export function nomDiscord(client, id) {
   return nom ? escapeMarkdown(nom) : null;
 }
 
+/**
+ * Mention si le membre est sur le serveur (elle s affiche alors en nom), sinon
+ * son nom en texte : un parti s affichait en <@1197...> brut (06/11).
+ */
+export function mentionOuNom(client, id) {
+  if (!id) return null;
+  const present = client?.guilds?.cache.get(config.discord.guildId)?.members.cache.has(String(id));
+  return present ? `<@${id}>` : nomDiscord(client, id);
+}
+
 export function trustDe(discordId) {
   return calculerTrust(store.vouchAll(discordId));
 }
@@ -194,7 +204,7 @@ export function carteReputation(link, client = null) {
     couleur: t.palier === PALIER_SIGNALE || t.neg ? FR.rouge : t.trusted ? FR.or : FR.bleu,
     image: link.image ?? link.mc_name,
     description:
-      `**${pseudo}** · <@${link.discord_id}>${link.nonLie ? ' · *compte Minecraft pas encore lié*' : ''}\n`
+      `**${pseudo}**${mentionOuNom(client, link.discord_id) ? ` · ${mentionOuNom(client, link.discord_id)}` : ''}${link.nonLie ? ' · *compte Minecraft pas encore lié*' : ''}\n`
       + `## ${t.palier.emoji} ${t.palier.nom}\n`
       + `${etoiles(t.moyenne)} ${t.pos ? t.moyenne.toFixed(1) : 'sans note'} · `
       + `${t.n} avis${pct === null ? '' : ` · ${pct} % positifs`}\n`
@@ -259,7 +269,9 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
     couleur: positif ? FR.vert : FR.rouge,
     image: auteurLink?.mc_name ?? 'aucune',
     description:
-      `**${auteurLink?.mc_name ?? nomAuteur ?? 'Membre'}** <@${vouch.from_id}> `
+      (auteurLink?.mc_name
+        ? `**${auteurLink.mc_name}**${mentionOuNom(client, vouch.from_id) ? ` ${mentionOuNom(client, vouch.from_id)}` : ''} `
+        : `**${mentionOuNom(client, vouch.from_id) ?? nomAuteur ?? 'Ancien membre'}** `)
       + (positif ? `· ${etoiles(vouch.stars ?? 5)}` : '· signale **' + cibleLink.mc_name + '**')
       + (texteAvis(vouch.comment) ? `\n> ${texteAvis(vouch.comment).replace(/\n/g, '\n> ')}` : ''),
   }).setTimestamp(vouch.created_at);

@@ -73,7 +73,7 @@ test('un evenement sur un joueur porte sa tete en vignette', async () => {
   journal({ niveau: 'warn', titre: 'Remboursement refuse', joueur: '.Farex_ZZone' });
   journal({ niveau: 'ok', titre: 'Sans joueur' });
   await attendreJournal();
-  assert.match(donnees(envois[0]).thumbnail.url, /mc-heads\.net\/avatar\/Farex_ZZone/);
+  assert.match(donnees(envois[0]).thumbnail.url, /minotar\.net\/helm\/Farex_ZZone/);
   assert.equal(donnees(envois[1]).thumbnail, undefined);
 });
 

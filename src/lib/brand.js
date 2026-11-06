@@ -26,7 +26,8 @@ export function logo() {
 
 export function skin(name) {
   const clean = String(name ?? '').replace(/^\./, '');
-  return clean ? `https://mc-heads.net/avatar/${encodeURIComponent(clean)}/128` : null;
+  // minotar et non mc-heads : mc-heads renvoyait Steve pour de vrais comptes (Unagsuti, t3ph, 06/11).
+  return clean ? `https://minotar.net/helm/${encodeURIComponent(clean)}/128` : null;
 }
 
 /**
