@@ -4,6 +4,7 @@ import { embed, TITRES } from '../lib/brand.js';
 import { MEDALS } from '../lib/format.js';
 import { calculerTrust, barre, etoiles, PALIER_SIGNALE } from '../vouch/trust.js';
 import { carteReputation, filDe, retirerAvis, cibleDe } from '../vouch/fils.js';
+import { cibleVouch } from '../vouch/panel.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vouches')
@@ -53,9 +54,9 @@ export async function execute(interaction) {
   }
 
   const target = interaction.options.getUser('membre') ?? interaction.user;
-  const link = cibleDe(interaction.client, target.id);
+  const link = cibleVouch(interaction.client, target.id);
   if (!link) {
-    return interaction.reply({ content: `**${target.username}** n'a pas de réputation (bot ou membre parti).`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `**${target.username}** n'a pas de compte vérifié : pas de réputation à afficher.`, flags: MessageFlags.Ephemeral });
   }
   await interaction.deferReply();
   const sansPost = link.nonLie && !store.getThread(target.id) && !store.vouchAll(target.id).length;

@@ -153,7 +153,11 @@ async function intervenir(channelId) {
     if (vise && reessayable && scamOffert !== cleNonLie) {
       const trouve = trouverLie(vise, salon.guild);
       const lie = trouve?.lie;
-      if (lie && lie.discord_id !== ticket.discord_id && scamOffert !== `non:${lie.discord_id}`) {
+      if (lie?.nonLie) {
+        // Non lie : pas de reputation, donc pas de signalement possible (06/11).
+        contenu += `\n\n-# ⚠️ **${escapeMarkdown(lie.mc_name)}** n'a pas lié son compte Minecraft : il n'a pas de réputation et ne peut pas encore y être signalé. Le staff garde la trace dans ce ticket.`;
+        scamOffert = cleNonLie;
+      } else if (lie && lie.discord_id !== ticket.discord_id && scamOffert !== `non:${lie.discord_id}`) {
         aConfirmer = lie;
         scamOffert = `propose:${lie.discord_id}`;
       } else if (!lie) {

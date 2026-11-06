@@ -293,8 +293,8 @@ async function retirerPanelEnBas(fil, link) {
 export async function rafraichir(client, discordId) {
   const link = cibleDe(client, discordId);
   if (!link) return;
-  // Un non lie n a de post que s il a deja ete note : pas de post vide.
-  if (link.nonLie && !store.getThread(discordId) && !store.vouchAll(discordId).length) return;
+  // Un non lie n a plus de post (06/11) : ses avis attendent en base son link.
+  if (link.nonLie) return;
   const fil = await filDe(client, link);
   if (fil) {
     await reveiller(fil);
@@ -392,10 +392,6 @@ export async function assurerFils(client) {
   const forum = await salonVouch(client);
   if (forum) await lectureSeule(forum);
   let n = 0;
-  // Posts des membres non lies : cartes reecrites (nom Discord a jour).
-  for (const r of store.filsNonLies()) {
-    if (!store.getLink(r.discord_id)) await rafraichir(client, r.discord_id).catch(() => {});
-  }
   for (const link of store.allLinks()) {
     const avant = store.getThread(link.discord_id);
     const fil = await filDe(client, link).catch((e) => { console.warn(`[vouch] fil de ${link.mc_name} :`, e.message); return null; });

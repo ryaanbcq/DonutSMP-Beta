@@ -9,6 +9,10 @@ import { settings, ouSeLier } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { etoiles, barre, ligneScore } from './trust.js';
 import { trustDe, posterAvis, retirerAvis, carteReputation, filDe, fichiersDe, cibleDe } from './fils.js';
+
+// Seuls les membres lies se notent (retour en arriere du 06/11, Nozz et Ryan) :
+// un membre non lie n a ni post ni avis.
+export const cibleVouch = (client, id) => { const l = cibleDe(client, id); return l?.nonLie ? null : l; };
 import { isValidName, bypass } from '../lib/names.js';
 import { config } from '../config.js';
 import { lireLienMedal } from './video.js';
@@ -139,7 +143,7 @@ export function panneauVouch(forumId) {
   const contenu = embed('⭐・RÉPUTATION', {
     description:
       "**Avant un trade, vérifiez. Après un trade, notez.**\n\n"
-      + `Chaque membre a son post dans <#${forumId}>, lié ou non (au nom Discord tant qu'il n'a pas lié son compte Minecraft) : cherchez son pseudo pour voir son `
+      + `Chaque membre vérifié a son post dans <#${forumId}> : cherchez son pseudo pour voir son `
       + 'trust score sur 100, ses étoiles, ses vouches et ses signalements.\n\n'
       + '**Chercher un membre** : choisissez-le dans le menu ci-dessous, ou tapez son pseudo Minecraft '
       + 'avec le bouton 🔍. Sa carte de réputation vous est montrée en privé.\n\n'
@@ -171,7 +175,7 @@ async function montrerCarte(interaction, link, { differe = false } = {}) {
 
 async function chercherParMembre(interaction) {
   const id = interaction.values[0];
-  const link = cibleDe(interaction.client, id);
+  const link = cibleVouch(interaction.client, id);
   if (!link) return interaction.reply({ content: `<@${id}> n'a pas de réputation (bot ou membre parti).`, ...EPH });
   // Creer le post peut enchainer plusieurs appels API : on prend le delai de
   // 15 min de Discord au lieu des 3 s d une reponse directe.
@@ -199,7 +203,7 @@ async function chercherParTexte(interaction) {
 
   // 2. nom Discord : Discord cherche par prefixe de pseudo ou de surnom
   const membres = await interaction.guild.members.search({ query: q, limit: 10 }).catch(() => null);
-  const lies = [...(membres?.values() ?? [])].map((m) => cibleDe(interaction.client, m.id)).filter(Boolean);
+  const lies = [...(membres?.values() ?? [])].map((m) => cibleVouch(interaction.client, m.id)).filter(Boolean);
   if (lies.length === 1) return montrerCarte(interaction, lies[0], { differe: true });
   if (lies.length > 1) {
     return interaction.editReply(
@@ -219,7 +223,7 @@ async function chercherParTexte(interaction) {
       + proches.map((l) => `• **${l.mc_name}** <@${l.discord_id}>`).join('\n'),
     );
   }
-  return interaction.editReply(`Aucun membre ne correspond à **${q}**. Essayez son nom Discord, ou choisissez-le dans le menu du panneau.`);
+  return interaction.editReply(`Aucun membre vérifié ne correspond à **${q}**. Seuls les comptes link ont une réputation.`);
 }
 
 
@@ -243,8 +247,8 @@ export async function ouvrir(interaction, cibleId = null, { verdict = null } = {
   // que par le menu.
   if (cibleId) {
     if (cibleId === interaction.user.id) return interaction.reply({ content: '❌ On ne se note pas soi-même.', ...EPH });
-    const cible = cibleDe(interaction.client, cibleId);
-    if (!cible) return interaction.reply({ content: `❌ <@${cibleId}> ne peut pas être noté (bot ou membre parti).`, ...EPH });
+    const cible = cibleVouch(interaction.client, cibleId);
+    if (!cible) return interaction.reply({ content: `❌ <@${cibleId}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (`/link`) peuvent être notés.`, ...EPH });
     const existant = store.getVouch(interaction.user.id, cibleId);
     poser(interaction.user.id, { cible: cibleId, cibleNonLie: cible.nonLie ? cible : null, ...(verdict ? { verdict } : {}) });
     return interaction.reply({ ...(existant ? vueExistant(existant, cible) : rendre(brouillon(interaction.user.id))), ...EPH });
@@ -262,8 +266,8 @@ export async function onSelect(interaction) {
   const id = interaction.values[0];
   const b = brouillon(interaction.user.id);
   if (id === interaction.user.id) return maj(interaction, rendre(b, '❌ On ne se note pas soi-même.'));
-  const cible = cibleDe(interaction.client, id);
-  if (!cible) return maj(interaction, rendre(b, `❌ <@${id}> ne peut pas être noté (bot ou membre parti).`));
+  const cible = cibleVouch(interaction.client, id);
+  if (!cible) return maj(interaction, rendre(b, `❌ <@${id}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (`/link`) peuvent être notés.`));
   const nl = cible.nonLie ? cible : null;
   const existant = store.getVouch(interaction.user.id, id);
   if (existant) {
@@ -319,7 +323,7 @@ export async function onBouton(interaction) {
   if (id === 'vouch:existant:supprimer') {
     await interaction.deferUpdate();
     const ok = b.cible ? await retirerAvis(interaction.client, interaction.user.id, b.cible) : false;
-    const cible = b.cible ? cibleDe(interaction.client, b.cible) : null;
+    const cible = b.cible ? cibleVouch(interaction.client, b.cible) : null;
     brouillons.delete(String(interaction.user.id));
     console.log(`[vouch] ${interaction.user.tag} retire son avis sur ${cible?.mc_name ?? b.cible}`);
     return interaction.editReply({
@@ -409,8 +413,8 @@ export async function onModal(interaction) {
 }
 
 async function publier(interaction, b) {
-  const cible = b.cible ? cibleDe(interaction.client, b.cible) : null;
-  if (!cible) return maj(interaction, rendre(b, '❌ Le membre visé n\'est plus sur le serveur.'));
+  const cible = b.cible ? cibleVouch(interaction.client, b.cible) : null;
+  if (!cible) return maj(interaction, rendre(b, '❌ Le membre visé n\'est plus vérifié.'));
   const scam = b.verdict === 'neg';
   if (scam && b.message.length < MIN_SCAM) return maj(interaction, rendre(b, `❌ Un signalement demande ${MIN_SCAM} caractères d'explication.`));
   if (scam && !(b.preuves?.length) && !b.video) return maj(interaction, rendre(b, '❌ Un signalement demande au moins une capture, une vidéo ou un clip Medal du trade.'));
