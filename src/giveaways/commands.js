@@ -79,7 +79,7 @@ function readOptions(interaction) {
     return opts;
 }
 /** Pièce jointe Discord → copie gardée par le bot (les liens de fichiers Discord expirent). */
-async function storeAttachment(ctx, att) {
+export async function storeAttachment(ctx, att) {
     if (att.size > MAX_IMAGE_BYTES)
         return { error: 'Image trop lourde (8 Mo maximum).' };
     if (att.contentType && !att.contentType.startsWith('image/'))

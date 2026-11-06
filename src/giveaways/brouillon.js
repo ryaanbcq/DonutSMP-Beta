@@ -5,12 +5,12 @@
 
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, MessageFlags,
-  ModalBuilder, RoleSelectMenuBuilder, TextInputBuilder, TextInputStyle,
+  ModalBuilder, RoleSelectMenuBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, FileUploadBuilder,
 } from 'discord.js';
+import { storeAttachment } from './commands.js';
 import { embed, FR } from '../lib/brand.js';
 import { startGiveaway } from './service.js';
 import { parseDuration } from './outils/format.js';
-import { normalizeImageRef } from './outils/images.js';
 import { MAX_GIVEAWAY_MS, MAX_WINNERS } from './rules.js';
 
 const brouillons = new Map(); // userId -> brouillon
@@ -39,7 +39,7 @@ export function panneau(b, note = '') {
     `⏱️ **Durée** · ${b.dureeTexte ?? '*à définir*'}`,
     `📍 **Salon** · <#${b.channelId}>`,
     `📝 **Description** · ${b.description ? b.description.slice(0, 200) : '*aucune*'}`,
-    `🖼️ **Image** · ${b.image ? 'oui' : '*aucune*'}`,
+    `🖼️ **Image** · ${b.image ? '✅ envoyée' : '*aucune*'} · **Miniature** · ${b.thumbnail ? '✅ envoyée' : '*aucune*'}`,
     '',
     `🔒 **Rôle requis** · ${roles(b.requis)}`,
     `➕ **+1 entrée** · ${roles(b.bonus[1])}`,
@@ -51,7 +51,6 @@ export function panneau(b, note = '') {
     couleur: pret ? FR.vert : FR.bleu,
     description: `${lignes.join('\n')}${note ? `\n\n${note}` : ''}`,
   });
-  if (/^https:\/\//.test(b.image ?? '')) e.setImage(b.image);
 
   const menuRoles = (id, placeholder, defauts, max) => {
     const m = new RoleSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder).setMinValues(0).setMaxValues(max);
@@ -70,7 +69,7 @@ export function panneau(b, note = '') {
       new ActionRowBuilder().addComponents(salon),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gdraft:infos').setLabel('Lot et durée').setEmoji('🎁').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('gdraft:texte').setLabel('Description et image').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gdraft:texte').setLabel('Description et images').setEmoji('📝').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gdraft:go').setLabel('Lancer').setEmoji('🎉').setStyle(ButtonStyle.Success).setDisabled(!pret),
         new ButtonBuilder().setCustomId('gdraft:cancel').setLabel('Annuler').setStyle(ButtonStyle.Danger),
       ),
@@ -83,7 +82,7 @@ export function panneau(b, note = '') {
 export function ouvrirPanneau(interaction, ctx) {
   nettoyer();
   const b = {
-    prize: '', winners: 1, dureeMs: 86_400_000, dureeTexte: '1d', description: '', image: '',
+    prize: '', winners: 1, dureeMs: 86_400_000, dureeTexte: '1d', description: '', image: '', thumbnail: '',
     channelId: interaction.channelId, requis: [], bonus: bonusDefaut(ctx, interaction.guildId), at: Date.now(),
   };
   brouillons.set(interaction.user.id, b);
@@ -115,9 +114,15 @@ export async function surBrouillon(interaction, ctx) {
     ));
   }
   if (quoi === 'texte') {
-    return interaction.showModal(new ModalBuilder().setCustomId('gdraft:m:texte').setTitle('Description et image').addComponents(
-      champ('description', 'Description (facultatif)', TextInputStyle.Paragraph, false, b.description, 1000, 'Conditions, détails…'),
-      champ('image', 'Image : lien https (facultatif)', TextInputStyle.Short, false, b.image, 500, 'https://…/image.png'),
+    // Images envoyees en fichier depuis l ordinateur ou le telephone (Ryan, 06/11), gardees par le bot.
+    const upload = (id) => new FileUploadBuilder().setCustomId(id).setMinValues(0).setMaxValues(1).setRequired(false);
+    const desc = new TextInputBuilder().setCustomId('description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(1000)
+      .setPlaceholder('Conditions, détails…');
+    if (b.description) desc.setValue(b.description);
+    return interaction.showModal(new ModalBuilder().setCustomId('gdraft:m:texte').setTitle('Description et images').addLabelComponents(
+      new LabelBuilder().setLabel('Description (facultatif)').setTextInputComponent(desc),
+      new LabelBuilder().setLabel('Grande image (facultatif)').setDescription('PNG, JPG, GIF ou WEBP, 8 Mo max. Vide = on garde l\'actuelle.').setFileUploadComponent(upload('image')),
+      new LabelBuilder().setLabel('Miniature en haut à droite (facultatif)').setDescription('Vide = on garde l\'actuelle.').setFileUploadComponent(upload('thumbnail')),
     ));
   }
   if (quoi === 'm:infos') {
@@ -132,12 +137,17 @@ export async function surBrouillon(interaction, ctx) {
     return interaction.update(panneau(b, erreurs.length ? `❌ ${erreurs.join(' ')}` : '✅ Lot et durée enregistrés.'));
   }
   if (quoi === 'm:texte') {
-    const lien = interaction.fields.getTextInputValue('image').trim();
-    const image = lien ? normalizeImageRef(lien) : '';
+    await interaction.deferUpdate();
     b.description = interaction.fields.getTextInputValue('description').trim();
-    if (lien && !image) return interaction.update(panneau(b, '❌ Lien d\'image invalide : il faut un lien https direct vers une image.'));
-    b.image = image;
-    return interaction.update(panneau(b, '✅ Description et image enregistrées.'));
+    const erreurs = [];
+    for (const id of ['image', 'thumbnail']) {
+      const fichier = interaction.fields.getUploadedFiles(id)?.first();
+      if (!fichier) continue;
+      const r = await storeAttachment(ctx, fichier);
+      if (r.error) erreurs.push(`${id === 'image' ? 'Image' : 'Miniature'} : ${r.error}`);
+      else b[id] = r.ref;
+    }
+    return interaction.editReply(panneau(b, erreurs.length ? `❌ ${erreurs.join(' ')}` : '✅ Description et images enregistrées.'));
   }
   if (quoi === 'requis') { b.requis = [...interaction.values]; return interaction.update(panneau(b)); }
   if (quoi === 'salon') { b.channelId = interaction.values[0] ?? b.channelId; return interaction.update(panneau(b)); }
@@ -161,7 +171,7 @@ export async function surBrouillon(interaction, ctx) {
     const g = await startGiveaway(ctx, interaction.guild, {
       channelId: b.channelId, hostId: interaction.user.id, prize: b.prize, description: b.description,
       durationMs: b.dureeMs, winners: b.winners,
-      options: { ...(b.image ? { image: b.image } : {}), requiredRoleIds: b.requis, bonusEntries },
+      options: { ...(b.image ? { image: b.image } : {}), ...(b.thumbnail ? { thumbnail: b.thumbnail } : {}), requiredRoleIds: b.requis, bonusEntries },
     });
     brouillons.delete(interaction.user.id);
     return interaction.editReply({ ...panneau(b, `🎉 Giveaway #${g.id} lancé dans <#${g.channel_id}> !`), components: [] });
