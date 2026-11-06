@@ -85,38 +85,52 @@ export function giveawayView(ctx, g, current = {}) {
             return `<@${id}> ⏳`;
         return `<@${id}>`;
     };
+    // Mise en page calquee sur Giveaway Boat (Ryan, 06/11) : lot en titre,
+    // consigne, gagnants, fin, entrees bonus par role, conditions, et le
+    // nombre de participants sur le bouton.
+    const emoji = isValidEmoji(s.emoji) ? s.emoji.trim() : '🎉';
     const lines = [];
-    if (o.drop && !ended)
-        lines.push(`⚡ **Drop** : les ${g.winners} premier(s) à cliquer gagnent !`, '');
     if (g.description)
         lines.push(g.description, '');
-    lines.push(ended ? `Terminé : <t:${endTs}:R> (<t:${endTs}:f>)` : `Fin : <t:${endTs}:R> (<t:${endTs}:f>)`);
-    lines.push(`Organisé par : <@${g.host_id}>`);
-    if (!o.drop)
+    if (ended) {
+        lines.push(`Terminé : <t:${endTs}:R>`);
+        lines.push(`Gagnants : ${winners.length ? winners.map(winnerLabel).join(', ') : 'aucun'}`);
         lines.push(`Participants : **${entries}**`);
-    if (ended || o.drop) {
-        lines.push(`Gagnants${o.drop && !ended ? ` (${winners.length}/${g.winners})` : ''} : ${winners.length ? winners.map(winnerLabel).join(', ') : ended ? 'aucun' : 'personne pour l\'instant'}`);
+    }
+    else if (o.drop) {
+        lines.push(`Clique sur ${emoji} : les **${g.winners}** premier(s) gagnent !`);
+        lines.push(`Gagnants : ${winners.length ? `${winners.map(winnerLabel).join(', ')} (${winners.length}/${g.winners})` : 'personne pour l\'instant'}`);
+        lines.push(`Fin : <t:${endTs}:R>`);
     }
     else {
+        lines.push(`Clique sur ${emoji} pour participer !`);
         lines.push(`Gagnants : **${g.winners}**`);
+        lines.push(`Fin : <t:${endTs}:R> (<t:${endTs}:f>)`);
     }
     if (!ended) {
-        if (o.winnerRoleId)
-            lines.push(`Rôle offert : <@&${o.winnerRoleId}>${o.winnerRoleDays ? ` pendant ${o.winnerRoleDays} jour(s)` : ''}`);
-        if (o.claimHours)
-            lines.push(`Les gagnants auront **${o.claimHours} h** pour réclamer leur lot.`);
+        const bonus = o.drop ? [] : [
+            ...o.bonusEntries.filter((b) => b.entries > 1).map((b) => `<@&${b.roleId}> : **+${b.entries - 1}** entrée${b.entries - 1 > 1 ? 's' : ''}`),
+            ...describeBonus({ ...o, bonusEntries: [] }),
+        ];
+        if (bonus.length)
+            lines.push('', '**Entrées bonus :**', ...bonus);
         const rules = describeRules(o);
         if (rules.length)
-            lines.push('', '**Conditions**', ...rules.map((r) => `• ${r}`));
-        const bonus = describeBonus(o);
-        if (bonus.length && !o.drop)
-            lines.push('', '**Entrées bonus**', ...bonus.map((b) => `• ${b}`));
+            lines.push('', ...rules);
+        const extra = [];
+        if (o.winnerRoleId)
+            extra.push(`Rôle offert : <@&${o.winnerRoleId}>${o.winnerRoleDays ? ` pendant ${o.winnerRoleDays} jour(s)` : ''}`);
+        if (o.claimHours)
+            extra.push(`Les gagnants auront **${o.claimHours} h** pour réclamer leur lot.`);
+        if (extra.length)
+            lines.push('', ...extra);
     }
+    lines.push('', `-# Organisé par <@${g.host_id}>`);
     const embed = new EmbedBuilder()
         .setColor(hexToInt(ended ? o.endedColor || s.endedColor : o.color || s.color))
         .setTitle(`${o.drop ? '⚡ ' : ''}${g.prize}`.slice(0, 256))
         .setDescription(lines.join('\n').slice(0, 4096))
-        .setFooter({ text: `Giveaway #${g.id}${ended ? ' · terminé' : ''}` })
+        .setFooter({ text: ended ? `Giveaway #${g.id} · terminé le` : `Giveaway #${g.id} · fin le` })
         .setTimestamp(ended ? g.ended_at ?? g.ends_at : g.ends_at);
     const image = imageUrlFor(o.image, current.image);
     const thumbnail = imageUrlFor(o.thumbnail, current.thumbnail);
@@ -134,9 +148,10 @@ export function giveawayView(ctx, g, current = {}) {
     else {
         const button = new ButtonBuilder()
             .setCustomId(`giveaway:enter:${g.id}`)
-            .setEmoji(isValidEmoji(s.emoji) ? s.emoji.trim() : '🎉')
+            .setEmoji(emoji)
             .setStyle(o.drop ? ButtonStyle.Success : ButtonStyle.Primary);
-        const label = o.drop ? s.buttonLabel.trim() || 'Attraper' : s.buttonLabel.trim();
+        // Comme Giveaway Boat : le nombre de participants sur le bouton.
+        const label = o.drop ? s.buttonLabel.trim() || 'Attraper' : s.buttonLabel.trim() || String(entries);
         if (label)
             button.setLabel(label.slice(0, 80));
         row.addComponents(button);
