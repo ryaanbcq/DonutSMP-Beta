@@ -51,6 +51,12 @@ export const config = {
     // se lit comme du vrai (vecu le 2026-09-11, un solde de 70M affiche a 3,34M).
     mock: process.env.DONUT_MOCK === 'true',
   },
+  // Scanner de mods (panneau /panel scan) : API v1 de donutscan.org, cle creee par
+  // `node tools/api-key.mjs create donutsmp-fr-bot` dans ~/donut-modscan.
+  donutscan: {
+    apiKey: process.env.DONUTSCAN_API_KEY ?? '',
+    base: process.env.DONUTSCAN_API_BASE ?? 'https://donutscan.org/api/v1',
+  },
   dbPath: process.env.DB_PATH ?? './data/bot.db',
   ingame: {
     trackedFile: process.env.TRACKED_FILE ?? './data/tracked.json',

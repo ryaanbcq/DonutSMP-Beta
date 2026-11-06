@@ -14,6 +14,7 @@ import { permissionsManquantes } from '../tickets/manager.js';
 import { publierPanneau } from '../tickets/setup.js';
 import { assurerFils } from '../vouch/fils.js';
 import { panneauVouch } from '../vouch/panel.js';
+import { panneauScan } from '../scan/panel.js';
 
 export const requiresLink = false;
 
@@ -104,6 +105,14 @@ const PANNEAUX = {
       return notes.join(' ');
     },
   },
+  scan: {
+    nom: 'Scanner de mods',
+    async poser(interaction, salon) {
+      if (!config.donutscan.apiKey) throw new Error('clé DonutScan absente : ajoute DONUTSCAN_API_KEY au .env du bot');
+      await salon.send(panneauScan());
+      return 'Les membres déposent leur .jar, le résultat leur arrive en privé.';
+    },
+  },
   ticket: {
     nom: 'Tickets',
     async poser(interaction, salon) {
@@ -137,6 +146,7 @@ export const data = new SlashCommandBuilder()
     s.setName('deverrouiller')
       .setDescription('Rouvre un salon de panneau à tout le monde')
       .addChannelOption((o) => o.setName('salon').setDescription('Le salon à rouvrir')))
+  .addSubcommand((s) => sousCommande(s, 'scan', 'Scanner de mods DonutScan : les membres déposent un .jar'))
   .addSubcommand((s) => sousCommande(s, 'ticket', 'Panneau de tickets pour les membres (réglages : /setup tickets)'))
   .addSubcommand((s) =>
     sousCommande(s, 'vouches', 'Panneau pour noter un membre, avec le forum des réputations')

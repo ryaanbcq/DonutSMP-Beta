@@ -31,6 +31,8 @@ import { bypass } from './lib/names.js';
 import { assurerRoles, majRolesDonateur, palierPour, nomRole, paliers as paliersDons } from './dons/dons.js';
 import { onGsetupSelect, onGsetupBouton, onGsetupModal } from './setup/general.js';
 import { onModalEmbed } from './commands/embed.js';
+import { onBoutonScan, onModalScan } from './scan/panel.js';
+import { demarrerAlerteScan, onBoutonScanNon } from './scan/alerte.js';
 import { onDsetupSelect, onDsetupBouton, onDsetupModal } from './dons/setup.js';
 import { publierPanneauDons, surveillerPanneauDons, onBoutonDons, onModalDons } from './dons/panneau.js';
 import { demarrerLogDons, logDon, salonDonsActif } from './dons/log.js';
@@ -105,6 +107,7 @@ client.once('clientReady', async (c) => {
   demarrerAntipub(c);
   demarrerPrefixe(c);
   demarrerHebs(c);
+  demarrerAlerteScan(c);
   // Avant les fils de vouches, qui prennent plusieurs minutes au demarrage.
   demarrerGuide(c);
   demarrerSuggestions(c);
@@ -310,6 +313,8 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('dsetup:')) return onDsetupBouton(interaction);
   if (interaction.customId.startsWith('gsetup:')) return onGsetupBouton(interaction);
   if (interaction.customId.startsWith('dons:')) return onBoutonDons(interaction);
+  if (interaction.customId === 'scan:start') return onBoutonScan(interaction);
+  if (interaction.customId === 'scan:non') return onBoutonScanNon(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
 
@@ -383,6 +388,7 @@ async function onModal(interaction) {
   if (interaction.customId.startsWith('embed:')) return onModalEmbed(interaction);
   if (interaction.customId.startsWith('dons:')) return onModalDons(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
+  if (interaction.customId === 'scan:modal') return onModalScan(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
 }
