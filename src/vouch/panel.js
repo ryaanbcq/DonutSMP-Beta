@@ -8,7 +8,7 @@ import { journal } from '../ops/journal.js';
 import { settings, ouSeLier } from '../settings.js';
 import { embed, FR } from '../lib/brand.js';
 import { etoiles, barre, ligneScore } from './trust.js';
-import { trustDe, posterAvis, retirerAvis, carteReputation, filDe, fichiersDe, cibleDe } from './fils.js';
+import { trustDe, posterAvis, retirerAvis, carteReputation, filDe, fichiersDe, cibleDe, texteAvis } from './fils.js';
 
 // Seuls les membres lies se notent (retour en arriere du 06/11, Nozz et Ryan) :
 // un membre non lie n a ni post ni avis.
@@ -286,7 +286,7 @@ function vueExistant(existant, cible) {
     description:
       `Votre avis sur **${cible.mc_name}** existe déjà, publié <t:${Math.floor(existant.created_at / 1000)}:R> :\n`
       + `${positif ? etoiles(existant.stars ?? 5) : '⚠️ Signalement'}`
-      + (existant.comment ? `\n> ${existant.comment.replace(/\n/g, '\n> ')}` : '')
+      + (texteAvis(existant.comment) ? `\n> ${texteAvis(existant.comment).replace(/\n/g, '\n> ')}` : '')
       + '\n\nUn seul avis par joueur. Vous pouvez le **modifier** (il sera remplacé) ou le **supprimer**.',
   });
   const boutons = new ActionRowBuilder().addComponents(

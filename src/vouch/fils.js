@@ -244,6 +244,11 @@ export async function fichiersDe(message) {
  * les images vont DANS l embed (la premiere en grand, jusqu a trois autres
  * en galerie, meme URL de carte = Discord les groupe), le reste en piece jointe.
  */
+/** Texte affiche d un avis : le prefixe « [Ancien vouch] » des imports reste en base, pas a l ecran (06/11). */
+export function texteAvis(comment) {
+  return String(comment ?? '').replace(/^\s*\[Ancien vouch\]\s*/i, '').replace(/^\(capture\)$/, '').trim();
+}
+
 export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null, client = null } = {}) {
   const nomAuteur = nomDiscord(client, vouch.from_id);
   const positif = vouch.value > 0;
@@ -256,7 +261,7 @@ export function carteAvis(vouch, auteurLink, cibleLink, { noms = [], lien = null
     description:
       `**${auteurLink?.mc_name ?? nomAuteur ?? 'Membre'}** <@${vouch.from_id}> `
       + (positif ? `· ${etoiles(vouch.stars ?? 5)}` : '· signale **' + cibleLink.mc_name + '**')
-      + (vouch.comment ? `\n> ${vouch.comment.replace(/\n/g, '\n> ')}` : ''),
+      + (texteAvis(vouch.comment) ? `\n> ${texteAvis(vouch.comment).replace(/\n/g, '\n> ')}` : ''),
   }).setTimestamp(vouch.created_at);
   const n = preuves.length + (vouch.video ? 1 : 0);
   if (n) contenu.setFooter({ text: `📎 ${n} preuve(s) jointe(s)` });
@@ -329,7 +334,8 @@ export function posterAvis(client, fromId, toId, opts = {}) {
 async function posterAvisSeul(client, fromId, toId, { fichiers = [] } = {}) {
   const vouch = store.getVouch(fromId, toId);
   const cible = cibleDe(client, toId);
-  if (!vouch || !cible) return null;
+  // Non lie : plus de post (06/11), l avis attend son link en base.
+  if (!vouch || !cible || cible.nonLie) return null;
   const fil = await filDe(client, cible);
   if (!fil) return null;
   await reveiller(fil);

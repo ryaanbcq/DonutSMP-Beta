@@ -106,3 +106,10 @@ test('non lie dont le pseudo avait deja une reputation : fusion, post du pseudo 
   assert.equal(store.getThread('N2')?.thread_id, 'fil-pseudo', 'le post du pseudo est garde');
   assert.deepEqual(JSON.parse(store.kvGet('vouch.postsFusionnes')), ['fil-discord'], 'le post Discord sera ferme');
 });
+
+test('avis importe : le prefixe [Ancien vouch] ne s affiche pas', async () => {
+  const { texteAvis } = await import('../src/vouch/fils.js');
+  assert.equal(texteAvis('[Ancien vouch] + vouch gamble 100m'), '+ vouch gamble 100m');
+  assert.equal(texteAvis('[Ancien vouch] (capture)'), '');
+  assert.equal(texteAvis('super trade'), 'super trade');
+});
