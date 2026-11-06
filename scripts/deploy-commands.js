@@ -8,6 +8,7 @@ const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'commands
 const body = [];
 for (const file of (await readdir(dir)).filter((f) => f.endsWith('.js'))) {
   const mod = await import(pathToFileURL(join(dir, file)).href);
+  for (const c of mod.commandes ?? []) body.push(c.data.toJSON());
   if (mod.data) body.push(mod.data.toJSON());
 }
 

@@ -19,6 +19,10 @@ import { duree } from '../ingame/diagnostic.js';
 import { PaymentWatcher } from './link/watcher.js';
 import { take } from './link/interactions.js';
 import { chargerUuids, resoudreUuids } from './lib/uuids.js';
+import { ctx as ctxGiveaways, brancherClient } from './giveaways/contexte.js';
+import { giveawaysModule } from './giveaways/index.js';
+import { invitesModule } from './invites/index.js';
+import { demarrerCompteurMessages } from './stats/store.js';
 import { setLogo, embed, TITRES, FR } from './lib/brand.js';
 import { balances, demarrerRafraichissement } from './donut/balances.js';
 import { publierSuivis, surveillerSoldes, demanderSolde, attendreSolde } from './donut/ingame-balances.js';
@@ -72,6 +76,8 @@ async function loadCommands() {
   const commands = new Collection();
   for (const file of files) {
     const mod = await import(pathToFileURL(join(dir, file)).href);
+    // Un fichier peut porter plusieurs commandes (giveaways : `commandes`).
+    for (const c of mod.commandes ?? []) commands.set(c.data.name, c);
     if (!mod.data || !mod.execute) continue;
     commands.set(mod.data.name, mod);
   }
@@ -80,7 +86,7 @@ async function loadCommands() {
 
 // Messages (sans leur contenu) et vocal : activite des membres, pour les
 // tags interdits « actifs seulement ». Intents non privilegies.
-const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates];
+const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildInvites];
 // Sans cet intent les transcripts de tickets n ont pas le texte des messages.
 if (config.discord.messageContent) intents.push(GatewayIntentBits.MessageContent);
 // Tags interdits : il faut la liste des membres. L intent n est demande que
@@ -94,6 +100,13 @@ const client = new Client({
   sweepers: { ...Options.DefaultSweeperSettings, messages: { interval: 900, lifetime: 1800 } },
 });
 client.commands = await loadCommands();
+
+// Giveaways et invitations (repris d Orbit, docs/giveaways-LISEZMOI.md).
+brancherClient(client);
+giveawaysModule.setup(ctxGiveaways);
+if (intents.includes(GatewayIntentBits.GuildMembers)) invitesModule.setup(ctxGiveaways);
+else console.log('[invites] intent Server Members absent : suivi des invitations a l arret');
+demarrerCompteurMessages(client, config.discord.guildId);
 
 client.once('clientReady', async (c) => {
   setLogo(c.user.displayAvatarURL({ size: 256, extension: 'png' }));
@@ -323,6 +336,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('dons:')) return onBoutonDons(interaction);
   if (interaction.customId === 'scan:start' || interaction.customId.startsWith('scan:start:')) return onBoutonScan(interaction);
   if (interaction.customId === 'scan:non') return onBoutonScanNon(interaction);
+  if (interaction.customId.startsWith('giveaway:')) return giveawaysModule.buttons.giveaway(interaction, ctxGiveaways, interaction.customId.split(':').slice(1));
   if (interaction.customId.startsWith('rat:')) return onBoutonRat(interaction);
   if (interaction.customId === 'link:unlink') return onDelier(interaction);
   if (interaction.customId !== 'link:start') return;
@@ -398,6 +412,7 @@ async function onModal(interaction) {
   if (interaction.customId.startsWith('dons:')) return onModalDons(interaction);
   if (interaction.customId.startsWith('vouch:')) return onVouchModal(interaction);
   if (interaction.customId === 'scan:modal' || interaction.customId.startsWith('scan:modal:')) return onModalScan(interaction);
+  if (interaction.customId.startsWith('gcreate:')) return giveawaysModule.modals.gcreate(interaction, ctxGiveaways, interaction.customId.split(':').slice(1));
   if (interaction.customId === 'rat:modal') return onModalRat(interaction);
   if (interaction.customId !== 'link:modal') return;
   return repondreChallenge(interaction, interaction.fields.getTextInputValue('pseudo'));
