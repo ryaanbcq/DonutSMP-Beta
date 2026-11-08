@@ -248,7 +248,7 @@ export async function ouvrir(interaction, cibleId = null, { verdict = null } = {
   if (cibleId) {
     if (cibleId === interaction.user.id) return interaction.reply({ content: '❌ On ne se note pas soi-même.', ...EPH });
     const cible = cibleVouch(interaction.client, cibleId);
-    if (!cible) return interaction.reply({ content: `❌ <@${cibleId}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (`/link`) peuvent être notés.`, ...EPH });
+    if (!cible) return interaction.reply({ content: `❌ <@${cibleId}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (\`/link\`) peuvent être notés.`, ...EPH });
     const existant = store.getVouch(interaction.user.id, cibleId);
     poser(interaction.user.id, { cible: cibleId, cibleNonLie: cible.nonLie ? cible : null, ...(verdict ? { verdict } : {}) });
     return interaction.reply({ ...(existant ? vueExistant(existant, cible) : rendre(brouillon(interaction.user.id))), ...EPH });
@@ -267,7 +267,7 @@ export async function onSelect(interaction) {
   const b = brouillon(interaction.user.id);
   if (id === interaction.user.id) return maj(interaction, rendre(b, '❌ On ne se note pas soi-même.'));
   const cible = cibleVouch(interaction.client, id);
-  if (!cible) return maj(interaction, rendre(b, `❌ <@${id}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (`/link`) peuvent être notés.`));
+  if (!cible) return maj(interaction, rendre(b, `❌ <@${id}> n'a pas lié son compte Minecraft : seuls les membres vérifiés (\`/link\`) peuvent être notés.`));
   const nl = cible.nonLie ? cible : null;
   const existant = store.getVouch(interaction.user.id, id);
   if (existant) {
