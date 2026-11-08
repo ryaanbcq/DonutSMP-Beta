@@ -4,10 +4,11 @@
 
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder, RoleSelectMenuBuilder,
-  ChannelSelectMenuBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder,
+  ChannelSelectMenuBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder,
 } from 'discord.js';
 import { embed, FR } from '../lib/brand.js';
 import { registre } from './actions.js';
+import { reglagesQuota } from './quota.js';
 import { reglagesAntipub, statsModele } from './antipub.js';
 
 const ACTIONS = [
@@ -35,6 +36,7 @@ export function pageModeration(note = '') {
       couleur: FR.bleu,
       description: '**Qui peut sanctionner**, action par action. Le propriétaire du serveur peut toujours tout.\n\n'
         + `${lignes.join('\n')}\n`
+        + `⏳ **Quota de bans (7 jours glissants)** · ${Object.entries(reglagesQuota.quotas()).map(([id, n]) => `<@&${id}> ${n}`).join(' · ') || 'par défaut : Sr Modérateur 10, Modérateur 3 (repérés par le nom du rôle)'} · *pas de quota pour le propriétaire et les administrateurs*\n`
         + `👑 **Peut tout faire** · ${[...membres.map((id) => `<@${id}>`), ...tout.map((id) => `<@&${id}>`)].join(' ') || '*personne*'}\n\n`
         + (regle ? '' : '➖ Rien de réglé : pour l\'instant, les admins du bot peuvent tout faire.\n\n')
         + `### Commandes rapides\nDans n'importe quel salon, préfixe **\`${p}\`** :\n`
@@ -49,6 +51,7 @@ export function pageModeration(note = '') {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('gsetup:mod:prefixe').setLabel(`Préfixe : ${p}`).setEmoji('⌨️').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:mod:tout').setLabel('Qui peut tout faire').setEmoji('👑').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('gsetup:mod:quota').setLabel('Quota de bans').setEmoji('⏳').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('gsetup:page:accueil').setLabel('Retour').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
       ),
     ],
@@ -92,6 +95,14 @@ export async function onModerationSelect(interaction, id) {
 
 export async function onModerationBouton(interaction, id) {
   if (id === 'mod:tout') return interaction.update(pageTout());
+  if (id === 'mod:quota') {
+    return interaction.showModal(new ModalBuilder().setCustomId('gsetup:mod:quota').setTitle('Quota de bans par rôle').addLabelComponents(
+      new LabelBuilder().setLabel('Rôle').setDescription('Le rôle le plus généreux d\'un membre compte.')
+        .setRoleSelectMenuComponent(new RoleSelectMenuBuilder().setCustomId('role').setMinValues(1).setMaxValues(1)),
+      new LabelBuilder().setLabel('Bans permis sur 7 jours glissants').setDescription('0 = retirer le quota de ce rôle.')
+        .setTextInputComponent(new TextInputBuilder().setCustomId('n').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(3).setPlaceholder('3')),
+    ));
+  }
   if (id === 'mod:prefixe') {
     return interaction.showModal(new ModalBuilder().setCustomId('gsetup:mod:prefixe').setTitle('Préfixe des commandes')
       .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('p')
@@ -102,6 +113,13 @@ export async function onModerationBouton(interaction, id) {
 }
 
 export async function onModerationModal(interaction, id) {
+  if (id === 'mod:quota') {
+    const role = interaction.fields.getSelectedRoles('role')?.first();
+    const n = Number(interaction.fields.getTextInputValue('n').trim());
+    if (!role || !Number.isInteger(n) || n < 0 || n > 999) return interaction.update(pageModeration('❌ Il faut un rôle et un nombre entre 0 et 999.'));
+    reglagesQuota.poser(role.id, n);
+    return interaction.update(pageModeration(n ? `✅ ${role} : ${n} bans sur 7 jours.` : `✅ Plus de quota pour ${role}.`));
+  }
   if (id !== 'mod:prefixe') return null;
   const p = interaction.fields.getTextInputValue('p').trim();
   if (!p || /\s|[@#<>`*_~|]/.test(p)) return interaction.update(pageModeration('❌ Préfixe refusé : pas d\'espace ni de @ # < > ` * _ ~ |.'));

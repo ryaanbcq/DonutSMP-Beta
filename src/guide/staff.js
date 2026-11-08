@@ -93,7 +93,8 @@ function moderation(guild) {
       + '### ⛔ Bannir\n'
       + `\`${p}ban @membre [durée] [raison]\` · sans durée : ban définitif\n`
       + `\`${p}unban <ID>\`\n`
-      + `${qui('ban')}\n\n`
+      + `${qui('ban')}\n`
+      + '⏳ **Quota de bans** sur 7 jours glissants : Modérateur 3, Sr Modérateur 10 (réglable dans /setup general > Modération). Bans temporaires et définitifs comptent, un unban ne rend pas de crédit. Pas de quota pour le propriétaire et les administrateurs. Limite atteinte : demande à un Sr Modérateur ou à un admin.\n\n'
       + `⏱️ **Durée** : \`10m\` \`2h\` \`3j\` \`1sem\` · ex. \`${p}ban 123456789012345678 3j pub en MP\`\n`
       + (peutTout ? `👑 **Peut tout faire** : ${peutTout}\n` : '')
       + '-# Préfixe et rôles : /setup general > Modération.',

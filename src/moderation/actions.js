@@ -19,6 +19,7 @@ import { config } from '../config.js';
 import { store } from '../db.js';
 import { estAdmin } from '../lib/admin.js';
 import { journal } from '../ops/journal.js';
+import { verifierQuota, reglagesQuota } from './quota.js';
 import {
   lireDuree, ecrireDuree, lireIdUtilisateur, MUTE_MAX_MS,
 } from './outils.js';
@@ -187,6 +188,7 @@ export async function appliquerSanction({ nom, guild, moderateur, utilisateur, r
   const qui = `<@${utilisateur.id}> (**${utilisateur.tag}**)`;
   let resultat;
   let titre;
+  let quota = { ok: true, limite: null };
   const champs = { Raison: raison, Par: `<@${moderateur.id}>` };
 
   try {
@@ -228,6 +230,13 @@ export async function appliquerSanction({ nom, guild, moderateur, utilisateur, r
       }
       case 'ban': {
         if (cible && !cible.bannable) throw new Error('je ne peux pas le bannir (droit ou rôle au-dessus du mien)');
+        // Quota de bans par role (quota.js), verifie AVANT tout MP ou ban.
+        quota = verifierQuota(moderateur);
+        if (!quota.ok) {
+          const nomRole = guild.roles.cache.get(quota.roleId)?.name.replace(/^\W+/, '') ?? 'ton rôle';
+          journal({ niveau: 'warn', titre: 'Modération : ban refusé (quota)', texte: `<@${moderateur.id}> a atteint sa limite de bans : ${qui} n'a pas été banni.`, champs: { Raison: raison, Quota: `${quota.faits}/${quota.limite} sur 7 jours (${nomRole})` } });
+          return { ok: false, texte: `⏳ Limite atteinte : tu as déjà fait ${quota.faits} bans sur les 7 derniers jours (limite ${nomRole}). Prochain ban possible <t:${Math.floor(quota.prochain / 1000)}:R>. Pour un cas urgent, demande à un Sr Modérateur ou à un admin.` };
+        }
         await mp(duree
           ? `⛔ Tu es banni ${ecrireDuree(duree)} de **${nomServeur}** : ${raison}`
           : `⛔ Tu es banni définitivement de **${nomServeur}** : ${raison}`);
@@ -238,6 +247,11 @@ export async function appliquerSanction({ nom, guild, moderateur, utilisateur, r
         champs.Durée = duree ? ecrireDuree(duree) : 'définitif';
         if (duree) champs.Fin = `<t:${Math.floor((Date.now() + duree) / 1000)}:f>`;
         resultat = `⛔ ${qui} banni ${duree ? ecrireDuree(duree) : 'définitivement'}.`;
+        if (quota.limite) {
+          const n = reglagesQuota.noterBan(moderateur.id);
+          champs.Quota = `${n}/${quota.limite}`;
+          resultat += `\n-# Bans cette semaine : ${n}/${quota.limite}`;
+        }
         break;
       }
       default:
