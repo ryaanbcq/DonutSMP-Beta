@@ -39,6 +39,11 @@ function aLeRole(membre, id) {
   return false;
 }
 
+/** Roles et membres a pinger pour une alerte staff (alerte ban du bot en jeu). */
+export function cibleAlerteAdmins() {
+  return { roles: rolesAdminLus(), users: liste(config.discord.adminUserIds) };
+}
+
 export function estAdmin(membre, reglages = null) {
   if (!membre) return false;
   const id = membre.id ?? membre.user?.id;

@@ -4,6 +4,7 @@
 
 import { readFileSync, statSync } from 'node:fs';
 import { config } from '../config.js';
+import { lireRegistre, compteActif } from './comptes.js';
 
 const FICHIER = process.env.BOT_ACCOUNT_FILE ?? './data/compte.json';
 let cache = { mtime: -1, etat: {} };
@@ -18,7 +19,14 @@ function lire() {
 }
 
 /** Pseudo du compte receveur. */
-export const compteBot = () => lire().nom || config.mc.linkAccount;
+// Le registre /bot auth passe devant : apres un « /bot auth switch », c est le
+// nouveau compte que les joueurs doivent payer.
+export const compteBot = () => {
+  const reg = lireRegistre();
+  const actif = compteActif(reg);
+  const enregistre = reg.comptes.length > 1 || reg.comptes[0]?.ajoutePar !== '.env';
+  return (enregistre && actif?.nom) || lire().nom || config.mc.linkAccount;
+};
 
 /** Vrai quand un changement de compte attend la connexion du nouveau compte. */
 export const changementEnCours = () => Boolean(lire().changement);

@@ -9,6 +9,8 @@ import mineflayer from 'mineflayer';
 import { creerSuperviseur } from './superviseur.js';
 import { note, noteSync, deposerCodeMsa, effacerCodeMsa } from './journal.js';
 import { diagnostiquerKick, diagnostiquerErreur, duree } from './diagnostic.js';
+import { rapportKick } from './rapport-kick.js';
+import { lireRegistre, compteActif, majCompte, trouverCompte } from '../src/ingame/comptes.js';
 import { shortMoney } from '../src/lib/format.js';
 import { appendFile, writeFile, readFile, mkdir, stat, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -83,6 +85,16 @@ const FICHIER_COMPTE = process.env.BOT_ACCOUNT_FILE ?? './data/compte.json';
 let compte = { nom: null, changement: false };
 try { compte = { ...compte, ...JSON.parse(await readFile(FICHIER_COMPTE, 'utf8')) }; } catch { /* jamais change */ }
 if (compte.nom) cfg.expectedName = compte.nom;
+
+// Registre /bot auth : le compte ACTIF fournit le jeton (dossier propre) et
+// le pseudo attendu. Sans registre, c est le compte du .env, comme avant.
+function appliquerCompte(c) {
+  if (!c) return;
+  if (c.cle) cfg.username = c.cle;
+  if (c.dossier) cfg.profilesFolder = c.dossier;
+  if (c.nom) cfg.expectedName = c.nom;
+}
+appliquerCompte(compteActif(lireRegistre()));
 async function sauverCompte() {
   await mkdir(dirname(FICHIER_COMPTE), { recursive: true });
   await writeFile(`${FICHIER_COMPTE}.tmp`, JSON.stringify(compte));
@@ -106,6 +118,14 @@ let lastPayment = null;
 // dit rien : elle faisait trois messages a chaque fois. Seule leur repetition
 // est signalee (« Connexion instable »).
 let panne = null; // { depuis, tentatives, raison, alerte, annoncee, diag }
+// Dernier kick diagnostique, ecrit dans le fichier d etat : le bot Discord
+// affiche ainsi la VRAIE raison (« compte bloque, Ban ID #… ») au lieu de
+// « deconnecte ». Efface des que le bot est de nouveau en jeu.
+let dernierKick = null;
+let enJeuCetteConnexion = false;
+// Ban ou compte bloque : relances espacees (une nouvelle tentative par
+// tranche de 30 min) au lieu d une par minute.
+const RELANCE_BLOQUE_MS = 30 * 60_000;
 const PANNE_ALERTES_MIN = [10, 60, 360];
 const ANNONCE_APRES_MS = 90_000;
 const INSTABLE_PAR_HEURE = 6;
@@ -129,6 +149,55 @@ function signaler(diag) {
     champs: { Motif: `\`${diag.motif.slice(0, 900)}\`` },
     actions: diag.actions,
   });
+}
+
+// Alerte ban : UN message qui ping le staff, par Ban ID (ou motif).
+const alertesBan = new Set();
+function alerteBan(diag, rapport) {
+  const cle = diag.banId ?? diag.motif;
+  if (alertesBan.has(cle)) return;
+  alertesBan.add(cle);
+  const autres = lireRegistre().comptes.filter((c) => c.id !== lireRegistre().actif).map((c) => c.nom ?? c.id);
+  note('err', '🚨 ALERTE BAN : compte du bot refusé',
+    `DonutSMP refuse le compte **${cfg.expectedName || cfg.username}** : plus aucune liaison ne passe.\n\n`
+    + (rapport?.resume ? `${rapport.resume}\n\n` : '')
+    + (autres.length
+      ? `Compte de secours disponible : **${autres.join(', ')}**. Bascule avec \`/bot auth switch\`.`
+      : 'Aucun autre compte enregistré : ajoute-en un avec `/bot auth add`, puis `/bot auth switch`.'),
+    {
+      champs: {
+        ...(diag.banId ? { 'Ban ID': diag.banId } : {}),
+        ...(rapport?.fin ? { Fin: rapport.fin } : {}),
+        Motif: `\`${diag.motif.slice(0, 900)}\``,
+      },
+      ping: 'admins',
+      actions: ['relink'],
+    });
+}
+
+async function demanderRapport(diag, avantSpawn) {
+  const reg = lireRegistre();
+  const rapport = await rapportKick(diag, {
+    compte: cfg.expectedName || cfg.username,
+    autresComptes: reg.comptes.filter((c) => c.id !== reg.actif).map((c) => c.nom ?? c.id),
+    avantSpawn,
+  });
+  if (!rapport) return;
+  if (dernierKick && dernierKick.motif === diag.motif.slice(0, 1500)) {
+    dernierKick.rapport = { type: rapport.type, ban: rapport.ban, resume: rapport.resume, queFaire: rapport.que_faire, fin: rapport.fin };
+    // Haiku a reconnu un ban que les regles ont rate : on arrete de frapper
+    // a la porte toutes les minutes.
+    if (rapport.ban) dernierKick.bloquant = true;
+    saveStatus({ online: Boolean(bot?.player) }).catch(() => {});
+  }
+  const cleRapport = `rapport|${diag.motif}`;
+  if (!diagsVus.has(cleRapport)) {
+    diagsVus.set(cleRapport, Date.now());
+    note(rapport.gravite, '🧠 Compte rendu du refus',
+      `${rapport.resume}\n\n**À faire :** ${rapport.que_faire}`,
+      { champs: { Type: rapport.type, ...(rapport.fin ? { Fin: rapport.fin } : {}) } });
+  }
+  if (rapport.ban) alerteBan({ ...diag, bloquant: true }, rapport);
 }
 
 // Relances et chien de garde : voir ingame/superviseur.js.
@@ -184,6 +253,7 @@ async function saveStatus(extra = {}) {
     } : null,
     lastPayment,
     refunds: ledger?.stats() ?? null,
+    kick: bot?.player ? null : dernierKick,
     rssMb: rss,
     heapMb: heap,
     at: Date.now(),
@@ -208,6 +278,7 @@ function connect() {
   // `ceBot` est CETTE connexion. Les handlers ne doivent jamais passer par la
   // variable partagee : elle vaut null des qu on a rendu la main, et elle
   // pointe la connexion suivante une fois qu on a relance.
+  enJeuCetteConnexion = false;
   const ceBot = mineflayer.createBot({
     host: cfg.host,
     port: cfg.port,
@@ -316,6 +387,11 @@ function connect() {
 
   ceBot.once('spawn', async () => {
     superviseur.connecte();
+    dernierKick = null;
+    enJeuCetteConnexion = true;
+    try {
+      majCompte(lireRegistre().actif, { nom: ceBot.username, uuid: ceBot.player?.uuid ?? null, vuEnJeuA: Date.now() });
+    } catch (e) { console.error('[comptes] registre non mis a jour :', e.message); }
     derniereConnexionA = Date.now();
     console.log(`[mc] connecte en tant que ${ceBot.username}`);
     if (msaEnAttente) {
@@ -455,8 +531,18 @@ function connect() {
       clicCustomCoupe = true;
       console.warn('[stats] kick sur le clic du profil complet : clics coupes jusqu au redemarrage');
     }
+    const diag = diagnostiquerKick(reason);
+    const avantSpawn = !enJeuCetteConnexion;
+    dernierKick = {
+      titre: diag.titre, niveau: diag.niveau, motif: diag.motif.slice(0, 1500),
+      bloquant: diag.bloquant, banId: diag.banId, at: Date.now(), avantSpawn, rapport: null,
+    };
     saveStatus({ online: false }).catch(() => {});
-    signaler(diagnostiquerKick(reason));
+    signaler(diag);
+    if (diag.bloquant) alerteBan(diag, null);
+    // Refus d entrer, ban, ou motif que les regles ne connaissent pas : Haiku
+    // lit le texte complet et fait le compte rendu.
+    if (avantSpawn || diag.bloquant || diag.titre === 'Bot expulsé') demanderRapport(diag, avantSpawn);
   });
   ceBot.on('error', (err) => {
     console.error(`[mc] erreur : ${err.message}`);
@@ -486,7 +572,7 @@ function rendreLaMain(raison, generation) {
   if (!superviseur.courante(generation)) return;
   bot = null;
   saveStatus({ online: false }).catch(() => {});
-  const dans = superviseur.relancer(raison, generation);
+  const dans = superviseur.relancer(raison, generation, dernierKick?.bloquant ? RELANCE_BLOQUE_MS : 0);
   if (dans === null) return;
   if (panne) {
     panne.tentatives += 1;
@@ -864,6 +950,7 @@ setInterval(async () => {
   let ordre;
   try { ordre = JSON.parse(await readFile(CONTROLE, 'utf8')); } catch { return; }
   await rm(CONTROLE, { force: true });
+  if (ordre?.action === 'switch') return basculerCompte(ordre);
   if (ordre?.action !== 'relink') return;
   if (ordre.changer) {
     compte.changement = true;
@@ -898,6 +985,34 @@ setInterval(async () => {
   }
   // Sans connexion ouverte, la relance deja programmee repartira sans jeton.
 }, 2_000).unref();
+
+// « /bot auth switch » : le compte actif du registre a change. On reprend son
+// jeton et son pseudo, et on repart TOUT DE SUITE (meme pendant l attente de
+// 30 min apres un ban).
+function basculerCompte(ordre) {
+  if (!(Date.now() - Number(ordre.at) < 5 * 60_000)) {
+    console.warn('[mc] ordre de bascule perime ignore');
+    return;
+  }
+  const c = trouverCompte(ordre.id) ?? compteActif(lireRegistre());
+  const ancien = cfg.expectedName;
+  appliquerCompte(c);
+  compte = { nom: c.nom ?? null, changement: false, depuis: Date.now() };
+  sauverCompte().catch(() => {});
+  dernierKick = null;
+  panne = null;
+  console.warn(`[mc] bascule de compte par ${ordre.par} : ${ancien || '?'} -> ${c.nom ?? c.id}`);
+  note('info', 'Bascule de compte',
+    `Le bot en jeu passe sur **${c.nom ?? c.id}**. Les joueurs le paient désormais pour se lier.`,
+    { champs: { Avant: ancien || 'inconnu', Maintenant: c.nom ?? c.id, Par: ordre.par ?? 'inconnu' }, joueur: c.nom ?? undefined });
+  const ancienBot = bot;
+  bot = null;
+  saveStatus({ online: false }).catch(() => {});
+  superviseur.relancerMaintenant(`bascule vers ${c.nom ?? c.id}`);
+  if (ancienBot) {
+    try { ancienBot.end('bascule de compte'); } catch { /* deja morte */ }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Remboursement : le micro-paiement n est qu une preuve, on le rend au joueur

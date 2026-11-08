@@ -103,3 +103,29 @@ test('ban temporaire, ban definitif et compte bloque se distinguent', () => {
   assert.equal(diagnostiquerKick('You are permanently banned from DonutSMP. Ban ID: #2').titre, 'Bot banni définitivement');
   assert.equal(diagnostiquerKick('Blocked account. Ban ID: #3').titre, 'Compte du bot bloqué par DonutSMP');
 });
+
+test('kick NBT type de DonutSMP (08/11/2026) : compte « placed on hold » reconnu, Ban ID extrait', () => {
+  const t = (v) => ({ type: 'string', value: v });
+  const motif = {
+    type: 'compound',
+    value: {
+      text: t(''),
+      extra: { type: 'list', value: { type: 'compound', value: [
+        { color: t('red'), text: t('Connect reason: ') },
+        { color: t('white'), text: t('You are already online\n') },
+        { text: t('§c§f§lYour account has been placed on hold.\n§7Ban ID: §f#jjDF5TT7\n§7You may be able to appeal this ban on\n') },
+        { color: t('white'), text: t('support.donutsmp.net\n') },
+      ] } },
+    },
+  };
+  assert.match(texteDuMotif(motif), /placed on hold/);
+  const d = diagnostiquerKick(motif);
+  assert.equal(d.titre, 'Compte du bot bloqué par DonutSMP', 'pas « Session fantôme » malgré already online');
+  assert.equal(d.banId, '#jjDF5TT7');
+  assert.equal(d.bloquant, true);
+  assert.notEqual(d.motif, '(aucun motif)');
+});
+
+test('une coupure banale n est pas bloquante', () => {
+  assert.equal(diagnostiquerKick('Server is restarting').bloquant, false);
+});

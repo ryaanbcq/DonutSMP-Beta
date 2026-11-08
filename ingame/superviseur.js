@@ -25,6 +25,10 @@ export function creerSuperviseur({
   let essais = 0;
   let prevue = false;
   let vuA = maintenant();
+  // Numero de la relance programmee : une relance remplacee (bascule de
+  // compte pendant une attente de 30 min apres un ban) ne doit pas se
+  // declencher plus tard et ouvrir une deuxieme connexion.
+  let planif = 0;
 
   const delai = () => Math.min(plafond, base * 2 ** essais++);
 
@@ -47,13 +51,16 @@ export function creerSuperviseur({
      * Programme une relance. Rend le delai retenu, ou null si la demande est
      * ignoree (relance deja prevue, ou generation perimee).
      */
-    relancer(raison, g = generation) {
+    relancer(raison, g = generation, auMoins = 0) {
       if (prevue) return null;
       if (g !== generation) return null;
       prevue = true;
-      const ms = delai();
+      // auMoins : compte banni ou bloque, inutile de frapper a la porte chaque minute.
+      const ms = Math.max(delai(), auMoins);
       journal(`${raison}, reconnexion dans ${Math.round(ms / 1000)} s`);
+      const p = ++planif;
       minuteur(() => {
+        if (p !== planif) return;
         prevue = false;
         vuA = maintenant();
         connecter();
@@ -76,8 +83,24 @@ export function creerSuperviseur({
       vuA = maintenant();
       prevue = true;
       journal('chien de garde : pas en jeu depuis trop longtemps, relance forcee');
-      minuteur(() => { prevue = false; connecter(); }, 0);
+      const p = ++planif;
+      minuteur(() => { if (p !== planif) return; prevue = false; connecter(); }, 0);
       return true;
+    },
+
+    /**
+     * Abandonne la connexion en cours et toute relance programmee, et repart
+     * tout de suite (changement de compte). Rend le numero de generation
+     * perime pour que les evenements de l ancienne connexion soient ignores.
+     */
+    relancerMaintenant(raison = 'relance immediate') {
+      generation += 1;
+      essais = 0;
+      vuA = maintenant();
+      prevue = true;
+      journal(raison);
+      const p = ++planif;
+      minuteur(() => { if (p !== planif) return; prevue = false; connecter(); }, 0);
     },
   };
 }

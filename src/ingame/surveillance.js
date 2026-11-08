@@ -43,6 +43,7 @@ export function surveillerPresence(client, { intervalMs = 30_000, annonceApresMs
         raison = etat.raison;
         console.warn(`[presence] bot en jeu hors ligne (${etat.raison}), /link suspendu`);
       }
+      if (etat.raison !== 'deconnecte' && etat.raison !== raison) raison = etat.raison;
       if (annonce || Date.now() - horsLigneDepuis < annonceApresMs) return;
       annonce = true;
       journal({
@@ -50,7 +51,12 @@ export function surveillerPresence(client, { intervalMs = 30_000, annonceApresMs
         titre: 'Vérifications suspendues',
         texte: 'Le bot en jeu ne répond plus : les nouveaux `/link` sont refusés'
           + ' et les paiements en cours ne seraient pas vus.',
-        champs: { Raison: raison, Depuis: `<t:${Math.floor(horsLigneDepuis / 1000)}:R>` },
+        champs: {
+          Raison: raison,
+          ...(etat.banId ? { 'Ban ID': etat.banId } : {}),
+          ...(etat.motif ? { Motif: `\`${String(etat.motif).slice(0, 900)}\`` } : {}),
+          Depuis: `<t:${Math.floor(horsLigneDepuis / 1000)}:R>`,
+        },
       });
       const n = await prevenir(client, (c) => embed('⚠️・PAIEMENT SUSPENDU', {
         couleur: FR.jaune,

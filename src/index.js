@@ -39,6 +39,7 @@ import { bypass } from './lib/names.js';
 import { assurerRoles, majRolesDonateur, palierPour, nomRole, paliers as paliersDons } from './dons/dons.js';
 import { onGsetupSelect, onGsetupBouton, onGsetupModal } from './setup/general.js';
 import { onModalEmbed } from './commands/embed.js';
+import { onBotAuth } from './commands/bot.js';
 import { onBoutonScan, onModalScan } from './scan/panel.js';
 import { demarrerAlerteScan, onBoutonScanNon } from './scan/alerte.js';
 import { onDsetupSelect, onDsetupBouton, onDsetupModal } from './dons/setup.js';
@@ -250,6 +251,7 @@ client.on('interactionCreate', async (interaction) => {
     }
     if (interaction.isAnySelectMenu()) {
       console.log(`[ui] menu ${interaction.customId} par ${qui}`);
+      if (interaction.customId.startsWith('botauth:')) return await onBotAuth(interaction);
       if (interaction.customId.startsWith('voicehub:')) return await onVoicehub(interaction);
       if (interaction.customId.startsWith('gdraft:')) return await giveawaysModule.brouillon(interaction, ctxGiveaways);
       if (interaction.customId.startsWith('recl:')) return await onReclamationSelect(interaction);
@@ -325,6 +327,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('support:vise:')) return onBoutonVise(interaction);
   if (interaction.customId.startsWith('support:resolu:')) return onBoutonResolu(interaction);
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
+  if (interaction.customId.startsWith('botauth:')) return onBotAuth(interaction);
   if (interaction.customId.startsWith('antipub:')) return onBoutonAntipub(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
   if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);

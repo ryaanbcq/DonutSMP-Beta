@@ -16,6 +16,7 @@ import {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from 'discord.js';
 import { config } from '../config.js';
+import { cibleAlerteAdmins } from '../lib/admin.js';
 import { Tailer } from '../lib/tail.js';
 import { FR, skin } from '../lib/brand.js';
 
@@ -111,7 +112,10 @@ async function envoyer(evenement) {
     return;
   }
 
+  const ping = evenement.ping === 'admins' ? cibleAlerteAdmins() : null;
+  const mentions = ping ? [...ping.roles.map((r) => `<@&${r}>`), ...ping.users.map((u) => `<@${u}>`)] : [];
   const message = await salon.send({
+    ...(mentions.length ? { content: mentions.join(' '), allowedMentions: { roles: ping.roles, users: ping.users } } : {}),
     embeds: [construire(evenement)],
     components: composants(evenement.actions, evenement.boutons),
   }).catch((e) => {
@@ -165,6 +169,7 @@ export async function demarrerJournal(client, salonId = config.discord.opsChanne
         champs: entree.champs,
         joueur: entree.joueur,
         actions: entree.actions,
+        ping: entree.ping ?? null,
         source: entree.source ?? 'jeu',
         at: entree.at,
       });

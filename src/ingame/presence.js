@@ -21,7 +21,19 @@ export async function presence() {
   }
 
   const age = Date.now() - Number(etat.at ?? 0);
-  if (!etat.online) return { enLigne: false, raison: 'deconnecte', age, username: etat.username };
+  if (!etat.online) {
+    // Le bot en jeu ecrit le diagnostic de son dernier kick : on rend la vraie
+    // raison (« Compte du bot bloqué par DonutSMP », Ban ID…) plutot que
+    // « deconnecte ».
+    const k = etat.kick;
+    if (k?.titre) {
+      return {
+        enLigne: false, raison: k.titre, motif: k.motif ?? null, banId: k.banId ?? null,
+        bloquant: Boolean(k.bloquant), kickA: k.at ?? null, rapport: k.rapport ?? null, age, username: etat.username,
+      };
+    }
+    return { enLigne: false, raison: 'deconnecte', age, username: etat.username };
+  }
   if (age > PERIME_MS) return { enLigne: false, raison: 'muet', age, username: etat.username };
 
   return { enLigne: true, age, username: etat.username, pos: etat.pos ?? null };

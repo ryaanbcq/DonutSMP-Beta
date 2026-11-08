@@ -175,15 +175,14 @@ async function pageBot(note = '') {
       couleur: FR.bleu,
       description: `${lignes.join('\n')}\n\n`
         + '**Reconnecter** : même compte, nouveau jeton (compte bloqué, jeton expiré).\n'
-        + '**Changer de compte** : le bot se déconnecte, et le compte Microsoft avec lequel vous validez le code'
-        + ' devient le compte qui encaisse les `/link` et les dons. Il doit posséder Minecraft Java.'
+        + '**Comptes du bot** : ajouter un compte de secours sans couper celui qui joue, et basculer dessus en un clic si DonutSMP le bloque.'
         + (note ? `\n\n${note}` : ''),
     })],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('ops:msa').setLabel('Afficher le code').setEmoji('🔑')
         .setStyle(ButtonStyle.Primary).setDisabled(!code),
       new ButtonBuilder().setCustomId('ops:relink').setLabel('Reconnecter').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('gsetup:changer').setLabel('Changer de compte').setEmoji('🔀').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('botauth:panneau').setLabel('Comptes du bot').setEmoji('🛟').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('gsetup:page:bot').setLabel('Actualiser').setEmoji('♻️').setStyle(ButtonStyle.Secondary),
       retour(),
     )],

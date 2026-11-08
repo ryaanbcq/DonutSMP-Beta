@@ -12,6 +12,15 @@ export function texteDuMotif(motif) {
     try { return texteDuMotif(JSON.parse(motif)); } catch { return motif; }
   }
   if (Array.isArray(motif)) return motif.map(texteDuMotif).join('');
+  // NBT type (mineflayer recent, vecu le 08/11 sur le kick DonutSMP_FR) :
+  // chaque noeud est { type, value }, les listes { type: 'list', value: { type, value: [...] } }.
+  // Sans ce cas le motif sortait vide : « (aucun motif) ».
+  if (typeof motif === 'object' && typeof motif.type === 'string' && 'value' in motif) {
+    const v = motif.value;
+    if (motif.type === 'list') return texteDuMotif(v?.value ?? v);
+    if (motif.type === 'compound') return texteDuMotif(deNbt(v));
+    return typeof v === 'string' ? v : '';
+  }
   if (typeof motif === 'object') {
     // Composants NBT simplifies ou JSON : text, extra, translate/with.
     const valeur = motif.value ?? motif;
@@ -27,15 +36,34 @@ export function texteDuMotif(motif) {
   return String(motif);
 }
 
+/** Compound NBT type -> objet de composant de chat ordinaire. */
+function deNbt(v) {
+  if (Array.isArray(v)) return v.map(deNbt);
+  if (!v || typeof v !== 'object') return v;
+  const o = {};
+  for (const [k, x] of Object.entries(v)) {
+    if (x && typeof x === 'object' && typeof x.type === 'string' && 'value' in x) {
+      o[k] = x.type === 'list' ? deNbt(x.value?.value ?? x.value)
+        : x.type === 'compound' ? deNbt(x.value) : x.value;
+    } else o[k] = deNbt(x);
+  }
+  return o;
+}
+
 const nettoyer = (s) => s.replace(/§./g, '').replace(/\s+/g, ' ').trim();
 
 const KICKS = [
   {
     // Vecu sur le casino (29/09/2026) : le vrai kick dit « Blocked account …
     // Ban ID » sans jamais ecrire « banned ».
-    re: /blocked account|account (has been |is |was )?(blocked|suspended|terminated|disabled)|suspended/i,
+    // Vecu sur DonutSMP_FR (08/11/2026) : « Your account has been placed on hold »
+    // + Ban ID, sans « banned » non plus ; le meme motif contenait aussi
+    // « You are already online » (proxy) : cette regle doit rester AVANT la
+    // session fantome.
+    re: /blocked account|account (has been |is |was )?(blocked|suspended|terminated|disabled|placed on hold|on hold)|placed on hold|suspended/i,
     niveau: 'err',
     titre: 'Compte du bot bloqué par DonutSMP',
+    bloquant: true,
     actions: ['relink'],
     texte: 'DonutSMP a bloqué le compte du bot : plus aucune vérification ne passera.'
       + ' Lis le motif, fais appel auprès de DonutSMP ou change de compte (`MC_LINK_ACCOUNT` + `donut auth`).',
@@ -45,6 +73,7 @@ const KICKS = [
     re: /(\bbann?(ed)?\b|ban id).*(temporar|\bfor \d|\d+\s*(s|m|h|d|w|mo|y|sec|min|hour|day|week|month|year)s?\b|expire|until|remaining|unbanned in)|temp ?ban/i,
     niveau: 'err',
     titre: 'Bot banni temporairement',
+    bloquant: true,
     actions: ['relink'],
     texte: 'Le compte du bot est banni pour une durée limitée : aucune vérification ne passe jusqu\'à la fin du ban.'
       + ' Le bot réessaie seul et reviendra à l\'expiration. Pour reprendre plus tôt : autre compte (`MC_LINK_ACCOUNT` + `donut auth`).',
@@ -53,6 +82,7 @@ const KICKS = [
     re: /\bbann?(ed)?\b|ban id|blacklist/i,
     niveau: 'err',
     titre: 'Bot banni définitivement',
+    bloquant: true,
     actions: ['relink'],
     texte: 'Le compte du bot est banni à vie : plus aucune vérification ne passera.'
       + ' Fais appel auprès de DonutSMP ou change de compte (`MC_LINK_ACCOUNT` + `donut auth`).',
@@ -112,7 +142,15 @@ export function diagnostiquerKick(motif) {
     texte: 'DonutSMP a expulsé le bot pour une raison non répertoriée. Le motif est ci-dessous.',
   };
   return {
-    niveau: base.niveau, titre: base.titre, texte: base.texte, motif: texte || '(aucun motif)', actions: base.actions ?? null,
+    niveau: base.niveau,
+    titre: base.titre,
+    texte: base.texte,
+    motif: texte || '(aucun motif)',
+    actions: base.actions ?? null,
+    // Ban ou compte bloque : se reconnecter toutes les minutes ne sert a rien
+    // et peut aggraver le dossier chez DonutSMP.
+    bloquant: Boolean(base.bloquant),
+    banId: (texte.match(/ban id:?\s*(#?[A-Za-z0-9]+)/i) || [])[1] ?? null,
   };
 }
 
