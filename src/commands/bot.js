@@ -219,6 +219,10 @@ export async function onBotAuth(interaction) {
     await interaction.deferUpdate();
     return ajouter(interaction);
   }
+  if (action === 'annulerajout') {
+    await interaction.deferUpdate();
+    return annulerAjout(interaction);
+  }
 
   if (action === 'choisir') {
     const c = trouverCompte(interaction.values[0]);
@@ -357,45 +361,80 @@ async function retirer(interaction, id) {
 
 // ------------------------------------------------------------------ ajout ---
 
-let ajoutEnCours = null;
+// Ajout en cours : un seul a la fois. Un nouveau clic reaffiche le code au lieu
+// de bloquer 15 min (vecu 08/11 : le panneau du premier clic etait perdu et chaque
+// clic suivant repondait « deja en cours »), et « Annuler » libere tout de suite.
+let ajoutEnCours = null; // { id, par, cible, carte, annule }
+
+const carteAttente = () => ({
+  embeds: [embed('➕・AJOUTER UN COMPTE', { couleur: FR.bleu, image: 'aucune', description: '⏳ Je demande un code à Microsoft…' })],
+  components: [ligne(bouton('annulerajout', 'Annuler', '✖️', ButtonStyle.Danger))],
+});
+
+function carteCode(res, expire) {
+  const lien = `https://www.microsoft.com/link?otc=${encodeURIComponent(res.user_code)}`;
+  return {
+    embeds: [embed('➕・AJOUTER UN COMPTE', {
+      couleur: FR.jaune,
+      image: 'aucune',
+      description: `# \`${res.user_code}\`\n`
+        + '1. **Ouvrir la page Microsoft** (le code est déjà rempli).\n'
+        + '2. Connecte-toi avec le compte Microsoft **du nouveau bot**, pas le tien.\n'
+        + '3. Accepte. Ce panneau se met à jour tout seul.\n\n'
+        + `Le compte actuel continue de jouer pendant ce temps. Code valable jusqu'à <t:${Math.floor(expire / 1000)}:t>,`
+        + ' **ne le partage avec personne** : qui le valide prend le compte.',
+    })],
+    components: [ligne(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Ouvrir la page Microsoft').setEmoji('🌐').setURL(lien),
+      bouton('annulerajout', 'Annuler', '✖️', ButtonStyle.Danger),
+    )],
+  };
+}
+
+/** Bouton Annuler de l ajout : libere le verrou, le code en cours ne mene plus a rien. */
+async function annulerAjout(interaction) {
+  if (ajoutEnCours) {
+    ajoutEnCours.annule = true;
+    ajoutEnCours = null;
+  }
+  return interaction.editReply(await panneau('✖️ Ajout annulé.'));
+}
 
 /** L interaction est deja differee : tout passe par editReply (panneau ou reponse). */
 async function ajouter(interaction) {
-  if (ajoutEnCours) return interaction.editReply(await panneau(`⏳ Un ajout est déjà en cours (lancé par ${ajoutEnCours}).`));
-  ajoutEnCours = qui(interaction);
+  if (ajoutEnCours) {
+    // Reprend la main sur l ajout en cours : ce panneau recoit desormais les mises a jour.
+    ajoutEnCours.cible = interaction;
+    return interaction.editReply(ajoutEnCours.carte ?? carteAttente());
+  }
+  const etat = { id: Date.now(), par: qui(interaction), cible: interaction, carte: null, annule: false };
+  ajoutEnCours = etat;
+  // Filet : prismarine-auth peut attendre Microsoft sans fin (vecu 08/11 : verrou tenu 47 min).
+  // Au-dela de la vie du code (15 min) on libere le verrou, le prochain clic repart de zero.
+  const garde = setTimeout(() => {
+    if (ajoutEnCours !== etat) return;
+    etat.annule = true;
+    ajoutEnCours = null;
+    etat.cible.editReply({ embeds: [embed('➕・AJOUTER UN COMPTE', { couleur: FR.rouge, image: 'aucune', description: '⌛ Code expiré. Reclique sur **Ajouter un compte** pour en avoir un nouveau.' })], components: [] }).catch(() => {});
+  }, 16 * 60_000);
+  garde.unref?.();
+  const maj = (contenu) => (etat.annule ? null : etat.cible.editReply(contenu).catch(() => {}));
   // Dossier provisoire : on ne connait le pseudo qu apres la connexion.
-  const provisoire = `${DOSSIER_COMPTES()}/.ajout-${Date.now()}`;
-  const cle = `donutfr-${Date.now()}`;
+  const provisoire = `${DOSSIER_COMPTES()}/.ajout-${etat.id}`;
+  const cle = `donutfr-${etat.id}`;
   try {
     await mkdir(provisoire, { recursive: true, mode: 0o700 });
-    await interaction.editReply({
-      embeds: [embed('➕・AJOUTER UN COMPTE', { couleur: FR.bleu, image: 'aucune', description: '⏳ Je demande un code à Microsoft…' })],
-      components: [],
-    });
+    await maj(carteAttente());
     const flow = new Authflow(cle, provisoire, {
       // Memes reglages que mineflayer, sinon le bot en jeu ne reutiliserait pas le jeton.
       flow: 'live', authTitle: Titles.MinecraftNintendoSwitch, deviceType: 'Nintendo',
     }, (res) => {
-      const lien = `https://www.microsoft.com/link?otc=${encodeURIComponent(res.user_code)}`;
-      const expire = Date.now() + (Number(res.expires_in) || 900) * 1000;
-      interaction.editReply({
-        embeds: [embed('➕・AJOUTER UN COMPTE', {
-          couleur: FR.jaune,
-          image: 'aucune',
-          description: `# \`${res.user_code}\`\n`
-            + '1. **Ouvrir la page Microsoft** (le code est déjà rempli).\n'
-            + '2. Connecte-toi avec le compte Microsoft **du nouveau bot**, pas le tien.\n'
-            + '3. Accepte. Ce panneau se met à jour tout seul.\n\n'
-            + `Le compte actuel continue de jouer pendant ce temps. Code valable jusqu'à <t:${Math.floor(expire / 1000)}:t>,`
-            + ' **ne le partage avec personne** : qui le valide prend le compte.',
-        })],
-        components: [ligne(
-          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Ouvrir la page Microsoft').setEmoji('🌐').setURL(lien),
-        )],
-      }).catch(() => {});
+      etat.carte = carteCode(res, Date.now() + (Number(res.expires_in) || 900) * 1000);
+      maj(etat.carte);
     });
-    journal({ niveau: 'info', titre: 'Ajout de compte lancé', texte: `<@${interaction.user.id}> connecte un nouveau compte Minecraft pour le bot.`, champs: { Par: qui(interaction) } });
+    journal({ niveau: 'info', titre: 'Ajout de compte lancé', texte: `<@${interaction.user.id}> connecte un nouveau compte Minecraft pour le bot.`, champs: { Par: etat.par } });
     const { profile } = await flow.getMinecraftJavaToken({ fetchProfile: true });
+    if (etat.annule) throw new Error('annule');
     if (!profile?.name) throw new Error('ce compte Microsoft ne possède pas Minecraft Java');
 
     const id = idDe(profile.name);
@@ -404,26 +443,28 @@ async function ajouter(interaction) {
     if (existant?.id === reg.actif) {
       // Le compte actif lui-meme : on ne touche pas au jeton qui tourne.
       await rm(provisoire, { recursive: true, force: true });
-      return interaction.editReply(await panneau(`ℹ️ \`${profile.name}\` est déjà le compte qui encaisse.`));
+      return maj(await panneau(`ℹ️ \`${profile.name}\` est déjà le compte qui encaisse.`));
     }
     const dossier = dossierPour(id);
     await rm(dossier, { recursive: true, force: true });
     await rename(provisoire, dossier);
-    ajouterCompte({ nom: profile.name, uuid: profile.id ?? null, cle, dossier, par: qui(interaction) });
+    ajouterCompte({ nom: profile.name, uuid: profile.id ?? null, cle, dossier, par: etat.par });
     journal({
       niveau: 'ok', titre: 'Compte de secours ajouté', texte: `**${profile.name}** est prêt à prendre le relais.`,
-      champs: { Compte: profile.name, Par: qui(interaction) }, joueur: profile.name,
+      champs: { Compte: profile.name, Par: etat.par }, joueur: profile.name,
     });
-    return interaction.editReply(await panneau(`✅ \`${profile.name}\` est ajouté en secours${existant ? ' (jeton renouvelé)' : ''}. Pour l'utiliser : menu **Basculer le bot sur…**`));
+    return maj(await panneau(`✅ \`${profile.name}\` est ajouté en secours${existant ? ' (jeton renouvelé)' : ''}. Pour l'utiliser : menu **Basculer le bot sur…**`));
   } catch (e) {
     await rm(provisoire, { recursive: true, force: true }).catch(() => {});
+    if (etat.annule) return null;
     console.error('[bot auth] ajout echoue :', e.message);
     const pourquoi = /own|profile|Not Found/i.test(e.message)
       ? 'ce compte Microsoft ne possède pas Minecraft Java'
       : 'la connexion Microsoft a échoué ou le code a expiré';
-    return interaction.editReply(await panneau(`⛔ Ajout impossible : ${pourquoi}.`)).catch(() => {});
+    return maj(await panneau(`⛔ Ajout impossible : ${pourquoi}.`));
   } finally {
-    ajoutEnCours = null;
+    clearTimeout(garde);
+    if (ajoutEnCours === etat) ajoutEnCours = null;
   }
 }
 
