@@ -17,6 +17,7 @@ const LIEN = `<${SITE}>`; // chevrons : pas d aperçu geant du site sous un mess
 
 const VERDICTS = {
   DANGER: { titre: '⛔・DANGER', couleur: FR.rouge, phrase: 'Ce mod est piégé. Ne le lance pas.' },
+  OBFUSQUE: { titre: '🔒・CODE OFFUSQUÉ', couleur: 0xd70015, phrase: 'L’auteur a caché le code de ce mod : soit pour protéger son travail, soit pour cacher ce qu’il fait. Impossible de tout vérifier.' },
   SUSPECT: { titre: '⚠️・SUSPECT', couleur: 0xff8a00, phrase: 'Ce mod cache des choses inhabituelles. À éviter sauf source officielle.' },
   ATTENTION: { titre: '🔎・À VÉRIFIER', couleur: FR.jaune, phrase: 'Rien de malveillant trouvé, mais certains points méritent un œil.' },
   OK: { titre: '✅・RIEN DE SUSPECT', couleur: FR.vert, phrase: 'Rien d’inquiétant trouvé. Une analyse ne remplace pas une source officielle.' },
