@@ -40,6 +40,7 @@ import { assurerRoles, majRolesDonateur, palierPour, nomRole, paliers as paliers
 import { onGsetupSelect, onGsetupBouton, onGsetupModal } from './setup/general.js';
 import { onModalEmbed } from './commands/embed.js';
 import { onBotAuth } from './commands/bot.js';
+import { assurerRoleApi, onBoutonApi } from './commands/donutscan.js';
 import { onBoutonScan, onModalScan } from './scan/panel.js';
 import { demarrerAlerteScan, onBoutonScanNon } from './scan/alerte.js';
 import { onDsetupSelect, onDsetupBouton, onDsetupModal } from './dons/setup.js';
@@ -182,6 +183,7 @@ client.once('clientReady', async (c) => {
   if (config.discord.guildId) {
     const g = await c.guilds.fetch(config.discord.guildId).catch(() => null);
     if (g) await assurerRoles(g).catch((e) => console.error('[don] roles de donateur :', e.message));
+    if (g) await assurerRoleApi(g).catch((e) => console.error('[scan] role API :', e.message));
     if (g) await publierPanneauDons(c, g).catch((e) => console.error('[don] panneau :', e.message));
     const verifierPanneau = surveillerPanneauDons(c);
     await verifierPanneau?.().catch(() => {});
@@ -328,6 +330,7 @@ async function onBouton(interaction) {
   if (interaction.customId.startsWith('support:resolu:')) return onBoutonResolu(interaction);
   if (interaction.customId.startsWith('ops:')) return onOpsBouton(interaction);
   if (interaction.customId.startsWith('botauth:')) return onBotAuth(interaction);
+  if (interaction.customId.startsWith('dscan:api:')) return onBoutonApi(interaction);
   if (interaction.customId.startsWith('antipub:')) return onBoutonAntipub(interaction);
   if (interaction.customId.startsWith('recl:')) return onReclamationBouton(interaction);
   if (/^(tsetup|vsetup|dsetup|gsetup):/.test(interaction.customId) && !estAdmin(interaction.member)) return refusSetup(interaction);
