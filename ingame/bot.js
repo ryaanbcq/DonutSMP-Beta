@@ -434,7 +434,7 @@ function connect() {
     await saveStatus();
   });
 
-  ceBot.on('message', (msg) => {
+  ceBot.on('message', (msg, position) => {
     const line = msg.toString();
 
     // Mise au point : DEBUG_CHAT=true loggue le chat, en masquant toute suite
@@ -500,6 +500,15 @@ function connect() {
 
     // Confirmation d un remboursement parti.
     const envoye = parsePaymentSent(line);
+    // Un /pay vient de partir et la ligne n est pas reconnue : on la garde,
+    // c est elle qui dira la nouvelle forme de la confirmation.
+    if (!envoye && line.trim()) {
+      const v = ledger?.inFlight() ?? dons?.enVol();
+      if (v && Date.now() - v.sentAt < 6_000) {
+        const sur = line.replace(/[A-Za-z0-9_\-]{24,}/g, (k) => `<${k.length} car. masques>`);
+        console.log(`[refund] ligne apres /pay (${position ?? '?'}) : ${JSON.stringify(sur)}`);
+      }
+    }
     if (envoye) {
       const entry = ledger?.matchConfirmation(envoye.to, envoye.amount);
       if (entry) {
@@ -1074,13 +1083,10 @@ setInterval(() => {
         signalerDoute(enVol, 'le bot a été déconnecté entre le /pay et sa confirmation');
         return;
       }
-      const e = ledger.retryOrFail(enVol.id);
-      if (e.status === 'failed') {
-        console.error(`[refund] ABANDON : ${e.amount} a rendre a ${e.to} a la main`);
-        note('err', 'Remboursement abandonné',
-          `**${e.to}** attend toujours son argent. À rendre à la main.`,
-          { champs: { Joueur: e.to, Montant: shortMoney(e.amount), Essais: e.attempts }, joueur: e.to });
-      }
+      // Jamais de renvoi sans confirmation (vecu 11/11 : DonutSMP a change sa
+      // ligne « You paid », chaque remboursement est parti trois fois).
+      ledger.mettreEnDoute(enVol.id);
+      signalerDoute(enVol, 'aucune confirmation « You paid » dans les temps');
       ledger.save().catch(() => {});
     }
     return;
