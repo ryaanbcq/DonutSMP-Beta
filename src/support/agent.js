@@ -7,7 +7,7 @@
 // Tous les messages des tickets sont notes (table support_messages, 14
 // jours) : la revue quotidienne en tire des propositions de FAQ.
 
-import { escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { escapeMarkdown, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { embed, FR, logo, skin } from '../lib/brand.js';
 import { cibleDe } from '../vouch/fils.js';
 import { store } from '../db.js';
@@ -67,6 +67,18 @@ let client = null;
 
 export const supportActif = () => reglagesSupport.actif() && iaDisponible();
 
+// /autosupport : kv support.auto:<salon> = { par, base, at } tant que le staff
+// laisse l assistant repondre a sa place dans ce ticket.
+const cleAuto = (channelId) => `support.auto:${channelId}`;
+function autoDe(channelId) {
+  try { return JSON.parse(store.kvGet(cleAuto(channelId)) || 'null'); } catch { return null; }
+}
+/** Ce que voit le decideur : en autosupport, l interrupteur general ne compte pas. */
+function contexte(channelId) {
+  const auto = autoDe(channelId);
+  return { auto, actif: auto ? iaDisponible() : supportActif() };
+}
+
 function role(message, ticket) {
   if (message.author.id === client?.user?.id) return null; // nos messages sont notes a l envoi
   if (message.author.bot) return null;
@@ -81,7 +93,7 @@ function planifier(channelId) {
   const ticket = store.getTicket(channelId);
   const d = decider({
     ticket, messages: memoire.messages(channelId), etat: memoire.etat(channelId),
-    reglages: reglagesSupport.reglages(), actif: supportActif(), depuis: reglagesSupport.depuis(),
+    reglages: reglagesSupport.reglages(), depuis: reglagesSupport.depuis(), ...contexte(channelId),
   });
   if (d.action === 'repondre') { intervenir(channelId).catch((e) => console.warn('[support] :', e.message)); return; }
   if (d.action === 'attendre') {
@@ -91,7 +103,7 @@ function planifier(channelId) {
   }
 }
 
-async function intervenir(channelId) {
+async function intervenir(channelId, { immediat = false } = {}) {
   if (enCours.has(channelId)) return;
   enCours.add(channelId);
   let ecrit = null;
@@ -103,7 +115,8 @@ async function intervenir(channelId) {
     const messages = memoire.messages(channelId);
     const etat = memoire.etat(channelId);
     const r = reglagesSupport.reglages();
-    const decision = decider({ ticket, messages, etat, reglages: r, actif: supportActif(), depuis: reglagesSupport.depuis() });
+    const ctx = contexte(channelId);
+    const decision = decider({ ticket, messages, etat, reglages: r, depuis: reglagesSupport.depuis(), ...ctx, immediat });
     if (decision.action !== 'repondre') return;
     // Reprise deja jugee inutile pour ce meme dernier message : on ne repaie pas.
     const cleReprise = `${messages.at(-1)?.at ?? ticket.created_at}`;
@@ -118,7 +131,7 @@ async function intervenir(channelId) {
       await salon.sendTyping().catch(() => {});
       ecrit = setInterval(() => salon.sendTyping().catch(() => {}), 8000);
     }
-    const faqAutorisee = reglagesSupport.categoriesFond().includes(cleDe(ticket.categorie ?? ''));
+    const faqAutorisee = Boolean(ctx.auto) || reglagesSupport.categoriesFond().includes(cleDe(ticket.categorie ?? ''));
     const rep = await repondreTicket({
       connaissances: connaissancesServeur(), faq: faqTexte(), categorie: ticket.categorie,
       sujet: ticket.sujet, transcript: transcriptPourIA(messages), faqAutorisee,
@@ -126,7 +139,7 @@ async function intervenir(channelId) {
       // categories de support technique : un signalement n en a pas besoin.
       fiche: faqAutorisee ? await ficheMembre(ticket.discord_id).catch((e) => `(fiche indisponible : ${e.message})`) : '',
       images: await imagesDuTicket(salon, ticket.discord_id).catch(() => []),
-      reprise: Boolean(decision.reprise),
+      reprise: Boolean(decision.reprise), auto: Boolean(ctx.auto),
     });
     if (decision.reprise && rep.repondre === false) {
       reprisesVues.set(channelId, cleReprise);
@@ -253,6 +266,43 @@ async function surMessage(message) {
     return;
   }
   planifier(message.channelId);
+}
+
+/**
+ * Rattrape en memoire les derniers messages du salon : un ticket ouvert
+ * pendant un arret du bot, ou avant l assistant, n y est pas en entier.
+ */
+async function relireSalon(salon, ticket) {
+  const lot = await salon.messages.fetch({ limit: 100 }).catch(() => null);
+  if (!lot) return;
+  for (const m of [...lot.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp)) {
+    let r = null;
+    if (m.author.id === client?.user?.id) r = m.content && !m.embeds.length ? 'ia' : null;
+    else if (!m.author.bot) r = m.author.id === ticket.discord_id ? 'membre' : estStaff(m.member) ? 'staff' : 'membre';
+    if (!r || (!m.content && !m.attachments.size)) continue;
+    memoire.noter({ id: m.id, channelId: salon.id, role: r, content: m.content, pieces: m.attachments.size, at: m.createdTimestamp });
+  }
+}
+
+/** /autosupport [arreter] : le staff confie le ticket courant a l assistant. */
+export async function onAutosupport(interaction) {
+  const dire = (content) => interaction.editReply({ content });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (!estStaff(interaction.member)) return dire('Cette commande est réservée au staff.');
+  const ticket = store.getTicket(interaction.channelId);
+  if (!ticket || ticket.etat !== 'ouvert') return dire('À utiliser dans un ticket ouvert.');
+  const channelId = interaction.channelId;
+  if (interaction.options.getBoolean('arreter')) {
+    store.kvSet(cleAuto(channelId), '');
+    clearTimeout(minuteurs.get(channelId)); minuteurs.delete(channelId);
+    return dire('L\'assistant ne répond plus à votre place dans ce ticket.');
+  }
+  if (!iaDisponible()) return dire('L\'assistant est indisponible : aucune clé `ANTHROPIC_API_KEY` sur ce bot.');
+  await relireSalon(interaction.channel, ticket);
+  store.kvSet(cleAuto(channelId), JSON.stringify({ par: interaction.user.id, base: memoire.etat(channelId).iaCount, at: Date.now() }));
+  console.log(`[support] ticket #${ticket.id} : autosupport lance par ${interaction.user.username}`);
+  await dire('L\'assistant lit le ticket et répond à votre place. Il continuera à chaque message du membre. `/autosupport arreter:True` pour reprendre la main.');
+  intervenir(channelId, { immediat: true }).catch((e) => console.warn('[support] autosupport :', e.message));
 }
 
 /** Au demarrage : reprend les tickets ouverts qui attendaient une reponse. */

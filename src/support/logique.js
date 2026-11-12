@@ -43,9 +43,20 @@ export function delaiMs(now, r) {
  * dernier message du membre (le temps qu il finisse d ecrire). Avoir transmis
  * au staff ne la coupe pas : elle continue d aider en attendant.
  */
-export function decider({ ticket, messages, etat = {}, reglages, actif, depuis = 0, now = Date.now() }) {
+export function decider({ ticket, messages, etat = {}, reglages, actif, depuis = 0, now = Date.now(), auto = null, immediat = false }) {
   if (!actif) return { action: 'rien', raison: 'éteint' };
   if (!ticket || ticket.etat !== 'ouvert') return { action: 'rien', raison: 'ticket fermé' };
+  // /autosupport : un staff a confie ce ticket a l assistant. Il repond tout
+  // de suite, puis a chaque message du membre, que le staff soit passe ou non.
+  // La limite par ticket repart du compteur releve a l activation.
+  if (auto) {
+    if ((etat.iaCount ?? 0) >= (auto.base ?? 0) + reglages.maxIaParTicket) return { action: 'rien', raison: 'limite par ticket' };
+    if (immediat) return { action: 'repondre', raison: 'autosupport' };
+    const dernierAuto = messages.at(-1);
+    if (dernierAuto?.role !== 'membre') return { action: 'rien', raison: 'attend le membre' };
+    const resteAuto = (reglages.suiteS ?? 4) * 1000 - (now - dernierAuto.at);
+    return resteAuto > 0 ? { action: 'attendre', dans: resteAuto, raison: 'délai' } : { action: 'repondre', raison: 'autosupport' };
+  }
   if (ticket.created_at < depuis) return { action: 'rien', raison: 'ouvert avant l\'assistant' };
   if ((etat.iaCount ?? 0) >= reglages.maxIaParTicket) return { action: 'rien', raison: 'limite par ticket' };
   // Le staff est passe (message ou prise en charge) : l IA se tait, sauf si

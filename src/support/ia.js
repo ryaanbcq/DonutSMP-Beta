@@ -131,12 +131,13 @@ export const SCHEMA_REPONSE = {
  * La reponse de l assistant dans un ticket.
  * faqAutorisee : la categorie permet de repondre sur le fond (support technique).
  */
-export function repondreTicket({ connaissances, faq, categorie, sujet, transcript, faqAutorisee, fiche = '', images = [], reprise = false }) {
+export function repondreTicket({ connaissances, faq, categorie, sujet, transcript, faqAutorisee, fiche = '', images = [], reprise = false, auto = false }) {
   const system = `${REGLES}\n\n# Connaissances\n${connaissances}\n\n# FAQ validée par le staff\n${faq || '(vide pour le moment)'}`;
   const contenu = `Catégorie du ticket : ${categorie ?? 'inconnue'}\n`
     + (faqAutorisee
       ? 'Dans cette catégorie, tu peux répondre sur le fond aux questions simples couvertes par les connaissances ou la FAQ.\n'
       : 'Dans cette catégorie, tu ne réponds PAS sur le fond : accueille, fais préciser ce qui manque, et transmets (transmettre = true). EXCEPTION prioritaire : un signalement de scam suit la règle des signalements (scam en jeu ou type inconnu : transmettre = false, jamais « le staff prend la suite »).\n')
+    + (auto ? "\nMODE AUTOSUPPORT : un membre du staff t'a confié ce ticket et t'a demandé d'y répondre à sa place. Relis TOUTE la conversation, la fiche et les captures, puis réponds sur le fond, complètement, à ce que le membre attend encore. Si le staff a déjà écrit, prolonge ce qu'il a dit sans le contredire. Si la suite exige une action que seul un humain peut faire (rendre de l'argent à la main, sanctionner, décider), dis clairement ce qui a été constaté et ce qui reste à faire, et mets transmettre = true ; ne promets jamais une action à la place du staff.\n" : '')
     + (reprise ? "\nMODE REPRISE : le staff a déjà répondu ou pris ce ticket, mais la dernière demande du membre attend depuis plus de 30 minutes. Relis TOUTE la conversation. Si cette demande est déjà traitée, si c'est juste un merci, un ok ou une attente normale (le staff a dit qu'il revenait), mets repondre = false. Sinon, repondre = true : réponds toi même si les connaissances le permettent, ou dis en une phrase que le staff a bien vu sa demande et reviendra, sans promettre de délai. Ne contredis jamais le staff, ne refais pas son travail, sois bref.\n" : 'Hors mode reprise, repondre = true.\n')
     + (fiche ? `\nFiche du membre (faits vérifiés par le bot, à jour) :\n${fiche}\n` : '')
     + `\nDemande écrite à l'ouverture du ticket :\n<<<\n${String(sujet ?? '').slice(0, 2000)}\n>>>\n`
