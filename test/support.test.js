@@ -80,22 +80,17 @@ test('support : apres le staff, reprise si la demande du membre attend 30 min', 
   assert.equal(decider({ ...base, messages: [...msgs(40), { role: 'ia', at: JOUR - MIN }] }).action, 'rien');
 });
 
-test('autosupport : repond tout de suite, puis seulement apres un message du membre, malgre le staff', () => {
+test('autosupport : une seule reponse, immediate, sans changer la suite', () => {
   const t = { etat: 'ouvert', created_at: JOUR - 3 * 3600_000, pris_par: 'staff1' };
   const r = DEFAUTS;
-  const auto = { base: 2 };
   const staff = [{ role: 'membre', at: JOUR - 60 * MIN }, { role: 'staff', at: JOUR - 50 * MIN }];
-  // Sans autosupport : le staff est passe, l assistant se tait.
+  // Sans la commande : le staff est passe, l assistant se tait.
   assert.equal(decider({ ticket: t, messages: staff, reglages: r, actif: true, now: JOUR }).action, 'rien');
-  // A l activation : reponse immediate, meme pour un ticket ouvert avant l assistant.
-  assert.equal(decider({ ticket: t, messages: staff, reglages: r, actif: true, depuis: JOUR, now: JOUR, auto, immediat: true }).action, 'repondre');
-  // Ensuite : rien tant que le membre n ecrit pas, puis reponse apres le court delai.
-  assert.equal(decider({ ticket: t, messages: staff, reglages: r, actif: true, now: JOUR, auto }).action, 'rien');
-  const relance = [...staff, { role: 'ia', at: JOUR - MIN }, { role: 'membre', at: JOUR - 1000 }];
-  assert.equal(decider({ ticket: t, messages: relance, reglages: r, actif: true, now: JOUR, auto }).action, 'attendre');
-  assert.equal(decider({ ticket: t, messages: relance, reglages: r, actif: true, now: JOUR + 10_000, auto }).action, 'repondre');
-  // La limite par ticket repart du compteur releve a l activation.
-  assert.equal(decider({ ticket: t, messages: relance, etat: { iaCount: 2 + r.maxIaParTicket }, reglages: r, actif: true, now: JOUR + 10_000, auto, immediat: true }).action, 'rien');
-  // Ticket ferme : plus rien.
-  assert.equal(decider({ ticket: { ...t, etat: 'ferme' }, messages: relance, reglages: r, actif: true, now: JOUR, auto, immediat: true }).action, 'rien');
+  // Avec : reponse immediate, meme ticket ancien et limite atteinte.
+  assert.equal(decider({ ticket: t, messages: staff, etat: { iaCount: 99 }, reglages: r, actif: true, depuis: JOUR, now: JOUR, immediat: true }).action, 'repondre');
+  // Ensuite le membre ecrit : rien, la commande n allume rien.
+  const suite = [...staff, { role: 'ia', at: JOUR - MIN }, { role: 'membre', at: JOUR - 20_000 }];
+  assert.equal(decider({ ticket: t, messages: suite, reglages: r, actif: false, now: JOUR }).action, 'rien');
+  // Ticket ferme : rien.
+  assert.equal(decider({ ticket: { ...t, etat: 'ferme' }, messages: staff, reglages: r, actif: true, now: JOUR, immediat: true }).action, 'rien');
 });
