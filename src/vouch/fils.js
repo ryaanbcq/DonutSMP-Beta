@@ -189,8 +189,23 @@ export function mentionOuNom(client, id) {
   return present ? `<@${id}>` : nomDiscord(client, id);
 }
 
+/**
+ * Anciens vouches attestes par le staff : des avis d avant le bot, perdus
+ * (ancien serveur, salon supprime), dont le staff se porte garant. Ils
+ * comptent dans le score comme des vouches sans note, mais n ont ni carte ni
+ * auteur : la carte de reputation dit ce qu ils sont. Pose par
+ * scripts/attester-vouches.js (cle kv « vouch.attestes:<id> » = « n|date »).
+ */
+export function attestesDe(discordId) {
+  const [n, at] = String(store.kvGet(`vouch.attestes:${discordId}`) ?? '').split('|').map(Number);
+  return n > 0 ? { n: Math.min(Math.floor(n), 200), at: at || Date.now() } : null;
+}
+
 export function trustDe(discordId) {
-  return calculerTrust(store.vouchAll(discordId));
+  const a = attestesDe(discordId);
+  const avis = store.vouchAll(discordId);
+  const t = calculerTrust(a ? [...avis, ...Array(a.n).fill({ value: 1, stars: null, created_at: a.at })] : avis);
+  return { ...t, attestes: a?.n ?? 0 };
 }
 
 export function carteReputation(link, client = null) {
@@ -209,7 +224,8 @@ export function carteReputation(link, client = null) {
       + `## ${t.palier.emoji} ${t.palier.nom}\n`
       + `${etoiles(t.moyenne)} ${t.pos ? t.moyenne.toFixed(1) : 'sans note'} · `
       + `${t.n} avis${pct === null ? '' : ` · ${pct} % positifs`}\n`
-      + ligneScore(t),
+      + ligneScore(t)
+      + (t.attestes ? `\n*dont ${t.attestes} ancien${t.attestes > 1 ? 's' : ''} vouch${t.attestes > 1 ? 'es' : ''} attesté${t.attestes > 1 ? 's' : ''} par le staff*` : ''),
   }).addFields(
     { name: 'Vouches', value: `✅ ${t.pos}`, inline: true },
     { name: 'Signalements', value: t.neg ? `☠️ **${t.neg}**` : '0', inline: true },

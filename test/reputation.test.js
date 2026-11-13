@@ -113,3 +113,17 @@ test('avis importe : le prefixe [Ancien vouch] ne s affiche pas', async () => {
   assert.equal(texteAvis('[Ancien vouch] (capture)'), '');
   assert.equal(texteAvis('super trade'), 'super trade');
 });
+
+test('anciens vouches attestes : comptes dans le score, annonces sur la carte', async () => {
+  const { trustDe, carteReputation } = await import('../src/vouch/fils.js');
+  const id = '777000000000000001';
+  assert.equal(trustDe(id).attestes, 0);
+  store.kvSet(`vouch.attestes:${id}`, `20|${Date.now()}`);
+  const t = trustDe(id);
+  assert.equal(t.attestes, 20);
+  assert.equal(t.pos, 20);
+  const carte = carteReputation({ discord_id: id, mc_name: 'Temoin' });
+  assert.match(carte.embeds[0].data.description, /dont 20 anciens vouches attestés par le staff/);
+  store.kvSet(`vouch.attestes:${id}`, '');
+  assert.equal(trustDe(id).attestes, 0);
+});

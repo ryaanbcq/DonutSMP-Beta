@@ -2,8 +2,8 @@ import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../db.js';
 import { embed, TITRES } from '../lib/brand.js';
 import { MEDALS } from '../lib/format.js';
-import { calculerTrust, barre, etoiles, PALIER_SIGNALE } from '../vouch/trust.js';
-import { carteReputation, filDe, retirerAvis, cibleDe } from '../vouch/fils.js';
+import { barre, etoiles, PALIER_SIGNALE } from '../vouch/trust.js';
+import { carteReputation, filDe, retirerAvis, cibleDe, trustDe } from '../vouch/fils.js';
 import { cibleVouch } from '../vouch/panel.js';
 
 export const data = new SlashCommandBuilder()
@@ -36,7 +36,7 @@ export async function execute(interaction) {
 
   if (sub === 'top') {
     const classes = store.vouchTargets()
-      .map((id) => ({ id, link: store.getLink(id), t: calculerTrust(store.vouchAll(id)) }))
+      .map((id) => ({ id, link: store.getLink(id), t: trustDe(id) }))
       // Un profil signale n'a pas sa place dans « les plus fiables ».
       .filter((r) => r.link && r.t.n >= 1 && r.t.palier !== PALIER_SIGNALE)
       .sort((a, b) => b.t.score - a.t.score || b.t.n - a.t.n)
