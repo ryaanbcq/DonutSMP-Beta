@@ -390,7 +390,16 @@ export async function onModal(interaction) {
   let note = '';
   let preuves = brouillon(interaction.user.id).preuves ?? [];
   if (envoyes.length) {
-    if (interaction.isFromMessage()) await interaction.deferUpdate(); else await interaction.deferReply(EPH);
+    // Pendant le telechargement (plusieurs secondes), le panneau perd ses
+    // boutons : un clic sur « Publier » partait SANS les preuves, puis le
+    // panneau se redessinait sur un brouillon deja vide (vecu le 13/11).
+    const depart = brouillons.get(String(interaction.user.id));
+    if (interaction.isFromMessage()) {
+      await interaction.update({
+        embeds: [embed('⭐・DONNER UN AVIS', { description: `⏳ Récupération de ${envoyes.length > 1 ? 'vos preuves' : 'votre preuve'}, quelques secondes…` })],
+        components: [], attachments: [],
+      });
+    } else await interaction.deferReply(EPH);
     preuves = [];
     for (const a of envoyes.slice(0, MAX_PREUVES)) {
       if ((a.size ?? 0) > MAX_OCTETS) { note += `\n⚠️ \`${a.name}\` dépasse 8 Mo, ignoré.`; continue; }
@@ -401,6 +410,10 @@ export async function onModal(interaction) {
       const ext = (a.name.match(/\.([a-z0-9]{2,5})$/i)?.[1] ?? (a.contentType ?? '').split('/')[1] ?? 'png').toLowerCase();
       preuves.push(new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), { name: `preuve-${preuves.length + 1}.${ext}` }));
     }
+    // Brouillon publie, annule ou rouvert sur un autre membre entre-temps :
+    // ces preuves ne lui appartiennent plus.
+    const actuel = brouillons.get(String(interaction.user.id));
+    if (depart && (!actuel || actuel.cible !== depart.cible)) return null;
     const b = poser(interaction.user.id, { message, preuves, video });
     return interaction.editReply(rendre(b, (note + noteVideo).trim()));
   }
