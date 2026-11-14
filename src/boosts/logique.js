@@ -27,6 +27,20 @@ export function compterBoosts(messages, debuts) {
 }
 
 /**
+ * File d attente : chaque tache attend la fin de la precedente, meme si elle a echoue.
+ * Sert a ne jamais lire les compteurs pendant qu une autre tache est entre sa lecture
+ * et son ecriture (bug du 14/11 : role donne puis retire dans la meme seconde).
+ */
+export function fileAttente() {
+  let derniere = Promise.resolve();
+  return (tache) => {
+    const p = derniere.then(tache, tache);
+    derniere = p.catch(() => {});
+    return p;
+  };
+}
+
+/**
  * Que faire du role : 'donner', 'retirer' ou null. Ryan (04/11) : le role
  * n existe qu avec 2 boosts actifs, qu il ait ete pose par le bot ou a la main.
  * Seul le proprietaire du serveur garde un role pose a la main.

@@ -21,7 +21,7 @@ import { store } from '../db.js';
 import { config } from '../config.js';
 import { journal } from '../ops/journal.js';
 import { embed, FR } from '../lib/brand.js';
-import { TYPES_BOOST, boostsDuMessage, compterBoosts, decisionRole, texteMerci } from './logique.js';
+import { TYPES_BOOST, boostsDuMessage, compterBoosts, decisionRole, texteMerci, fileAttente } from './logique.js';
 
 // GIF « on te met sur le podium » (Chad, W, winner), un au hasard a chaque boost.
 // ETEINT par defaut (Ryan, 04/11) : kv boosts.gifs = « on » pour cette liste, ou une liste JSON d URLs.
@@ -56,6 +56,11 @@ const PAGES_MAX = 30; // 3 000 messages du salon systeme au demarrage
 
 const lire = () => { try { return JSON.parse(store.kvGet('boosts.compteurs') ?? '') ?? {}; } catch { return {}; } };
 const ecrire = (c) => store.kvSet('boosts.compteurs', JSON.stringify(c));
+
+// Une seule tache a la fois entre la lecture et l ecriture des compteurs. Sans ca, le role que le bot
+// vient de poser declenche guildMemberUpdate AVANT l ecriture du nouveau compte : l autre tache lisait
+// l ancien compte, retirait le role, puis ecrasait le bon compte (vecu le 14/11 en prod).
+const enFile = fileAttente();
 
 export const reglagesBoosts = {
   roleId: () => store.kvGet('boosts.role') || null,
@@ -116,11 +121,22 @@ async function remercier(m, membre, boosts, devientSuper) {
   });
   const gif = reglagesBoosts.gif();
   if (gif) carte.setImage(gif);
-  await m.reply({ content: `${membre}`, embeds: [carte], allowedMentions: { users: [membre.id], repliedUser: false } });
+  const envoi = { content: `${membre}`, embeds: [carte], allowedMentions: { users: [membre.id], repliedUser: false } };
+  try {
+    await m.reply(envoi);
+  } catch (err) {
+    // Discord refuse la reponse a certains messages systeme (« Invalid Form Body ») : meme carte, sans reponse.
+    console.warn('[boosts] reponse refusee, envoi simple :', err.message, JSON.stringify(err.rawError?.errors ?? {}).slice(0, 300));
+    await m.channel.send(envoi);
+  }
 }
 
 async function surMessage(m) {
   if (!m.guild || m.guild.id !== config.discord.guildId || !TYPES_BOOST.has(m.type)) return;
+  return enFile(() => traiterBoost(m));
+}
+
+async function traiterBoost(m) {
   const c = lire();
   const e = c[m.author.id] ?? { n: 0, bot: false };
   c[m.author.id] = { ...e, n: e.n + boostsDuMessage(m.content) };
@@ -138,6 +154,10 @@ async function surMembre(ancien, membre) {
   const role = roleSuper(membre.guild);
   const roleAjoute = role && !ancien?.roles?.cache?.has(role.id) && membre.roles.cache.has(role.id);
   if (avant === apres && !roleAjoute) return;
+  return enFile(() => traiterMembre(membre, apres));
+}
+
+async function traiterMembre(membre, apres) {
   const c = lire();
   if (!apres) c[membre.id] = { n: 0, bot: c[membre.id]?.bot ?? false };
   await appliquer(membre, c).catch((err) => console.warn('[boosts] role :', err.message));
@@ -146,7 +166,11 @@ async function surMembre(ancien, membre) {
 }
 
 /** Recompte depuis l historique du salon systeme, puis met les roles a jour. */
-export async function recompter(guild) {
+export function recompter(guild) {
+  return enFile(() => recompterMaintenant(guild));
+}
+
+async function recompterMaintenant(guild) {
   const salon = guild.systemChannel;
   if (!salon) return { erreur: 'aucun salon système' };
   const messages = [];

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boostsDuMessage, compterBoosts, decisionRole } from '../src/boosts/logique.js';
+import { boostsDuMessage, compterBoosts, decisionRole, fileAttente } from '../src/boosts/logique.js';
 
 test('boosts : nombre de boosts d un message systeme', () => {
   assert.equal(boostsDuMessage(''), 1);
@@ -43,4 +43,19 @@ test('boosts : remerciement, salon des avantages et passage Super Booster', asyn
   assert.match(deux, /2e boost/);
   assert.match(deux, /tu deviens <@&9>/);
   assert.doesNotMatch(deux, /Un 2e boost|<#/);
+});
+
+test('boosts : file d attente, une tache ne lit jamais avant l ecriture de la precedente', async () => {
+  const enFile = fileAttente();
+  let compte = 0; // joue le role de kv boosts.compteurs
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const lus = [];
+  // Tache 1 : lit, attend (pose du role), ecrit 2. Tache 2 (guildMemberUpdate) arrive pendant l attente.
+  const t1 = enFile(async () => { const n = compte; await pause(20); compte = n + 2; });
+  const t2 = enFile(async () => { lus.push(compte); });
+  // Une tache qui echoue ne bloque pas la suivante.
+  const t3 = enFile(async () => { throw new Error('boum'); });
+  const t4 = enFile(async () => { lus.push('apres'); });
+  await t1; await t2; await assert.rejects(t3, /boum/); await t4;
+  assert.deepEqual(lus, [2, 'apres']);
 });
